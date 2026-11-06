@@ -343,6 +343,15 @@ func newBroker(cfg Config, apiVersion uint, p providers.Provider, args ...Option
 	if cfg.clientID == "" {
 		err = errors.Join(err, errors.New("client ID is required and was not provided"))
 	}
+	unixAttributesConfigured := cfg.unixUIDAttribute != "" || cfg.unixGIDAttribute != ""
+	if unixAttributesConfigured {
+		if _, ok := providers.ProviderAs[info.UnixAttributeEnricher](opts.provider); !ok {
+			err = errors.Join(err, errors.New("invalid configuration: Unix attribute configuration requires a provider that supports Unix attribute enrichment"))
+		}
+		if _, ok := providers.ProviderAs[providers.GroupFetcher](opts.provider); !ok {
+			err = errors.Join(err, errors.New("invalid configuration: Unix attribute configuration requires a provider that supports group fetching"))
+		}
+	}
 	// The entra_auth flow can only retrieve groups from Microsoft Graph when
 	// device registration or a client secret is available (see the matching check
 	// in authModeIsAvailable). If neither is configured, the flow is unusable, so
@@ -1527,7 +1536,7 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 	// registration time: the cache is written before the group lookup and must
 	// not lose them.
 	var deviceRegistrationData []byte
-	oldAuthInfo, err := session.loadAuthInfo(session.tokenPath)
+	oldAuthInfo, err := b.loadCachedAuthInfo(session, session.tokenPath)
 	if err == nil {
 		deviceRegistrationData = oldAuthInfo.DeviceRegistrationData
 		authInfo.UserInfo.Groups = slices.Clone(oldAuthInfo.UserInfo.Groups)
@@ -1546,7 +1555,7 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 		}
 	}
 
-	cleanup, access, data := b.maybeRegisterDevice(ctx, session, authInfo, t, deviceRegistrationData)
+	cleanup, access, data := b.maybeRegisterDevice(ctx, session, authInfo, t, deviceRegistrationData, oldAuthInfo)
 	defer cleanup()
 	if access != "" {
 		return access, data
@@ -1554,10 +1563,11 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 
 	// We can only fetch the groups after registering the device, because the token acquired for device registration
 	// cannot be used with the Microsoft Graph API and a new token must be acquired for the Graph API.
-	groups, err := b.getGroups(ctx, session, authInfo)
-	// A device-code login never falls back to cached groups: a failed lookup
-	// denies the login.
-	if access, data := b.handleGroupFetch(ctx, session, authInfo, nil, groups, err); access != "" {
+	cachedInfo := (*token.AuthCachedInfo)(nil)
+	if b.unixAttributeEnrichmentEnabled() && !b.cfg.forceAccessCheckWithProvider {
+		cachedInfo = oldAuthInfo
+	}
+	if access, data := b.refreshGroupsAndHandle(ctx, session, authInfo, cachedInfo, oldAuthInfo, nil); access != "" {
 		return access, data
 	}
 
@@ -1580,7 +1590,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		return AuthRetry, errorMessage{Message: "Incorrect password, please try again."}
 	}
 
-	authInfo, err := session.loadAuthInfo(session.tokenPath)
+	authInfo, err := b.loadCachedAuthInfo(session, session.tokenPath)
 	if err != nil {
 		log.Error(context.Background(), err.Error())
 		if errors.Is(err, errProviderIDMismatch) {
@@ -1598,6 +1608,8 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		session.nextAuthModes = []string{authmodes.NewPassword}
 		return AuthNext, nil
 	}
+	oldAuthInfo := authInfo
+	var transientToken *oauth2.Token
 
 	// Refresh the token on every online login (even if it has not expired) to
 	// re-verify the account with the provider. This refresh is also the live
@@ -1606,7 +1618,6 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 	// via the provider; all other tokens use the OIDC app refresh. Both paths feed
 	// the same error classification below.
 	if b.cfg.forceAccessCheckWithProvider || !session.isOffline {
-		oldAuthInfo := authInfo
 		// Both refresh paths use the cached refresh token; without one we can't
 		// perform the liveness check, so require re-authentication.
 		if authInfo.Token.RefreshToken == "" {
@@ -1616,7 +1627,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		}
 		log.Debugf(context.Background(), "Starting token refresh for user %q", session.username)
 		if authInfo.ObtainedViaEntraAuth {
-			authInfo, err = b.refreshEntraToken(ctx, session, authInfo)
+			authInfo, transientToken, err = b.refreshEntraToken(ctx, session, authInfo)
 		} else {
 			authInfo, err = b.refreshToken(ctx, session, authInfo)
 		}
@@ -1688,16 +1699,14 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 				return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
 			}
 		}
-		cleanup, access, data := b.maybeRegisterDevice(ctx, session, authInfo, authInfo.Token, authInfo.DeviceRegistrationData)
+		cleanup, access, data := b.maybeRegisterDevice(ctx, session, authInfo, authInfo.Token, authInfo.DeviceRegistrationData, oldAuthInfo)
 		defer cleanup()
 		if access != "" {
 			return access, data
 		}
 	}
 
-	// Try to refresh the groups
-	groups, err := b.getGroups(ctx, session, authInfo)
-	if access, data := b.handleGroupFetch(ctx, session, authInfo, authInfo, groups, err); access != "" {
+	if access, data := b.refreshGroupsAndHandle(ctx, session, authInfo, oldAuthInfo, oldAuthInfo, transientToken); access != "" {
 		return access, data
 	}
 
@@ -1726,7 +1735,7 @@ func (b *Broker) entraAuth(ctx context.Context, session *session, userPassword s
 	// A missing token is expected on a first login. Other load errors must not be
 	// treated as an empty cache, since it may contain credentials for another
 	// identity.
-	cachedAuthInfo, err := session.loadAuthInfo(session.tokenPath)
+	cachedAuthInfo, err := b.loadCachedAuthInfo(session, session.tokenPath)
 	if errors.Is(err, os.ErrNotExist) {
 		log.Debugf(context.Background(), "No cached auth info for user %q: %v", session.username, err)
 	} else if err != nil {
@@ -2490,7 +2499,7 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	// A successful passwordless MFA flow can still yield a token that is valid
 	// for first-time device registration, so do not gate registration on an
 	// entered Entra password here.
-	cleanup, access, data := b.maybeRegisterDevice(ctx, session, authInfo, t, deviceRegistrationData)
+	cleanup, access, data := b.maybeRegisterDevice(ctx, session, authInfo, t, deviceRegistrationData, oldAuthInfo)
 	defer cleanup()
 	if access != "" {
 		// Keep the existing client-secret group-fetch fallback for passwordless
@@ -2509,11 +2518,7 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 		}
 	}
 
-	// Fetch groups. The MFA flow just authenticated with the provider, so a
-	// group-fetch failure is not a liveness signal: fall back to cached groups
-	// on a returning auth, and only deny first-time logins that have no cached groups.
-	groups, err := b.getGroups(ctx, session, authInfo)
-	if access, data := b.handleGroupFetch(ctx, session, authInfo, oldAuthInfo, groups, err); access != "" {
+	if access, data := b.refreshGroupsAndHandle(ctx, session, authInfo, oldAuthInfo, oldAuthInfo, nil); access != "" {
 		return access, data
 	}
 
@@ -2741,7 +2746,7 @@ func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (s
 		// offline session when the cached token already carries a provider ID, so this only defers
 		// the migration for a legacy cache whose token predates the provider ID (it then migrates on
 		// the next online login).
-		return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
+		return AuthGranted, userInfoMessage{UserInfo: userInfoForResponse(authInfo.UserInfo)}
 	}
 
 	// If we are authenticating a cached user without refreshing the token, we might not have the providerID cached yet.
@@ -2763,7 +2768,7 @@ func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (s
 		log.Errorf(context.Background(), "Failed to store token: %s. Continuing with login since provider access check is not forced.", err)
 	}
 
-	return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
+	return AuthGranted, userInfoMessage{UserInfo: userInfoForResponse(authInfo.UserInfo)}
 }
 
 func (b *Broker) newPassword(session *session, secret string) (string, isAuthenticatedDataResponse) {
@@ -3012,7 +3017,7 @@ func (b *Broker) updateSession(sessionID string, session session) error {
 // device-auth refresh). Errors are returned unwrapped so the caller classifies them
 // with the same checks it uses for device-auth (IsUserDisabledError → AADSTS50057,
 // IsTokenExpiredError → AADSTS50173, isAADSTSGrantRevokedError, net.Error → offline).
-func (b *Broker) refreshEntraToken(ctx context.Context, session *session, oldToken *token.AuthCachedInfo) (*token.AuthCachedInfo, error) {
+func (b *Broker) refreshEntraToken(ctx context.Context, session *session, oldToken *token.AuthCachedInfo) (*token.AuthCachedInfo, *oauth2.Token, error) {
 	ep, ok := providers.ProviderAs[himmelblau.EntraAuthProvider](b.provider)
 	if !ok {
 		// The token was obtained via the entra_auth flow, so the provider that
@@ -3020,13 +3025,13 @@ func (b *Broker) refreshEntraToken(ctx context.Context, session *session, oldTok
 		// deployment is misconfigured: fail the login rather than skipping the
 		// liveness/revocation check, which would let a deleted/disabled user keep
 		// logging in with the cached token.
-		return nil, fmt.Errorf("provider does not implement EntraAuthProvider; cannot refresh entra_auth token for user %q", oldToken.UserInfo.Name)
+		return nil, nil, fmt.Errorf("provider does not implement EntraAuthProvider; cannot refresh entra_auth token for user %q", oldToken.UserInfo.Name)
 	}
 	refreshCtx, cancel := context.WithTimeout(ctx, maxRequestDuration)
 	defer cancel()
 	newTok, err := ep.RefreshEntraToken(refreshCtx, b.cfg.issuerURL, oldToken.Token.RefreshToken)
 	if err != nil {
-		return oldToken, err
+		return oldToken, nil, err
 	}
 	refreshed := *oldToken
 	tokenCopy := *oldToken.Token
@@ -3045,18 +3050,18 @@ func (b *Broker) refreshEntraToken(ctx context.Context, session *session, oldTok
 	userInfo, err := b.extractEntraUserInfo(newTok)
 	if err != nil {
 		cacheRotatedToken("user info extraction failure")
-		return oldToken, fmt.Errorf("could not refresh user info from the refreshed Entra token: %w", err)
+		return oldToken, nil, fmt.Errorf("could not refresh user info from the refreshed Entra token: %w", err)
 	}
 	// getUserInfo (the device-auth refresh path) re-checks this on every refresh,
 	// not just on first login; do the same here so a refreshed Entra token can't
 	// silently swap the cached identity.
 	if err := session.verifyProviderID(userInfo.ProviderID); err != nil {
-		return oldToken, err
+		return oldToken, nil, err
 	}
 	// Prefer a stable-ID conflict so a rotated token for another account is not cached.
 	if err := b.provider.VerifyUsername(session.username, userInfo.Name); err != nil {
 		cacheRotatedToken("username verification failure")
-		return oldToken, fmt.Errorf("username verification failed: %w", err)
+		return oldToken, nil, fmt.Errorf("username verification failed: %w", err)
 	}
 	if userInfo.Gecos == "" {
 		userInfo.Gecos = oldToken.UserInfo.Gecos
@@ -3064,7 +3069,7 @@ func (b *Broker) refreshEntraToken(ctx context.Context, session *session, oldTok
 	userInfo.Groups = oldToken.UserInfo.Groups
 	oldToken.UserInfo = userInfo
 
-	return oldToken, nil
+	return oldToken, newTok, nil
 }
 
 // refreshToken refreshes the OAuth2 token and returns the updated AuthCachedInfo.
@@ -3220,7 +3225,7 @@ func (b *Broker) getUserInfo(ctx context.Context, session *session, token *oauth
 // releases. cleanup is always non-nil (a no-op when nothing was registered), so the
 // caller can defer it unconditionally. When access is non-empty the caller must
 // return (access, data); an empty access means "proceed".
-func (b *Broker) maybeRegisterDevice(ctx context.Context, session *session, authInfo *token.AuthCachedInfo, regToken *oauth2.Token, existingData []byte) (cleanup func(), access string, data isAuthenticatedDataResponse) {
+func (b *Broker) maybeRegisterDevice(ctx context.Context, session *session, authInfo *token.AuthCachedInfo, regToken *oauth2.Token, existingData []byte, oldAuthInfo *token.AuthCachedInfo) (cleanup func(), access string, data isAuthenticatedDataResponse) {
 	cleanup = func() {}
 
 	dr, ok := providers.ProviderAs[providers.DeviceRegisterer](b.provider)
@@ -3263,9 +3268,8 @@ func (b *Broker) maybeRegisterDevice(ctx context.Context, session *session, auth
 		authInfo.DeviceRegistrationDataObtainedAt = time.Now().Unix()
 	}
 
-	// Store the auth info before group lookup, so fresh registration data is not
-	// lost if the login fails after this point.
-	if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
+	// Store the auth info, so that the device registration data is not lost if the login fails after this point.
+	if err := b.cacheCredentialsWithPreviousUserInfo(session, authInfo, oldAuthInfo); err != nil {
 		log.Errorf(context.Background(), "Failed to store token: %s", err)
 		return cleanup, AuthDenied, unexpectedErrMsg("failed to store token")
 	}
@@ -3276,14 +3280,211 @@ func (b *Broker) maybeRegisterDevice(ctx context.Context, session *session, auth
 	return cleanup, "", nil
 }
 
-func (b *Broker) getGroups(ctx context.Context, session *session, t *token.AuthCachedInfo) ([]info.Group, error) {
+func (b *Broker) unixAttributeConfig() info.UnixAttributeConfig {
+	return info.UnixAttributeConfig{
+		UIDAttribute: b.cfg.unixUIDAttribute,
+		GIDAttribute: b.cfg.unixGIDAttribute,
+		UIDRequired:  b.cfg.unixUIDRequired,
+		GIDRequired:  b.cfg.unixGIDRequired,
+	}
+}
+
+func (b *Broker) unixAttributeEnrichmentEnabled() bool {
+	return b.cfg.unixUIDAttribute != "" || b.cfg.unixGIDAttribute != ""
+}
+
+func (b *Broker) mustDenyUnixAttributeError(err error) bool {
+	return errors.Is(err, info.ErrUnixAttributeMissing) ||
+		(b.cfg.forceAccessCheckWithProvider && errors.Is(err, info.ErrUnixAttributeRequired))
+}
+
+func (b *Broker) enrichUserInfo(ctx context.Context, session *session, authInfo *token.AuthCachedInfo, transientToken *oauth2.Token) error {
 	if session.isOffline {
-		return nil, errors.New("session is in offline mode")
+		return nil
+	}
+
+	groups, err := b.getGroups(ctx, session, authInfo)
+	if err != nil {
+		if b.cfg.forceAccessCheckWithProvider && (b.cfg.unixUIDRequired || b.cfg.unixGIDRequired) {
+			// A failed lookup leaves required IDs unread, even if the cache has them.
+			err = fmt.Errorf("%w: %w", info.ErrUnixAttributeRequired, err)
+		}
+		return fmt.Errorf("%w: %w", info.ErrGroupsUnavailable, err)
+	}
+
+	enriched, err := b.fetchUnixAttributes(ctx, authInfo, transientToken, groups)
+	if err != nil {
+		if !errors.Is(err, info.ErrUnixAttributePartial) {
+			if b.cfg.forceAccessCheckWithProvider && (b.cfg.unixUIDRequired || b.cfg.unixGIDRequired) {
+				// A failed lookup leaves required IDs unread, even if the cache has them.
+				err = fmt.Errorf("%w: %w", info.ErrUnixAttributeRequired, err)
+			}
+			return fmt.Errorf("%w: %w", info.ErrGroupsUnavailable, err)
+		}
+		// Missing values are authoritative; unreadable values follow the force setting.
+		if b.cfg.forceAccessCheckWithProvider || errors.Is(err, info.ErrUnixAttributeMissing) {
+			// On a returning login, the caller stores this snapshot before denying the login.
+			authInfo.UserInfo = enriched
+			b.recordUnixAttributeNames(authInfo)
+			return err
+		}
+		log.Warningf(ctx, "Using cached values for Unix attributes that could not be read: %v", err)
+	}
+	authInfo.UserInfo = enriched
+	b.recordUnixAttributeNames(authInfo)
+	return nil
+}
+
+// fetchUnixAttributes enriches the user using the groups already fetched from the provider.
+func (b *Broker) fetchUnixAttributes(ctx context.Context, authInfo *token.AuthCachedInfo, transientToken *oauth2.Token, groups info.GroupFetchResult) (info.User, error) {
+	config := b.unixAttributeConfig()
+	enricher, ok := providers.ProviderAs[info.UnixAttributeEnricher](b.provider)
+	if !ok {
+		return info.User{}, errors.New("provider does not support Unix attribute enrichment")
+	}
+
+	graphToken := authInfo.Token
+	if transientToken != nil {
+		graphToken = transientToken
+	}
+	return enricher.EnrichUserWithUnixAttributes(
+		ctx,
+		authInfo.UserInfo,
+		groups,
+		b.cfg.clientID,
+		b.cfg.issuerURL,
+		graphToken,
+		authInfo.ProviderMetadata,
+		authInfo.DeviceRegistrationData,
+		config,
+	)
+}
+
+func (b *Broker) recordUnixAttributeNames(authInfo *token.AuthCachedInfo) {
+	if b.unixAttributeEnrichmentEnabled() {
+		authInfo.UnixAttributeNames = &token.UnixAttributeNames{
+			UID: b.cfg.unixUIDAttribute,
+			GID: b.cfg.unixGIDAttribute,
+		}
+	}
+}
+
+// dropStaleUnixIDs removes the cached Unix IDs that were read from attribute
+// names other than the configured ones. It reports whether it changed authInfo.
+func (b *Broker) dropStaleUnixIDs(authInfo *token.AuthCachedInfo) bool {
+	names := authInfo.UnixAttributeNames
+	uidStale := names == nil || names.UID != b.cfg.unixUIDAttribute
+	gidStale := names == nil || names.GID != b.cfg.unixGIDAttribute
+
+	changed := false
+	if uidStale && authInfo.UserInfo.UID != nil {
+		authInfo.UserInfo.UID = nil
+		changed = true
+	}
+	if gidStale {
+		for i := range authInfo.UserInfo.Groups {
+			if authInfo.UserInfo.Groups[i].GID != nil {
+				authInfo.UserInfo.Groups[i].GID = nil
+				changed = true
+			}
+		}
+	}
+	return changed
+}
+
+// loadCachedAuthInfo loads the cached token for a login. If the cached Unix IDs
+// were read from other attribute names, it drops them and rewrites the cache, so
+// that neither a later login nor apply-entra-unix-ids can use them.
+func (b *Broker) loadCachedAuthInfo(session *session, path string) (*token.AuthCachedInfo, error) {
+	authInfo, err := session.loadAuthInfo(path)
+	if err != nil {
+		return nil, err
+	}
+	if !b.dropStaleUnixIDs(authInfo) {
+		return authInfo, nil
+	}
+	if err := token.CacheAuthInfo(path, authInfo); err != nil {
+		// A required ID must not keep the old attribute's value, so deny instead of continuing.
+		if b.cfg.forceAccessCheckWithProvider && (b.cfg.unixUIDRequired || b.cfg.unixGIDRequired) {
+			return nil, fmt.Errorf("failed to store cleaned Unix ID data: %w", err)
+		}
+		// The IDs are already dropped in memory, so this login does not use them.
+		log.Errorf(context.Background(), "Failed to store cleaned Unix ID data: %v", err)
+	}
+	return authInfo, nil
+}
+
+func (b *Broker) preserveCachedUserInfo(authInfo, oldAuthInfo *token.AuthCachedInfo) {
+	authInfo.UserInfo = oldAuthInfo.UserInfo
+	authInfo.UserInfo.Groups = slices.Clone(oldAuthInfo.UserInfo.Groups)
+	authInfo.UnixAttributeNames = oldAuthInfo.UnixAttributeNames
+}
+
+func (b *Broker) cacheCredentialsWithPreviousUserInfo(session *session, authInfo, oldAuthInfo *token.AuthCachedInfo) error {
+	cached := *authInfo
+	if b.unixAttributeEnrichmentEnabled() && oldAuthInfo != nil {
+		cached.UserInfo = oldAuthInfo.UserInfo
+		cached.UnixAttributeNames = oldAuthInfo.UnixAttributeNames
+	}
+	return token.CacheAuthInfo(session.tokenPath, &cached)
+}
+
+func (b *Broker) refreshGroupsOrEnrich(ctx context.Context, session *session, authInfo *token.AuthCachedInfo, transientToken *oauth2.Token, oldAuthInfo *token.AuthCachedInfo) error {
+	if b.unixAttributeEnrichmentEnabled() {
+		previousUserInfo := authInfo.UserInfo
+		previousUserInfo.Groups = slices.Clone(previousUserInfo.Groups)
+		previousUnixAttributeNames := authInfo.UnixAttributeNames
+		freshRegistration := authInfo.DeviceRegistrationDataObtainedAt != 0
+		if !session.isOffline && oldAuthInfo != nil {
+			if err := b.cacheCredentialsWithPreviousUserInfo(session, authInfo, oldAuthInfo); err != nil {
+				return fmt.Errorf("could not preserve refreshed credentials: %w", err)
+			}
+			// The enricher keeps these cached values for lookups that fail.
+			authInfo.UserInfo.UID = oldAuthInfo.UserInfo.UID
+			authInfo.UserInfo.Groups = slices.Clone(oldAuthInfo.UserInfo.Groups)
+		}
+		err := b.enrichUserInfo(ctx, session, authInfo, transientToken)
+		if errors.Is(err, info.ErrUnixAttributePartial) {
+			// Groups were read, so the fresh registration is no longer waiting for replication.
+			authInfo.DeviceRegistrationDataObtainedAt = 0
+			if oldAuthInfo != nil {
+				if storeErr := token.CacheAuthInfo(session.tokenPath, authInfo); storeErr != nil {
+					return errors.Join(err, fmt.Errorf("could not store partial Unix ID data: %w", storeErr))
+				}
+				return err
+			}
+			if freshRegistration {
+				// Keep a first-login denial from storing its partial user snapshot.
+				cached := *authInfo
+				cached.UserInfo = previousUserInfo
+				cached.UnixAttributeNames = previousUnixAttributeNames
+				if storeErr := token.CacheAuthInfo(session.tokenPath, &cached); storeErr != nil {
+					return errors.Join(err, fmt.Errorf("could not store registration state: %w", storeErr))
+				}
+			}
+			return err
+		}
+		if err != nil && oldAuthInfo != nil {
+			b.preserveCachedUserInfo(authInfo, oldAuthInfo)
+		}
+		return err
+	}
+
+	groups, err := b.getGroups(ctx, session, authInfo)
+	if err == nil {
+		authInfo.UserInfo.Groups = groups.Groups
+	}
+	return err
+}
+
+func (b *Broker) getGroups(ctx context.Context, session *session, t *token.AuthCachedInfo) (info.GroupFetchResult, error) {
+	if session.isOffline {
+		return info.GroupFetchResult{}, errors.New("session is in offline mode")
 	}
 
 	gf, ok := providers.ProviderAs[providers.GroupFetcher](b.provider)
 	if !ok {
-		return nil, nil
+		return info.GroupFetchResult{}, nil
 	}
 	// A cached token that carries device-registration data has a PRT that must be
 	// exchanged for a Graph-scoped token (strategy 2). Derive this from the
@@ -3295,6 +3496,7 @@ func (b *Broker) getGroups(ctx context.Context, session *session, t *token.AuthC
 		t.ProviderMetadata,
 		t.DeviceRegistrationData,
 		len(t.DeviceRegistrationData) > 0,
+		b.cfg.unixGIDAttribute,
 	)
 }
 
@@ -3389,9 +3591,44 @@ func (b *Broker) handleGroupFetch(ctx context.Context, session *session, authInf
 	return "", nil
 }
 
+func userInfoForResponse(userInfo info.User) info.User {
+	projected := userInfo
+	projected.UID = nil
+	projected.Groups = slices.Clone(userInfo.Groups)
+	for i := range projected.Groups {
+		projected.Groups[i].GID = nil
+	}
+	return projected
+}
+
+func (b *Broker) refreshGroupsAndHandle(ctx context.Context, session *session, authInfo, cachedInfo, oldAuthInfo *token.AuthCachedInfo, transientToken *oauth2.Token) (string, isAuthenticatedDataResponse) {
+	err := b.refreshGroupsOrEnrich(ctx, session, authInfo, transientToken, oldAuthInfo)
+	if ctx.Err() != nil || errors.Is(err, providerErrors.ErrDeviceDisabled) || errors.Is(err, providerErrors.ErrInvalidRedirectURI) || registrationIsStale(authInfo, err) {
+		return b.handleGroupFetch(ctx, session, authInfo, cachedInfo, authInfo.UserInfo.Groups, err)
+	}
+	if session.isOffline {
+		if b.cfg.forceAccessCheckWithProvider && (b.cfg.unixUIDRequired || b.cfg.unixGIDRequired) {
+			return AuthDenied, errorMessageForDisplay(info.ErrUnixAttributeRequired, "Required Unix ID data is unavailable")
+		}
+		return "", nil
+	}
+	if b.unixAttributeEnrichmentEnabled() && b.mustDenyUnixAttributeError(err) {
+		log.Errorf(context.Background(), "Required Unix attribute enrichment failed: %v", err)
+		return AuthDenied, errorMessageForDisplay(err, "Required Unix ID data is unavailable")
+	}
+	return b.handleGroupFetch(ctx, session, authInfo, cachedInfo, authInfo.UserInfo.Groups, err)
+}
+
 // Checks if the provided error is of type ForDisplayError. If it is, it returns the error message. Else, it returns
 // the provided fallback message.
 func errorMessageForDisplay(err error, fallback string) errorMessage {
+	// PAM clients display these messages verbatim, so keep the explanation on one line.
+	if errors.Is(err, info.ErrUnixUIDRequired) {
+		return errorMessage{Message: "Authentication failure: Microsoft Entra ID did not provide a valid required Unix UID for your account.\nPlease contact your administrator."}
+	}
+	if errors.Is(err, info.ErrUnixGIDRequired) {
+		return errorMessage{Message: "Authentication failure: Microsoft Entra ID did not provide a valid required Unix GID for one or more of your groups. Please contact your administrator."}
+	}
 	var forDisplayErr *providerErrors.ForDisplayError
 	if errors.As(err, &forDisplayErr) {
 		return errorMessage{Message: forDisplayErr.Error()}

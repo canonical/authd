@@ -2161,10 +2161,12 @@ func TestGdmModel(t *testing.T) {
 				msg:    "invalid json data from provider: invalid character 'i' looking for beginning of value",
 			},
 		},
-		"Error_on_authentication_client_denied_because_of_wrong_password_-_with_error_message": {
+		"Error_on_authentication_client_denied_with_required_GID_error_message": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
-				pam_test.WithIsAuthenticatedWantSecret("gdm-good-password"),
-				pam_test.WithIsAuthenticatedMessage("you're not allowed!"),
+				pam_test.WithIsAuthenticatedReturn(&authd.IAResponse{
+					Access: auth.Denied,
+					Msg:    `{"message":"Authentication failure: Microsoft Entra ID did not provide a valid required Unix GID\nfor one or more of your groups.\nPlease contact your administrator."}`,
+				}, nil),
 			),
 			pamUser: "pam-preset-user-for-client-selected-brokers-with-wrong-pass",
 			messages: []tea.Msg{
@@ -2202,7 +2204,7 @@ func TestGdmModel(t *testing.T) {
 			wantStage:       gdmTestIgnoreStage,
 			wantPAMReturnValue: pamError{
 				status: pam.ErrAuth,
-				msg:    "you're not allowed!",
+				msg:    "Authentication failure: Microsoft Entra ID did not provide a valid required Unix GID\nfor one or more of your groups.\nPlease contact your administrator.",
 			},
 		},
 		"Error_on_authentication_client_denied_because_of_wrong_password": {

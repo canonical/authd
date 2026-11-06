@@ -24,6 +24,7 @@ import (
 	"github.com/canonical/authd/brokers/internal/consts"
 	"github.com/canonical/authd/brokers/internal/fido"
 	"github.com/canonical/authd/brokers/internal/password"
+	"github.com/canonical/authd/brokers/internal/providers"
 	providerErrors "github.com/canonical/authd/brokers/internal/providers/errors"
 	"github.com/canonical/authd/brokers/internal/providers/info"
 	"github.com/canonical/authd/brokers/internal/providers/msentraid/himmelblau"
@@ -80,6 +81,28 @@ type mockEntraAuthProvider struct {
 	registrationEnrollments       int
 	registrationExistingData      []byte
 	registrationExistingDataCalls [][]byte
+	unixUID                       uint32
+	unixGID                       uint32
+	unixEnrichmentCalls           int
+	unixAttributeConfig           info.UnixAttributeConfig
+}
+
+type mockUnixEnricherWithoutGroupFetcher struct {
+	providers.Provider
+}
+
+func (mockUnixEnricherWithoutGroupFetcher) EnrichUserWithUnixAttributes(
+	_ context.Context,
+	user info.User,
+	_ info.GroupFetchResult,
+	_ string,
+	_ string,
+	_ *oauth2.Token,
+	_ map[string]interface{},
+	_ []byte,
+	_ info.UnixAttributeConfig,
+) (info.User, error) {
+	return user, nil
 }
 
 type blockingMFAProvider struct {
@@ -177,6 +200,16 @@ func (p *mockEntraAuthProvider) MaybeRegisterDevice(_ context.Context, _ *oauth2
 	}
 	p.registrationEnrollments++
 	return mockDeviceRegistrationData, func() {}, nil
+}
+
+func (p *mockEntraAuthProvider) EnrichUserWithUnixAttributes(_ context.Context, user info.User, _ info.GroupFetchResult, _ string, _ string, _ *oauth2.Token, _ map[string]interface{}, _ []byte, config info.UnixAttributeConfig) (info.User, error) {
+	p.unixEnrichmentCalls++
+	p.unixAttributeConfig = config
+	uid := p.unixUID
+	gid := p.unixGID
+	user.UID = &uid
+	user.Groups = []info.Group{{Name: "enriched-remote-group", UGID: "enriched-group-id", GID: &gid}}
+	return user, nil
 }
 
 // mockMFADeniedProvider simulates MFA push notification being denied by the user.
@@ -478,6 +511,113 @@ func TestNew(t *testing.T) {
 			require.NotNil(t, b, "New should have returned a non-nil broker")
 		})
 	}
+}
+
+func TestNewPreservesConfiguredOIDCSettings(t *testing.T) {
+	t.Parallel()
+
+	cfg := &broker.Config{DataDir: t.TempDir()}
+	cfg.Init()
+	cfg.SetIssuerURL(defaultIssuerURL)
+	cfg.SetClientID(consts.MicrosoftBrokerAppID)
+	cfg.SetClientSecret("configured-secret")
+
+	b, err := broker.New(*cfg, broker.LatestAPIVersion, broker.WithCustomProvider(&testutils.MockProvider{}))
+	require.NoError(t, err)
+
+	gotClientID, gotClientSecret := b.OIDCConfigForTests()
+	require.Equal(t, consts.MicrosoftBrokerAppID, gotClientID)
+	require.Equal(t, "configured-secret", gotClientSecret)
+}
+
+func TestNewSetsOIDCClientForDeviceRegistration(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name           string
+		registerDevice bool
+		wantClientID   string
+	}{
+		{name: "device code keeps configured client ID", wantClientID: "configured-client-id"},
+		{name: "device registration uses Microsoft Broker App", registerDevice: true, wantClientID: consts.MicrosoftBrokerAppID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := &broker.Config{DataDir: t.TempDir()}
+			cfg.Init()
+			cfg.SetIssuerURL(defaultIssuerURL)
+			cfg.SetClientID("configured-client-id")
+			cfg.SetClientSecret("configured-secret")
+			cfg.SetRegisterDevice(tc.registerDevice)
+
+			provider := &mockEntraAuthProvider{MockProvider: &testutils.MockProvider{}}
+			b, err := broker.New(*cfg, broker.LatestAPIVersion, broker.WithCustomProvider(provider))
+			require.NoError(t, err)
+
+			gotClientID, gotClientSecret := b.OIDCConfigForTests()
+			require.Equal(t, tc.wantClientID, gotClientID)
+			require.Empty(t, gotClientSecret)
+		})
+	}
+}
+
+func TestNewRejectsUnixAttributesWithoutEnricher(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		uidRequired      bool
+		gidRequired      bool
+		withEnricher     bool
+		wantErrorMessage string
+	}{
+		"Required_UID_without_enricher": {uidRequired: true, wantErrorMessage: "Unix attribute configuration requires a provider that supports Unix attribute enrichment"},
+		"Required_GID_without_enricher": {gidRequired: true, wantErrorMessage: "Unix attribute configuration requires a provider that supports Unix attribute enrichment"},
+		"Optional_IDs_without_enricher": {wantErrorMessage: "Unix attribute configuration requires a provider that supports Unix attribute enrichment"},
+		"Required_UID_with_enricher":    {uidRequired: true, withEnricher: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := &broker.Config{DataDir: t.TempDir()}
+			cfg.Init()
+			cfg.SetIssuerURL(defaultIssuerURL)
+			cfg.SetClientID("test-client-id")
+			cfg.SetUnixAttributes("uidNumber", "gidNumber", tc.uidRequired, tc.gidRequired)
+
+			var provider providers.Provider = &testutils.MockProvider{}
+			if tc.withEnricher {
+				provider = &mockEntraAuthProvider{MockProvider: &testutils.MockProvider{}}
+			}
+			b, err := broker.New(*cfg, broker.LatestAPIVersion, broker.WithCustomProvider(provider))
+			if tc.wantErrorMessage != "" {
+				require.ErrorContains(t, err, tc.wantErrorMessage)
+				require.Nil(t, b)
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, b)
+		})
+	}
+}
+
+func TestNewRejectsUnixAttributesWithoutGroupFetcher(t *testing.T) {
+	t.Parallel()
+
+	cfg := &broker.Config{DataDir: t.TempDir()}
+	cfg.Init()
+	cfg.SetIssuerURL(defaultIssuerURL)
+	cfg.SetClientID("test-client-id")
+	cfg.SetUnixAttributes("uidNumber", "gidNumber", false, false)
+
+	_, err := broker.New(
+		*cfg,
+		broker.LatestAPIVersion,
+		broker.WithCustomProvider(mockUnixEnricherWithoutGroupFetcher{}),
+	)
+	require.ErrorContains(t, err, "provider that supports group fetching")
 }
 
 // TestNewRejectsUnusableEntraAuthWithoutGroupSource verifies that New fails
