@@ -40,7 +40,8 @@ type gdmModel struct {
 	// RPC (and, for device auth, mint a second device code that orphans the
 	// in-flight poll). It is consumed (cleared) by the first matching echo, so
 	// a later genuine re-selection of the same mode is still honored.
-	pendingEchoAuthModeID string
+	pendingEchoAuthModeID                  string
+	preservePendingEchoOnNextAuthModeStage bool
 }
 
 type gdmPollResponse struct {
@@ -159,6 +160,9 @@ func (m gdmModel) handlePollResponse(gdmPollResults []*gdm.EventData) (gdmModel,
 				m.pendingEchoAuthModeID = ""
 				break
 			}
+			// Poll events are ordered. A different choice supersedes any
+			// outstanding echo, so selecting the old mode later is genuine.
+			m.pendingEchoAuthModeID = ""
 			commands = append(commands, selectGdmAuthMode(res.AuthModeSelected.AuthModeId))
 
 		case *gdm.EventData_IsAuthenticatedRequested:
@@ -239,10 +243,14 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 			m.pollGdm())
 
 	case StageChanged:
-		// Entering auth mode selection permits a genuine re-selection, so an
-		// echo pending from the previous selection is no longer relevant.
 		if msg.Stage == proto.Stage_authModeSelection {
-			m.pendingEchoAuthModeID = ""
+			// MFA is not back-navigation. Keep a delayed echo until it arrives
+			// or the next selection replaces it. An empty poll may have been
+			// sent before the selection, so it cannot expire the pending echo.
+			if !m.preservePendingEchoOnNextAuthModeStage {
+				m.resetPendingAuthModeEcho()
+			}
+			m.preservePendingEchoOnNextAuthModeStage = false
 		}
 		return m, m.changeStage(msg.Stage)
 
@@ -344,6 +352,27 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func (m *gdmModel) resetPendingAuthModeEcho() {
+	m.pendingEchoAuthModeID = ""
+	m.preservePendingEchoOnNextAuthModeStage = false
+}
+
+// afterGdmAck runs next only after a GDM command succeeds. Unlike tea.Sequence,
+// it stops on protocol errors instead of starting the next authentication step.
+func afterGdmAck(command, next tea.Cmd) tea.Cmd {
+	return func() tea.Msg {
+		if command != nil {
+			if msg := command(); msg != nil {
+				return msg
+			}
+		}
+		if next != nil {
+			return next()
+		}
+		return nil
+	}
 }
 
 func (m gdmModel) changeStage(s proto.Stage) tea.Cmd {
