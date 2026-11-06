@@ -180,6 +180,8 @@ jobs:
   go-tests-coverage:
     name: "Go Tests with Coverage Collection"
     runs-on: ubuntu-26.04 # ubuntu-latest
+    outputs:
+      tests-failed: ${{ steps.coverage-tests.outcome == 'failure' }}
     env:
       RAW_COVERAGE_DIR: ${{ github.workspace }}/raw-coverage
       COVERAGE_DIR: ${{ github.workspace }}/coverage
@@ -198,6 +200,7 @@ jobs:
       #   continue-on-error: true
 
       - name: Run tests with coverage collection
+        id: coverage-tests
         env:
           G_DEBUG: "fatal-criticals"
         run: |
@@ -244,6 +247,8 @@ jobs:
 
       - name: Export LXD test image for cache
         id: export-lxd-test-image
+        # Cache export is optional and can fail when the runner is low on disk space.
+        continue-on-error: true
         if: always() && steps.setup-go-tests.outputs.lxd-image-cache-matched-key == ''
         uses: ./.github/actions/export-lxd-test-image-for-cache
 
@@ -260,7 +265,7 @@ jobs:
   go-tests-coverage-retry:
     name: "Retry Go Tests with Coverage Collection"
     needs: go-tests-coverage
-    if: always() && needs.go-tests-coverage.result == 'failure'
+    if: always() && needs.go-tests-coverage.outputs.tests-failed == 'true'
     runs-on: ubuntu-26.04 # ubuntu-latest
     env:
       RAW_COVERAGE_DIR: ${{ github.workspace }}/raw-coverage
@@ -325,6 +330,7 @@ jobs:
 
       - name: Export LXD test image for cache
         id: export-lxd-test-image
+        continue-on-error: true
         if: always() && steps.setup-go-tests.outputs.lxd-image-cache-matched-key == ''
         uses: ./.github/actions/export-lxd-test-image-for-cache
 
