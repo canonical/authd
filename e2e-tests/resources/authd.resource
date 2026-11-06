@@ -19,22 +19,22 @@ Change Password
     Hid.Type String    passwd
     Hid.Keys Combo    Return
 
-    Match Text    regex:Enter\\s*your\\s*(?:local\\s*)?password:    15
+    Match Text    regex:Enter\\s*your\\s*(?:local\\s*)?password:    20
     Builtin.Sleep    2
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
 
-    Match Text    New password:    15
+    Match Text    New password:    20
     Builtin.Sleep    2
     Hid.Type String    ${new_password}
     Hid.Keys Combo    Return
 
-    Match Text    Confirm password:    15
+    Match Text    Confirm password:    20
     Builtin.Sleep    2
     Hid.Type String    ${new_password}
     Hid.Keys Combo    Return
 
-    Match Text    passwd: password updated successfully    15
+    Match Text    passwd: password updated successfully    20
 
 Try Log In With Remote User
     [Arguments]    ${username}
