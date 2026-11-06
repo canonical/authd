@@ -48,12 +48,17 @@ type preAuthUser struct {
 
 // PreAuthUserRecords tracks temporary users that have done a pre-auth request.
 type PreAuthUserRecords struct {
-	rwMu         sync.RWMutex
+	rwMu sync.RWMutex
+	// storeMu serializes store changes and new pins. Acquire it before rwMu.
+	storeMu      sync.Mutex
 	users        map[uint32]preAuthUser
 	uidByName    map[string]uint32
 	uidByLogin   map[string]uint32
 	store        systemd.DescriptorStore
 	requireStore bool
+	monitor      *ownerMonitor
+	closeOnce    sync.Once
+	closeErr     error
 }
 
 // NewPreAuthUserRecords creates a new instance of [preAuthUserRecords] that
@@ -66,36 +71,9 @@ func NewPreAuthUserRecords() *PreAuthUserRecords {
 	}
 }
 
-// MaybeCompletePreauthUser tries to complete a pre-auth user registration.
-//
-// Returns the reserved UID and a function to release the reservation after
-// the account is saved.
-func (r *PreAuthUserRecords) MaybeCompletePreauthUser(name string) (uid uint32, cleanup func() error, err error) {
-	r.rwMu.Lock()
-	defer r.rwMu.Unlock()
-
-	if err := r.prune(); err != nil {
-		return 0, nil, err
-	}
-	// Check if there is already a pre-auth user for that name
-	uid, ok := r.uidByLogin[name]
-	if !ok {
-		return 0, nil, NoDataFoundError{}
-	}
-
-	return uid, func() error {
-		return r.MarkCompleted(uid)
-	}, nil
-}
-
 // UserByID returns the user information for the given user ID.
 func (r *PreAuthUserRecords) UserByID(uid uint32) (types.UserEntry, error) {
 	return r.userByID(uid)
-}
-
-// UserByLogin returns the user information for the given user name.
-func (r *PreAuthUserRecords) UserByLogin(name string) (types.UserEntry, error) {
-	return r.userByLogin(name)
 }
 
 // GroupByID returns the private-group information for the given user ID.
@@ -113,35 +91,11 @@ func (r *PreAuthUserRecords) GroupByID(gid uint32) (types.GroupEntry, error) {
 	}, nil
 }
 
-// AllUsers returns all pre-auth users as a slice of UserEntry.
-func (r *PreAuthUserRecords) AllUsers() ([]types.UserEntry, error) {
-	r.rwMu.Lock()
-	defer r.rwMu.Unlock()
-
-	if err := r.prune(); err != nil {
-		return nil, err
-	}
-
-	if len(r.users) == 0 {
-		return nil, nil
-	}
-
-	users := make([]types.UserEntry, 0, len(r.users))
-	for _, user := range r.users {
-		if user.completed {
-			continue
-		}
-		users = append(users, preAuthUserEntry(user))
-	}
-
-	return users, nil
-}
-
 // RegisterPreAuthUser reserves a unique UID in our NSS handler. If a store is
 // configured, the reservation is saved before this method returns.
 //
-// The temporary user record is removed by the cleanup function returned by
-// [MaybeCompletePreauthUser], after the account is saved in the database.
+// The temporary user record is removed after calling the completion function
+// returned by [PreAuthUserRecords.HoldUser], once the account is saved.
 //
 // This method is called when a user logs in for the first time via SSH, in
 // which case sshd checks if the user exists on the system (before
@@ -160,6 +114,8 @@ func (r *PreAuthUserRecords) RegisterPreAuthUser(loginName string, uid uint32, o
 			MaxPreAuthUserNameLength, loginName)
 	}
 
+	r.storeMu.Lock()
+	defer r.storeMu.Unlock()
 	r.rwMu.Lock()
 	defer r.rwMu.Unlock()
 
@@ -169,7 +125,7 @@ func (r *PreAuthUserRecords) RegisterPreAuthUser(loginName string, uid uint32, o
 	if len(owners) > 1 {
 		return errors.New("expected one initial pre-auth process owner")
 	}
-	if err := r.prune(); err != nil {
+	if err := r.monitorError(); err != nil {
 		return err
 	}
 	// To mitigate DoS attacks, we limit the pre-auth users to [MaxPreAuthUsers].
@@ -215,12 +171,8 @@ func (r *PreAuthUserRecords) RegisterPreAuthUser(loginName string, uid uint32, o
 
 // UserByID returns the user information for the given user ID.
 func (r *PreAuthUserRecords) userByID(uid uint32) (types.UserEntry, error) {
-	r.rwMu.Lock()
-	defer r.rwMu.Unlock()
-
-	if err := r.prune(); err != nil {
-		return types.UserEntry{}, err
-	}
+	r.rwMu.RLock()
+	defer r.rwMu.RUnlock()
 
 	return r.userByIDWithoutLock(uid)
 }
@@ -232,22 +184,6 @@ func (r *PreAuthUserRecords) userByIDWithoutLock(uid uint32) (types.UserEntry, e
 	}
 
 	return preAuthUserEntry(user), nil
-}
-
-func (r *PreAuthUserRecords) userByLogin(loginName string) (types.UserEntry, error) {
-	r.rwMu.Lock()
-	defer r.rwMu.Unlock()
-
-	if err := r.prune(); err != nil {
-		return types.UserEntry{}, err
-	}
-
-	uid, ok := r.uidByLogin[loginName]
-	if !ok {
-		return types.UserEntry{}, db.NewUserNotFoundError(loginName)
-	}
-
-	return r.userByIDWithoutLock(uid)
 }
 
 func preAuthUserEntry(user preAuthUser) types.UserEntry {

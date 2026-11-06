@@ -142,7 +142,7 @@ func TestPreAuthUser(t *testing.T) {
 				registeredUIDs = append(registeredUIDs, uid)
 
 				// Check that the user was registered
-				user, err := records.UserByLogin(loginName)
+				user, err := records.UserByID(uid)
 				require.NoError(t, err, "UserByID should not return an error, but did")
 
 				var goldenOptions []golden.Option
@@ -168,15 +168,16 @@ func TestPreAuthUser(t *testing.T) {
 
 				removeUID := registeredUIDs[len(registeredUIDs)-wantRegistered-1]
 				t.Logf("Removing user %q for UID %v", loginName, removeUID)
-				preauthUID, cleanup, err := records.MaybeCompletePreauthUser(loginName)
-				require.NoError(t, err, "MaybeCompletePreauthUser should not fail but it did")
-				require.Equal(t, removeUID, preauthUID, "MaybeCompletePreauthUser UID is not matching")
+				preauthUID, release, cleanup, err := records.HoldUser(loginName)
+				require.NoError(t, err, "HoldUser should not fail but it did")
+				require.Equal(t, removeUID, preauthUID, "HoldUser UID is not matching")
 				require.NoError(t, cleanup())
+				release()
 				require.Len(t, records.GetUsers(), wantRegistered,
 					"Number of pre-auth users should be %d", wantRegistered)
 
 				// Check that the user was removed
-				_, err = records.UserByLogin(loginName)
+				_, err = records.UserByID(removeUID)
 				require.Error(t, err, "UserByID should return an error, but did not")
 			}
 		})

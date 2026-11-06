@@ -105,6 +105,14 @@ func (s *TestDescriptorStore) Remove(names ...string) error {
 	return nil
 }
 
+// SetFailRemove changes removal failures while a daemon worker is running.
+func (s *TestDescriptorStore) SetFailRemove(fail bool) {
+	testsdetection.MustBeTesting()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.FailRemove = fail
+}
+
 // Close represents daemon exit, not service-manager exit.
 func (s *TestDescriptorStore) Close() error {
 	testsdetection.MustBeTesting()

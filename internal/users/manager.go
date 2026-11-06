@@ -304,15 +304,11 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 		// The user already exists in the database, use the existing UID to avoid permission issues.
 		u.UID = oldUserInfo.UID
 	} else {
-		preauthUID, cleanup, err := m.preAuthRecords.MaybeCompletePreauthUser(u.Name)
+		preauthUID, release, cleanup, err := m.preAuthRecords.HoldUser(u.Name)
 		if err != nil && !errors.Is(err, tempentries.NoDataFoundError{}) {
 			return err
 		}
 		if preauthUID != 0 {
-			release, err := m.preAuthRecords.HoldIDs(preauthUID)
-			if err != nil {
-				return err
-			}
 			defer release()
 			if existing, err := m.db.UserByID(preauthUID); err == nil && existing.Name != u.Name {
 				return fmt.Errorf("pre-auth UID %d for %q is already assigned to %q", preauthUID, u.Name, existing.Name)

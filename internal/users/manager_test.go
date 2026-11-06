@@ -253,7 +253,8 @@ func TestIdentityChangesRejectPreAuthReservations(t *testing.T) {
 			require.Equal(t, bob, unchanged, "a rejected reassignment must not change the account")
 
 			exit()
-			require.NoError(t, setID(uid), "an abandoned reservation must not block reassignment")
+			require.Eventually(t, func() bool { return setID(uid) == nil }, 3*time.Second, time.Millisecond,
+				"an abandoned reservation must not block reassignment")
 			updated, err := m.UserByName(bob.Name)
 			require.NoError(t, err)
 			if idType == "UID" {
@@ -282,6 +283,10 @@ func TestCompletedPreAuthAllowsIdentityChanges(t *testing.T) {
 	require.NoError(t, err)
 	_, err = m.SetGroupID("alice@example.com", uid+100)
 	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		ids, err := m.UsedUIDs()
+		return err == nil && !slices.Contains(ids, uid)
+	}, 3*time.Second, time.Millisecond, "completed reservations must release while their owners are alive")
 	require.NoError(t, m.Stop())
 	m = newManagerForTests(t, dbDir)
 	t.Cleanup(func() { require.NoError(t, m.Stop()) })
@@ -303,14 +308,14 @@ func TestPreAuthCleanupFailureStillUpdatesLocalGroups(t *testing.T) {
 	m := newManagerForTests(t, dbDir, users.WithPreAuthStore(store), users.WithIDGenerator(generator))
 	uid, err := m.RegisterUserPreAuth("alice@example.com", owner)
 	require.NoError(t, err)
-	store.FailRemove = true
-	require.ErrorContains(t, m.UpdateUser(types.UserInfo{
+	store.SetFailRemove(true)
+	require.NoError(t, m.UpdateUser(types.UserInfo{
 		Name: "alice@example.com", Dir: "/nonexistent", Shell: "/bin/bash",
 		Groups: []types.GroupInfo{
 			{Name: "localgroup1"},
 			{Name: "shared@example.com", UGID: "shared"},
 		},
-	}), "descriptor store removal failed")
+	}), "background cleanup failures must not fail account creation")
 	alice, err := userstestutils.DBManager(m).UserByName("alice@example.com")
 	require.NoError(t, err, "the account must be saved before its reservation is released")
 	require.Equal(t, uid, alice.UID)
@@ -319,7 +324,7 @@ func TestPreAuthCleanupFailureStillUpdatesLocalGroups(t *testing.T) {
 	require.Contains(t, string(groups), "localgroup1:x:41:user1@example.com,alice@example.com")
 	require.NoError(t, m.Stop())
 
-	store.FailRemove = false
+	store.SetFailRemove(false)
 	m = newManagerForTests(t, dbDir, users.WithPreAuthStore(store))
 	require.NoError(t, m.DeleteUser("alice@example.com", false))
 	ids, err := m.UsedUIDs()

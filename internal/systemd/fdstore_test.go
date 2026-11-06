@@ -129,13 +129,9 @@ func TestSocketDescriptorStoreSurvivesDaemonExit(t *testing.T) {
 	files := second.Load()
 	require.Len(t, files[StorePrefix+"owner"], 1)
 	require.NoError(t, files[StorePrefix+"owner"][0].Close())
-	store.mu.Lock()
-	store.FailRemove = true
-	store.mu.Unlock()
+	store.SetFailRemove(true)
 	require.ErrorContains(t, second.Remove(StorePrefix+"owner"), "removal failed")
-	store.mu.Lock()
-	store.FailRemove = false
-	store.mu.Unlock()
+	store.SetFailRemove(false)
 	require.NoError(t, second.Remove(StorePrefix+"owner"))
 	require.Empty(t, second.Load())
 }

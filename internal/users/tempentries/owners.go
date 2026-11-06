@@ -13,9 +13,11 @@ func (r *PreAuthUserRecords) AddOwner(name string, owner *proc.Process) (uint32,
 	if err := checkOwner(owner); err != nil {
 		return 0, err
 	}
+	r.storeMu.Lock()
+	defer r.storeMu.Unlock()
 	r.rwMu.Lock()
 	defer r.rwMu.Unlock()
-	if err := r.prune(); err != nil {
+	if err := r.monitorError(); err != nil {
 		return 0, err
 	}
 
@@ -63,18 +65,21 @@ func checkOwner(owner *proc.Process) error {
 	return nil
 }
 
-// HoldIDs protects an ID during account creation even if all SSH owners exit.
-// Without this hold, group allocation could reclaim the account's pending UID.
-func (r *PreAuthUserRecords) HoldIDs(uid uint32) (func(), error) {
+// HoldUser finds and pins a reservation during account creation, even if all
+// SSH owners exit. Complete it only after saving the account, then release it.
+func (r *PreAuthUserRecords) HoldUser(name string) (uid uint32, release func(), complete func() error, err error) {
+	r.storeMu.Lock()
+	defer r.storeMu.Unlock()
 	r.rwMu.Lock()
 	defer r.rwMu.Unlock()
-	u, ok := r.users[uid]
+	uid, ok := r.uidByLogin[name]
 	if !ok {
-		return nil, NoDataFoundError{}
+		return 0, nil, nil, NoDataFoundError{}
 	}
+	u := r.users[uid]
 	u.pins++
 	r.users[uid] = u
-	return func() {
+	release = func() {
 		r.rwMu.Lock()
 		defer r.rwMu.Unlock()
 		u, ok := r.users[uid]
@@ -83,7 +88,9 @@ func (r *PreAuthUserRecords) HoldIDs(uid uint32) (func(), error) {
 		}
 		u.pins--
 		r.users[uid] = u
-	}, nil
+		r.wakeMonitor()
+	}
+	return uid, release, func() error { return r.MarkCompleted(uid) }, nil
 }
 
 // ReservedUsers returns the login name for each reserved UID.
@@ -99,11 +106,8 @@ func (r *PreAuthUserRecords) ReservedUsers() map[uint32]string {
 
 // ReservedIDs returns IDs held for pending account creation.
 func (r *PreAuthUserRecords) ReservedIDs() ([]uint32, error) {
-	r.rwMu.Lock()
-	defer r.rwMu.Unlock()
-	if err := r.prune(); err != nil {
-		return nil, err
-	}
+	r.rwMu.RLock()
+	defer r.rwMu.RUnlock()
 	ids := make([]uint32, 0, len(r.users))
 	for uid := range r.users {
 		ids = append(ids, uid)
