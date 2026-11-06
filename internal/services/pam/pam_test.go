@@ -21,6 +21,7 @@ import (
 	"github.com/canonical/authd/internal/services/errmessages"
 	"github.com/canonical/authd/internal/services/pam"
 	"github.com/canonical/authd/internal/services/permissions"
+	"github.com/canonical/authd/internal/systemd"
 	"github.com/canonical/authd/internal/testutils"
 	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/canonical/authd/internal/users"
@@ -70,8 +71,10 @@ var (
 func TestNewService(t *testing.T) {
 	t.Parallel()
 
-	m, err := users.NewManager(users.DefaultConfig, t.TempDir())
+	m, err := users.NewManager(users.DefaultConfig, t.TempDir(),
+		users.WithPreAuthStore(systemd.Z_ForTests_NewDescriptorStore(t)))
 	require.NoError(t, err, "Setup: could not create user manager")
+	t.Cleanup(func() { _ = m.Stop() })
 
 	service := pam.NewService(context.Background(), m, globalBrokerManager, pam.DefaultConfig)
 
@@ -152,7 +155,8 @@ func TestGetBroker(t *testing.T) {
 			err = db.Z_ForTests_CreateDBFromYAMLReader(bytes.NewBuffer(d), dbDir)
 			require.NoError(t, err, "Setup: could not create database from testdata")
 
-			m, err := users.NewManager(users.DefaultConfig, dbDir)
+			m, err := users.NewManager(users.DefaultConfig, dbDir,
+				users.WithPreAuthStore(systemd.Z_ForTests_NewDescriptorStore(t)))
 			require.NoError(t, err, "Setup: could not create user manager")
 			t.Cleanup(func() { _ = m.Stop() })
 
@@ -211,7 +215,8 @@ func TestSelectBroker(t *testing.T) {
 				require.NoError(t, err, "Setup: could not create database from testdata")
 			}
 
-			m, err := users.NewManager(users.DefaultConfig, cacheDir)
+			m, err := users.NewManager(users.DefaultConfig, cacheDir,
+				users.WithPreAuthStore(systemd.Z_ForTests_NewDescriptorStore(t)))
 			require.NoError(t, err, "Setup: could not create user manager")
 			t.Cleanup(func() { _ = m.Stop() })
 
@@ -463,6 +468,7 @@ func TestIsAuthenticated(t *testing.T) {
 			}
 
 			managerOpts := []users.Option{
+				users.WithPreAuthStore(systemd.Z_ForTests_NewDescriptorStore(t)),
 				users.WithIDGenerator(&users.IDGeneratorMock{
 					UIDsToGenerate: []uint32{1111},
 					GIDsToGenerate: []uint32{22222, 33333, 44444},
@@ -781,6 +787,7 @@ func TestIDGeneration(t *testing.T) {
 			t.Parallel()
 
 			managerOpts := []users.Option{
+				users.WithPreAuthStore(systemd.Z_ForTests_NewDescriptorStore(t)),
 				users.WithIDGenerator(&users.IDGeneratorMock{
 					UIDsToGenerate: []uint32{1111},
 					GIDsToGenerate: []uint32{22222},
@@ -900,7 +907,8 @@ func newPamClientWithConfig(t *testing.T, m *users.Manager, brokerManager *broke
 	require.NoError(t, err, "Setup: could not create unix socket")
 
 	if m == nil {
-		m, err = users.NewManager(users.DefaultConfig, t.TempDir())
+		m, err = users.NewManager(users.DefaultConfig, t.TempDir(),
+			users.WithPreAuthStore(systemd.Z_ForTests_NewDescriptorStore(t)))
 		require.NoError(t, err, "Setup: could not create user manager")
 		t.Cleanup(func() { _ = m.Stop() })
 	}

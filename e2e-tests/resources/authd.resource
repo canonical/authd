@@ -14,6 +14,18 @@ Disable Authd Socket And Service
     SSH.Execute    systemctl mask --now authd.socket
     SSH.Execute    systemctl mask --now authd.service
 
+Get Authd Descriptor Count
+    ${count} =    SSH.Execute    systemctl show authd.service -p NFileDescriptorStore --value
+    RETURN    ${count}
+
+Wait For Authd Descriptor Count
+    [Arguments]    ${expected}
+    Wait Until Keyword Succeeds    30s    1s    Check Authd Descriptor Count    ${expected}
+
+Check Authd Descriptor Count
+    [Arguments]    ${expected}
+    ${count} =    Get Authd Descriptor Count
+    Should Be Equal    ${count}    ${expected}
 
 Change Password
     [Arguments]    ${local_password}    ${new_password}

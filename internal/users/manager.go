@@ -16,6 +16,7 @@ import (
 
 	"github.com/canonical/authd/internal/decorate"
 	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/internal/systemd"
 	"github.com/canonical/authd/internal/users/db"
 	"github.com/canonical/authd/internal/users/localentries"
 	userslocking "github.com/canonical/authd/internal/users/locking"
@@ -55,7 +56,15 @@ type Manager struct {
 }
 
 type options struct {
-	idGenerator IDGeneratorIface
+	idGenerator  IDGeneratorIface
+	preAuthStore systemd.DescriptorStore
+}
+
+// WithPreAuthStore supplies a descriptor store. This option is useful in tests.
+func WithPreAuthStore(store systemd.DescriptorStore) Option {
+	return func(o *options) {
+		o.preAuthStore = store
+	}
 }
 
 // Option is a function that allows changing some of the default behaviors of the manager.
@@ -123,14 +132,39 @@ func NewManager(config Config, dbDir string, args ...Option) (m *Manager, err er
 	}
 
 	m = &Manager{
-		config:         config,
-		preAuthRecords: tempentries.NewPreAuthUserRecords(),
-		idGenerator:    opts.idGenerator,
+		config:      config,
+		idGenerator: opts.idGenerator,
 	}
 
 	m.db, err = db.New(dbDir)
 	if err != nil {
 		return nil, err
+	}
+	if opts.preAuthStore != nil {
+		m.preAuthRecords, err = tempentries.NewStoredPreAuthUserRecords(opts.preAuthStore)
+	} else {
+		m.preAuthRecords, err = tempentries.NewPersistentPreAuthUserRecords()
+	}
+	if err != nil {
+		m.db.Close()
+		return nil, fmt.Errorf("failed to restore pre-auth users: %w", err)
+	}
+	for uid, loginName := range m.preAuthRecords.ReservedUsers() {
+		if user, err := m.db.UserByID(uid); err == nil {
+			if user.Name == loginName {
+				if err := m.preAuthRecords.MarkCompleted(uid); err != nil {
+					_ = m.Stop()
+					return nil, err
+				}
+			} else {
+				log.Warningf(context.Background(),
+					"Pre-auth UID %d for %q is already owned by %q; keeping reservation pinned",
+					uid, loginName, user.Name)
+			}
+		} else if !errors.Is(err, db.NoDataFoundError{}) {
+			_ = m.Stop()
+			return nil, err
+		}
 	}
 
 	return m, nil
@@ -138,7 +172,7 @@ func NewManager(config Config, dbDir string, args ...Option) (m *Manager, err er
 
 // Stop closes the underlying db.
 func (m *Manager) Stop() error {
-	return m.db.Close()
+	return errors.Join(m.preAuthRecords.Close(), m.db.Close())
 }
 
 // UpdateUser updates the user information in the db.
@@ -259,6 +293,13 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 	}
 	defer func() { err = errors.Join(err, unlockEntries()) }()
 
+	var completePreauth func() error
+	var accountSaved bool
+	defer func() {
+		if accountSaved && completePreauth != nil {
+			err = errors.Join(err, completePreauth())
+		}
+	}()
 	if oldUserInfo != nil {
 		// The user already exists in the database, use the existing UID to avoid permission issues.
 		u.UID = oldUserInfo.UID
@@ -268,8 +309,18 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 			return err
 		}
 		if preauthUID != 0 {
+			release, err := m.preAuthRecords.HoldIDs(preauthUID)
+			if err != nil {
+				return err
+			}
+			defer release()
+			if existing, err := m.db.UserByID(preauthUID); err == nil && existing.Name != u.Name {
+				return fmt.Errorf("pre-auth UID %d for %q is already assigned to %q", preauthUID, u.Name, existing.Name)
+			} else if err != nil && !errors.Is(err, db.NoDataFoundError{}) {
+				return err
+			}
 			u.UID = preauthUID
-			defer cleanup()
+			completePreauth = cleanup
 		} else {
 			unique, err := lockedEntries.IsUniqueUserName(u.Name)
 			if err != nil {
@@ -379,6 +430,7 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 	if err = m.db.UpdateUserEntry(userRow, groupRows, localGroups); err != nil {
 		return err
 	}
+	accountSaved = true
 
 	// Update local groups.
 	if err := localentries.UpdateGroups(lockedEntries, u.Name, localGroups, oldLocalGroups); err != nil {
@@ -486,6 +538,9 @@ func (m *Manager) SetUserID(name string, uid uint32) (resp *SetUserIDResp, err e
 		resp.Warnings = append(resp.Warnings, warning)
 		return resp, nil
 	}
+	if err := m.preAuthRecords.CheckNotReserved(uid); err != nil {
+		return nil, err
+	}
 
 	// Check if another user already has the given UID
 	_, err = user.LookupId(strconv.FormatUint(uint64(uid), 10))
@@ -586,6 +641,9 @@ func (m *Manager) SetGroupID(name string, gid uint32) (resp *SetGroupIDResp, err
 		log.Info(context.Background(), warning)
 		resp.Warnings = append(resp.Warnings, warning)
 		return resp, nil
+	}
+	if err := m.preAuthRecords.CheckNotReserved(gid); err != nil {
+		return nil, err
 	}
 
 	// Check if another group already has the given GID
@@ -924,7 +982,6 @@ func (m *Manager) DeleteUser(username string, removeHome bool) (err error) {
 	if err != nil {
 		return err
 	}
-
 	lockedEntries, unlockEntries, err := localentries.WithUserDBLock()
 	if err != nil {
 		return err
@@ -1072,16 +1129,12 @@ func (m *Manager) UsedUIDs() ([]uint32, error) {
 		uids = append(uids, usr.UID)
 	}
 
-	// Add temporary users from the pre-auth records.
-	tempUsers, err := m.preAuthRecords.AllUsers()
+	// Include IDs still held by connections after successful authentication.
+	reserved, err := m.preAuthRecords.ReservedIDs()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get temporary users: %w", err)
 	}
-	for _, tempUser := range tempUsers {
-		uids = append(uids, tempUser.UID)
-	}
-
-	return uids, nil
+	return append(uids, reserved...), nil
 }
 
 // GroupByName returns the group information for the given group name.
@@ -1141,16 +1194,11 @@ func (m *Manager) UsedGIDs() ([]uint32, error) {
 		gids = append(gids, u.GID)
 	}
 
-	// Add temporary groups from the pre-auth records.
-	tempUsers, err := m.preAuthRecords.AllUsers()
+	reserved, err := m.preAuthRecords.ReservedIDs()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get temporary groups: %w", err)
 	}
-	for _, tu := range tempUsers {
-		gids = append(gids, tu.GID)
-	}
-
-	return gids, nil
+	return append(gids, reserved...), nil
 }
 
 // ShadowByName returns the shadow information for the given user name.
@@ -1176,12 +1224,35 @@ func (m *Manager) AllShadows() ([]types.ShadowEntry, error) {
 	return shadowEntries, err
 }
 
-// RegisterUserPreAuth registers a temporary user with a unique UID in our NSS handler (in memory, not in the database).
+// RegisterUserPreAuth reserves a unique UID for NSS until authentication completes.
+// Reservations survive daemon restarts until the account is saved or all owners exit.
 //
 // The temporary user record is removed when UpdateUser is called with the same username.
-func (m *Manager) RegisterUserPreAuth(name string) (uid uint32, err error) {
+func (m *Manager) RegisterUserPreAuth(name string, owners ...*proc.Process) (uid uint32, err error) {
 	defer decorate.OnError(&err, "failed to register pre-auth user %q", name)
 
+	var owner *proc.Process
+	if len(owners) == 0 {
+		owner, err = proc.OpenProcess(os.Getpid())
+		if err != nil {
+			return 0, err
+		}
+		defer owner.Close()
+	} else if len(owners) == 1 {
+		owner = owners[0]
+	} else {
+		return 0, errors.New("expected one pre-auth process owner")
+	}
+	if owner == nil {
+		return 0, errors.New("missing peer pidfd")
+	}
+	alive, err := owner.Alive()
+	if err != nil {
+		return 0, err
+	}
+	if !alive {
+		return 0, errors.New("pre-auth process owner has exited")
+	}
 	// Do a first check without the lock, so that if the user is already there
 	// we don't have to go through actual locking.
 	if userRow, err := m.db.UserByName(name); err == nil {
@@ -1199,10 +1270,10 @@ func (m *Manager) RegisterUserPreAuth(name string) (uid uint32, err error) {
 		return userRow.UID, nil
 	}
 
-	user, err := m.preAuthRecords.UserByLogin(name)
+	uid, err = m.preAuthRecords.AddOwner(name, owner)
 	if err == nil {
 		log.Debugf(context.Background(), "user %q already pre-authenticated", name)
-		return user.UID, nil
+		return uid, nil
 	}
 	if err != nil && !errors.Is(err, tempentries.NoDataFoundError{}) {
 		return 0, err
@@ -1228,7 +1299,7 @@ func (m *Manager) RegisterUserPreAuth(name string) (uid uint32, err error) {
 	}
 	defer cleanupUID()
 
-	if err := m.preAuthRecords.RegisterPreAuthUser(name, uid); err != nil {
+	if err := m.preAuthRecords.RegisterPreAuthUser(name, uid, owner); err != nil {
 		return 0, err
 	}
 

@@ -9,8 +9,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/canonical/authd/internal/users/proc"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
 )
 
 func TestPeerCredsInfoAuthType(t *testing.T) {
@@ -59,10 +61,18 @@ func TestServerPeerCredsHandshake(t *testing.T) {
 	c, i, err := s.ServerHandshake(conn)
 
 	require.NoError(t, err, "ServerHandshake should not fail")
-	require.Equal(t, conn, c, "Connexion should match given connection")
+	wrapped, ok := c.(*peerConnection)
+	require.True(t, ok)
+	require.Equal(t, conn, wrapped.Conn, "Connection wrapper should preserve the Unix socket")
+	defer c.Close()
 	uid := currentUserUID()
 	require.Equal(t, fmt.Sprintf("uid: %d, pid: %d", uid, os.Getpid()),
 		i.AuthType(), "uid or pid received doesn't match what we expected")
+	process, err := PeerProcess(peer.NewContext(context.Background(), &peer.Peer{AuthInfo: i}))
+	require.NoError(t, err)
+	pid, err := process.PID()
+	require.NoError(t, err)
+	require.Equal(t, os.Getpid(), pid, "reservation owner must come from the kernel peer")
 
 	// ClientHandshake status check.
 	c, i, err = s.ClientHandshake(context.Background(), "unused", conn)
@@ -76,6 +86,24 @@ func TestServerPeerCredsHandshake(t *testing.T) {
 	wg.Wait()
 
 	require.NoError(t, clientErr, "Client should not return an error")
+}
+
+func TestPeerProcessRejectsInvalidOwner(t *testing.T) {
+	t.Parallel()
+	process, err := proc.OpenProcess(os.Getpid())
+	require.NoError(t, err)
+	require.NoError(t, process.Close())
+	for _, info := range []credentials.AuthInfo{
+		nil,
+		peerAuthInfo{pid: int32(os.Getpid())}, //nolint:gosec // Test process IDs fit in int32.
+		peerAuthInfo{process: process},
+	} {
+		ctx := peer.NewContext(context.Background(), &peer.Peer{AuthInfo: info})
+		_, err := PeerProcess(ctx)
+		require.Error(t, err, "client-supplied or reused PIDs must not acquire reservations")
+	}
+	_, err = PeerProcess(context.Background())
+	require.Error(t, err)
 }
 
 func TestServerPeerCredsInvalidSocket(t *testing.T) {
