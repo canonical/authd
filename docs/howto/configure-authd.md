@@ -445,6 +445,11 @@ When using the Microsoft Entra ID broker, you can enable automatic device
 registration, which allows administrators to manage registered devices in the
 Microsoft Entra admin center.
 
+If a registered device is deleted in Entra, the broker attempts to register it
+again at the next online password login. If this fails, the user can sign in
+with another online method. Device-code recovery keeps the existing local
+password and may ask for it again after another authentication method.
+
 Automatic device registration can be enabled with the `register_device`
 option in the `msentraid` section of the broker configuration file:
 
