@@ -167,7 +167,7 @@ class CollectTests(unittest.TestCase):
         lock = Path(__file__).parents[1] / "workflows/nightly-ci-triage.lock.yml"
         self.assertIn(f"      - name: {COMPLETION_STEP}\n", lock.read_text())
 
-    def test_incomplete_safe_outputs_keep_window_for_retry(self):
+    def test_incomplete_triage_writes_keep_window_for_retry(self):
         workflows = Path(__file__).parents[1] / "workflows"
         scripts = []
         for suffix in ("md", "lock.yml"):
@@ -178,6 +178,7 @@ class CollectTests(unittest.TestCase):
             needs = job.split("    needs:", 1)[1].split("    if:", 1)[0]
             self.assertIn("agent", needs)
             self.assertIn("safe_outputs", needs)
+            self.assertIn("attach_triage_recordings", needs)
             step = job.split(
                 "      - name: Require all triage writes before advancing the checkpoint\n",
                 1,
@@ -190,6 +191,7 @@ class CollectTests(unittest.TestCase):
             for variable, expression in {
                 "SAFE_OUTPUTS_RESULT": "needs.safe_outputs.result",
                 "SAFE_OUTPUTS_STATUS": "needs.safe_outputs.outputs.process_safe_outputs_status",
+                "RECORDINGS_RESULT": "needs.attach_triage_recordings.result",
                 **{
                     f"ITEMS_{outcome.upper()}": (
                         f"needs.safe_outputs.outputs.process_safe_outputs_items_{outcome}"
@@ -202,6 +204,7 @@ class CollectTests(unittest.TestCase):
         complete = {
             "SAFE_OUTPUTS_RESULT": "success",
             "SAFE_OUTPUTS_STATUS": "success",
+            "RECORDINGS_RESULT": "success",
             "ITEMS_DEFERRED": "0",
             "ITEMS_SKIPPED": "0",
             "ITEMS_FAILED": "0",
@@ -214,7 +217,11 @@ class CollectTests(unittest.TestCase):
         )
         cases.extend(
             {variable: value}
-            for variable in ("SAFE_OUTPUTS_RESULT", "SAFE_OUTPUTS_STATUS")
+            for variable in (
+                "SAFE_OUTPUTS_RESULT",
+                "SAFE_OUTPUTS_STATUS",
+                "RECORDINGS_RESULT",
+            )
             for value in (
                 "failure",
                 "skipped",
@@ -244,7 +251,7 @@ class CollectTests(unittest.TestCase):
                 result = self.collect([previous], checkpoints=(90,))
                 self.assertEqual(result["bootstrap"], bool(overrides))
                 if overrides:
-                    self.assertIn("::error::Incomplete safe outputs", checked.stdout)
+                    self.assertIn("::error::Incomplete triage writes", checked.stdout)
                     self.assertEqual(result["since"], "2026-10-18T03:00:00+00:00")
 
     def test_unusable_agent_output_keeps_window_for_retry(self):
