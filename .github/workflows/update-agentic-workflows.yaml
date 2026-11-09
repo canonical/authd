@@ -13,22 +13,17 @@ concurrency:
   group: update-agentic-workflows
 
 jobs:
-  update-agentic-workflows:
+  prepare:
+    permissions:
+      contents: read
+    outputs:
+      modified: ${{ steps.update.outputs.modified }}
     runs-on: ubuntu-26.04 # ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
-
-      - name: Check update credentials
-        env:
-          WORKFLOW_UPDATE_TOKEN: ${{ secrets.AGENTIC_WORKFLOW_UPDATE_TOKEN }}
-        shell: bash
-        run: |
-          if [[ -z "${WORKFLOW_UPDATE_TOKEN}" ]]; then
-            echo "::error::Configure AGENTIC_WORKFLOW_UPDATE_TOKEN with Contents, Pull requests, and Workflows write access"
-            exit 1
-          fi
 
       - name: Upgrade agentic workflows
         id: update
@@ -51,32 +46,118 @@ jobs:
 
       - name: Check CI triage safeguards
         if: steps.update.outputs.modified == 'true'
-        run: python3 -m unittest discover -s .github/scripts -p 'test_collect_ci_failures.py'
+        run: |
+          python3 -m unittest discover -s .github/scripts -p 'test_collect_ci_failures.py'
+          python3 -m unittest discover -s .github/scripts -p 'test_sign_agentic_update.py'
 
       - name: Prepare pull request description
         if: steps.update.outputs.modified == 'true'
+        env:
+          UPDATE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           {
+            printf 'Automated gh-aw update created by the [Update agentic workflows workflow](%s). This PR was not opened manually.\n\n' "${UPDATE_RUN_URL}"
             cat <<'EOF'
           Updates gh-aw, its runtime Actions, and generated workflow locks together.
 
           Validation:
           - `gh aw compile`: passed.
           - `python3 -m unittest discover -s .github/scripts -p 'test_collect_ci_failures.py'`: passed.
+          - `python3 -m unittest discover -s .github/scripts -p 'test_sign_agentic_update.py'`: passed.
 
+          These checks ran in the updater workflow. PRs created with GITHUB_TOKEN
+          do not trigger normal PR CI. Close and reopen the PR to run those checks.
           EOF
             cat .github/pull_request_template.md
           } > "${RUNNER_TEMP}/agentic-workflows-update.md"
 
-      - name: Create pull request
+      - name: Prepare update patch
         if: steps.update.outputs.modified == 'true'
+        run: |
+          git add -A
+          git diff-index --cached --binary HEAD > "${RUNNER_TEMP}/update.patch"
+
+      - name: Upload prepared update
+        if: steps.update.outputs.modified == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: agentic-update
+          path: |
+            ${{ runner.temp }}/update.patch
+            ${{ runner.temp }}/agentic-workflows-update.md
+
+  publish:
+    needs: prepare
+    if: needs.prepare.outputs.modified == 'true'
+    permissions:
+      contents: write
+      pull-requests: write
+    runs-on: ubuntu-26.04 # ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Check update credentials
+        env:
+          WORKFLOW_UPDATE_TOKEN: ${{ secrets.AGENTIC_WORKFLOW_UPDATE_TOKEN }}
+        shell: bash
+        run: |
+          if [[ -z "${WORKFLOW_UPDATE_TOKEN}" ]]; then
+            echo "::error::Configure AGENTIC_WORKFLOW_UPDATE_TOKEN with Contents and Workflows write access"
+            exit 1
+          fi
+
+      - name: Download prepared update
+        uses: actions/download-artifact@v8
+        with:
+          name: agentic-update
+          path: ${{ runner.temp }}
+
+      - name: Sign the update as github-actions[bot]
+        id: sign-update
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_UPDATE_TOKEN: ${{ secrets.AGENTIC_WORKFLOW_UPDATE_TOKEN }}
+        run: |
+          cp .github/scripts/sign_agentic_update.py "${RUNNER_TEMP}/sign_agentic_update.py"
+          git apply --index "${RUNNER_TEMP}/update.patch"
+          python3 -I "${RUNNER_TEMP}/sign_agentic_update.py" \
+            --message "deps(ci): keep the agentic runtime and compiler in sync"
+          echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+
+      - name: Publish the exact signed commit
+        env:
+          GH_TOKEN: ${{ secrets.AGENTIC_WORKFLOW_UPDATE_TOKEN }}
+          SIGNED_SHA: ${{ steps.sign-update.outputs.sha }}
+        run: |
+          set -euo pipefail
+          ref=refs/heads/auto-update-agentic-workflows
+          previous_sha=$(git -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
+            ls-remote origin "${ref}" | cut -f1)
+          git -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
+            push --force-with-lease="${ref}:${previous_sha}" origin "${SIGNED_SHA}:${ref}"
+
+      - name: Create pull request
+        id: create-pr
         uses: peter-evans/create-pull-request@v8
         with:
-          token: ${{ secrets.AGENTIC_WORKFLOW_UPDATE_TOKEN }}
+          token: ${{ github.token }}
+          branch-token: ${{ secrets.AGENTIC_WORKFLOW_UPDATE_TOKEN }}
+          # The exact signed commit is already on this branch.
           branch: auto-update-agentic-workflows
           delete-branch: true
-          sign-commits: true
           draft: true
           commit-message: "deps(ci): keep the agentic runtime and compiler in sync"
           title: "deps(ci): update agentic workflows"
           body-path: ${{ runner.temp }}/agentic-workflows-update.md
+
+      - name: Verify the exact signed commit was published
+        env:
+          COMMITS_VERIFIED: ${{ steps.create-pr.outputs.pull-request-commits-verified }}
+          PUBLISHED_SHA: ${{ steps.create-pr.outputs.pull-request-head-sha }}
+          SIGNED_SHA: ${{ steps.sign-update.outputs.sha }}
+        run: |-
+          test "${PUBLISHED_SHA}" = "${SIGNED_SHA}"
+          test "${COMMITS_VERIFIED}" = "true"
