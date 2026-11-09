@@ -40,6 +40,11 @@ func main() {
 	}
 
 	rootCmd := root.RootCmd
+	// TODO: Remove this workaround once https://github.com/spf13/pflag/issues/454
+	// is fixed and we can disable boolean value syntax upstream.
+	if *format == "markdown" || *format == "rest" {
+		rootCmd = root.CommandForDocs(rootCmd)
+	}
 	rootCmd.DisableAutoGenTag = true // stable, reproducible files (no timestamp footer)
 
 	switch *format {
