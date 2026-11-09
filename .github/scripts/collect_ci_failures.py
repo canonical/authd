@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from time import monotonic
 from urllib.parse import urlencode
+from xml.parsers import expat
 
 FAILURES = {"failure", "timed_out", "action_required", "startup_failure", "stale"}
 COMPLETION_STEP = "Require complete triage before advancing the checkpoint"
@@ -29,6 +30,7 @@ FILTERED_RUN_LIMIT = 1000
 MAX_LOG_BYTES = 16 * 1024**2
 MAX_ARCHIVE_BYTES = 256 * 1024**2
 MAX_DIAGNOSTIC_BYTES = 32 * 1024**2
+MAX_ROBOT_RESULTS_BYTES = 32 * 1024**2
 MAX_ARCHIVE_MEMBERS = 10_000
 MAX_ARCHIVE_FILES = 1_000
 MAX_DOWNLOAD_BYTES = 2 * 1024**3
@@ -260,6 +262,62 @@ def expected_artifact(failure, job):
     return None
 
 
+def robot_failed_suites(archive, deadline):
+    try:
+        entry = archive.getinfo("output.xml")
+    except KeyError:
+        return set()
+    # shortcut: skip oversized results; add a compact suite summary if needed.
+    if (
+        entry.file_size > MAX_ROBOT_RESULTS_BYTES
+        or entry.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED)
+        or stat.S_IFMT(entry.external_attr >> 16) not in (0, stat.S_IFREG)
+    ):
+        return set()
+
+    suites = set()
+    parents = []
+    depth = 0
+
+    def start(tag, attrs):
+        nonlocal depth
+        if depth < 3:
+            parents.append(tag)
+        elif (
+            depth == 3
+            and tag == "stat"
+            and parents == ["robot", "statistics", "suite"]
+            and "name" in attrs
+            and int(attrs.get("fail", "0")) > 0
+        ):
+            suites.add(attrs["name"].rsplit(".", 1)[-1])
+        depth += 1
+
+    def end(_tag):
+        nonlocal depth
+        depth -= 1
+        if depth < 3:
+            parents.pop()
+
+    def reject_doctype(*_args):
+        raise ValueError("Robot results must not contain a DOCTYPE")
+
+    parser = expat.ParserCreate()
+    parser.StartElementHandler = start
+    parser.EndElementHandler = end
+    parser.StartDoctypeDeclHandler = reject_doctype
+    try:
+        with archive.open(entry) as source:
+            while True:
+                request_timeout(deadline)
+                chunk = source.read(64 * 1024)
+                parser.Parse(chunk, not chunk)
+                if not chunk:
+                    return suites
+    except (EOFError, expat.ExpatError, ValueError, zipfile.BadZipFile, zlib.error):
+        return set()
+
+
 def extract_diagnostics(raw, directory, deadline, limit, *, failed_suites=None):
     def e2e_priority(entry):
         name = entry.filename
@@ -269,10 +327,14 @@ def extract_diagnostics(raw, directory, deadline, limit, *, failed_suites=None):
             suite, separator, _ = name.partition("/journal/")
             if separator and suite in failed_suites:
                 return 1
-        return 2 if name in ("report.html", "output.xml") else 3
+        if name.endswith(".webp"):
+            suite, separator, _ = name.partition("/screenshots/")
+            if separator and suite in failed_suites:
+                return 2
+        return 3 if name in ("report.html", "output.xml") else 4
 
     remaining = limit
-    skipped = False
+    limit_hit = None
     staged_files = 0
     with zipfile.ZipFile(raw) as archive:
         entries = archive.infolist()
@@ -282,6 +344,7 @@ def extract_diagnostics(raw, directory, deadline, limit, *, failed_suites=None):
         if len(entries) > MAX_ARCHIVE_MEMBERS:
             raise ValueError(f"archive exceeds the {MAX_ARCHIVE_MEMBERS}-member limit")
         if failed_suites is not None:
+            failed_suites.update(robot_failed_suites(archive, deadline))
             entries = sorted(entries, key=e2e_priority)
         for entry in entries:
             request_timeout(deadline)
@@ -292,26 +355,34 @@ def extract_diagnostics(raw, directory, deadline, limit, *, failed_suites=None):
                 continue
             if stat.S_IFMT(entry.external_attr >> 16) not in (0, stat.S_IFREG):
                 raise zipfile.BadZipFile
-            if path.suffix not in DIAGNOSTIC_SUFFIXES and not (
-                path.suffix[1:].isdigit() and path.with_suffix("").suffix == ".log"
+            if (
+                path.suffix not in DIAGNOSTIC_SUFFIXES
+                and not (
+                    path.suffix[1:].isdigit() and path.with_suffix("").suffix == ".log"
+                )
+                and not (
+                    failed_suites is not None
+                    and len(path.parts) >= 3
+                    and path.parts[1] == "screenshots"
+                    and path.suffix == ".webp"
+                )
             ):
                 continue
             if entry.file_size > remaining:
-                skipped = True
+                limit_hit = limit_hit or "diagnostic size limit"
                 continue
             if entry.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
                 raise zipfile.BadZipFile
             if staged_files >= MAX_ARCHIVE_FILES:
-                raise ValueError(
-                    f"archive exceeds the {MAX_ARCHIVE_FILES}-file staging limit"
-                )
+                limit_hit = f"{MAX_ARCHIVE_FILES}-file staging limit"
+                continue
             destination = directory / path
             destination.parent.mkdir(parents=True, exist_ok=True)
             with archive.open(entry) as source, destination.open("xb") as output:
                 shutil.copyfileobj(source, output)
             staged_files += 1
             remaining -= entry.file_size
-    return limit - remaining, skipped
+    return limit - remaining, limit_hit
 
 
 def collect_evidence(repo, failures, output: Path, deadline):
@@ -466,7 +537,7 @@ def collect_evidence(repo, failures, output: Path, deadline):
                     job["artifact_error"] = f"Artifact {name} unavailable ({error})"
                     continue
                 directory = Path(temporary)
-                size, skipped = extract_diagnostics(
+                size, limit_hit = extract_diagnostics(
                     raw,
                     directory,
                     deadline,
@@ -475,8 +546,8 @@ def collect_evidence(repo, failures, output: Path, deadline):
                 )
                 if not any(directory.iterdir()):
                     job["artifact_error"] = (
-                        f"Artifact {name} exceeds the diagnostic size budget"
-                        if skipped
+                        f"Artifact {name} exceeds the {limit_hit}"
+                        if limit_hit
                         else f"Artifact {name} has no usable diagnostics"
                     )
                     continue
@@ -494,9 +565,9 @@ def collect_evidence(repo, failures, output: Path, deadline):
             )
             continue
         result = {"artifact_path": str(destination)}
-        if skipped:
+        if limit_hit:
             result["artifact_error"] = (
-                f"Some files in {name} exceed the diagnostic size limit"
+                f"Some files in {name} were skipped ({limit_hit})"
             )
         staged[key] = result
         job.update(result)
