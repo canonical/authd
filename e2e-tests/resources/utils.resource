@@ -104,7 +104,8 @@ Wait Until GDM Login Screen Ready
     BuiltIn.Sleep    2
 
 Wait Until Desktop Ready
-    Wait Until Keyword Succeeds    1 min    1 sec
+    [Arguments]    ${timeout}=1 min
+    Wait Until Keyword Succeeds    ${timeout}    1 sec
     ...    Try Desktop Ready
     # Before 26.04, GNOME Shell sometimes starts with the Activities overview
     # opened, see https://bugs.launchpad.net/ubuntu/+source/gnome-shell/+bug/2145704.
