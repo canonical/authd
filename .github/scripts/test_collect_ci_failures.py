@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from collect_ci_failures import COMPLETION_STEP, collect, pages
+from collect_ci_failures import COMPLETION_STEP, collect, issue_index, main, pages
 
 
 def run(run_id=1, **overrides):
@@ -568,6 +568,97 @@ class CollectTests(unittest.TestCase):
         self.assertEqual(
             api.call_args.args[0], "repos/o/r/actions/runs?per_page=100&page=2"
         )
+
+    @patch("collect_ci_failures.subprocess.check_output")
+    def test_issue_index_includes_older_issues_without_test_name_or_ci_label(
+        self, check_output
+    ):
+        issue = {
+            "number": 2063,
+            "title": (
+                "GDM sometimes not showing local password entry "
+                "after device code flow or Entra MFA flow"
+            ),
+            "state": "OPEN",
+            "labels": [{"name": "e2e-tests"}],
+        }
+        check_output.return_value = json.dumps(
+            [issue, {**issue, "number": 1424, "state": "CLOSED"}]
+        )
+        result = issue_index("o/r")
+        self.assertEqual([item["number"] for item in result], [2063, 1424])
+        self.assertEqual(result[0]["title"], issue["title"])
+        self.assertEqual(result[0]["labels"], ["e2e-tests"])
+        self.assertEqual(result[0]["state"], "open")
+        self.assertEqual(result[1]["state"], "closed")
+        self.assertNotIn("url", result[0])
+        check_output.assert_called_once_with(
+            [
+                "gh",
+                "issue",
+                "list",
+                "--repo",
+                "o/r",
+                "--state",
+                "all",
+                "--limit",
+                "100000",
+                "--json",
+                "number,title,state,labels",
+            ],
+            text=True,
+        )
+
+    @patch("collect_ci_failures.subprocess.check_output")
+    def test_issue_inventory_api_failure_is_not_an_empty_search(self, check_output):
+        check_output.side_effect = subprocess.CalledProcessError(
+            1, ["gh", "issue", "list"]
+        )
+        with self.assertRaises(subprocess.CalledProcessError):
+            issue_index("o/r")
+
+    @patch.dict(
+        os.environ,
+        GITHUB_REPOSITORY="o/r",
+        GITHUB_RUN_ID="100",
+        GITHUB_RUN_ATTEMPT="1",
+    )
+    @patch("collect_ci_failures.api")
+    @patch("collect_ci_failures.subprocess.check_output")
+    def test_main_writes_searchable_issue_lines_only_when_failures_exist(
+        self, check_output, api
+    ):
+        issues = [
+            {"number": 2063, "title": "GDM\nblank form", "state": "OPEN", "labels": []},
+            {"number": 1424, "title": "Login timeout", "state": "CLOSED", "labels": []},
+        ]
+        check_output.return_value = json.dumps(issues)
+        for failures in (False, True):
+            with (
+                self.subTest(failures=failures),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                check_output.reset_mock()
+                api.side_effect = [
+                    CURRENT,
+                    {"default_branch": "main"},
+                    {"workflow_runs": [run()] if failures else []},
+                    run(),
+                    {"jobs": []},
+                ]
+                output = Path(directory)
+                with patch("collect_ci_failures.Path", return_value=output):
+                    main()
+                manifest = json.loads((output / "failures.json").read_text())
+                lines = (output / "issues.jsonl").read_text().splitlines()
+                self.assertEqual(len(manifest["failures"]), int(failures))
+                self.assertEqual(
+                    [json.loads(line) for line in lines],
+                    [{**issue, "state": issue["state"].lower()} for issue in issues]
+                    if failures
+                    else [],
+                )
+                self.assertEqual(check_output.call_count, int(failures))
 
 
 if __name__ == "__main__":

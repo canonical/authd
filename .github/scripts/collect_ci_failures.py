@@ -29,6 +29,34 @@ def pages(endpoint, key):
         page += 1
 
 
+def issue_index(repo):
+    listed = subprocess.check_output(
+        [
+            "gh",
+            "issue",
+            "list",
+            "--repo",
+            repo,
+            "--state",
+            "all",
+            "--limit",
+            "100000",
+            "--json",
+            "number,title,state,labels",
+        ],
+        text=True,
+    )
+    return [
+        {
+            "number": issue["number"],
+            "title": issue["title"],
+            "state": issue["state"].lower(),
+            "labels": [label["name"] for label in issue["labels"]],
+        }
+        for issue in json.loads(listed)
+    ]
+
+
 def collect(runs, current, branch, get_attempt, get_jobs):
     until = timestamp(current["run_started_at"])
     triage_runs = [
@@ -155,8 +183,12 @@ def main():
             f"{base}/runs/{run_id}/attempts/{attempt}/jobs", "jobs"
         ),
     )
+    issues = issue_index(repo) if manifest["failures"] else []
     output = Path("/tmp/gh-aw/ci-triage")
     output.mkdir(parents=True, exist_ok=True)
+    (output / "issues.jsonl").write_text(
+        "".join(json.dumps(issue) + "\n" for issue in issues)
+    )
     (output / "failures.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print(
         f"Found {len(manifest['failures'])} failed attempts "
