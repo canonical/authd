@@ -58,6 +58,7 @@ jobs:
             cat .github/pull_request_template.md
           } > "${RUNNER_TEMP}/agentic-workflows-update.md"
 
+      # See .github/agentic-workflow-updater.md for the App setup.
       - name: Mint update token
         id: app-token
         if: steps.update.outputs.modified == 'true'
