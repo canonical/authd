@@ -65,7 +65,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.3
         if: steps.update.outputs.modified == 'true'
         with:
           version-file: .github/uv-requirements.txt
