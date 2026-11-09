@@ -30,7 +30,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           version-file: .github/uv-requirements.txt
           enable-cache: true
