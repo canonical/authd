@@ -147,6 +147,9 @@ each commit must contain one coherent, self-contained logical change.
 
 Explain why, not what — the diff shows what changed.
 
+- For CI-only, E2E-only, or docs-only changes, use `ci:`, `e2e:`, or `docs:`.
+- For dependency-only updates, use `deps(<scope>):`, e.g. `deps(go):`.
+- Otherwise, follow recent commit prefixes for the affected component.
 - For bug fixes, describe the observable symptom before the root cause
 - Document non-obvious decisions and rejected alternatives
 - One-liners are fine for mechanical changes; anything behavioral needs a body
