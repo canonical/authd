@@ -125,6 +125,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Free disk space for VM snapshots
+        if: runner.environment == 'github-hosted'
+        run: |
+          set -euo pipefail
+          echo "Host storage before cleanup:"
+          df -h /var/tmp
+
+          # This job uses prebuilt packages and does not need Android or .NET.
+          sudo rm -rf -- /usr/local/lib/android/sdk /usr/share/dotnet
+
+          echo "Host storage after cleanup:"
+          df -h /var/tmp
+
       - name: Compute VM image hash
         id: vm-image-hash
         uses: ./.github/actions/compute-e2e-vm-image-hash
