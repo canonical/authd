@@ -2,6 +2,8 @@
 package root
 
 import (
+	"strings"
+
 	"github.com/canonical/authd/cmd/authctl/group"
 	"github.com/canonical/authd/cmd/authctl/user"
 	"github.com/spf13/cobra"
@@ -35,4 +37,10 @@ func init() {
 
 	RootCmd.AddCommand(user.UserCmd)
 	RootCmd.AddCommand(group.GroupCmd)
+
+	cobra.AddTemplateFunc("flagUsages", FlagUsages)
+	RootCmd.SetUsageTemplate(strings.NewReplacer(
+		".LocalFlags.FlagUsages", "flagUsages .LocalFlags",
+		".InheritedFlags.FlagUsages", "flagUsages .InheritedFlags",
+	).Replace(RootCmd.UsageTemplate()))
 }
