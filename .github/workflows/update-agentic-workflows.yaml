@@ -20,16 +20,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check update credentials
-        env:
-          WORKFLOW_UPDATE_TOKEN: ${{ secrets.AGENTIC_WORKFLOW_UPDATE_TOKEN }}
-        shell: bash
-        run: |
-          if [[ -z "${WORKFLOW_UPDATE_TOKEN}" ]]; then
-            echo "::error::Configure AGENTIC_WORKFLOW_UPDATE_TOKEN with Contents, Pull requests, and Workflows write access"
-            exit 1
-          fi
-
       - name: Upgrade agentic workflows
         id: update
         env:
@@ -68,11 +58,22 @@ jobs:
             cat .github/pull_request_template.md
           } > "${RUNNER_TEMP}/agentic-workflows-update.md"
 
+      - name: Mint update token
+        id: app-token
+        if: steps.update.outputs.modified == 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.AGENTIC_WORKFLOW_UPDATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AGENTIC_WORKFLOW_UPDATE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+
       - name: Create pull request
         if: steps.update.outputs.modified == 'true'
         uses: peter-evans/create-pull-request@v8
         with:
-          token: ${{ secrets.AGENTIC_WORKFLOW_UPDATE_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           branch: auto-update-agentic-workflows
           delete-branch: true
           sign-commits: true
