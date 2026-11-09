@@ -39,7 +39,7 @@ jobs:
           set -euo pipefail
 
           gh extension install github/gh-aw
-          gh aw upgrade
+          gh aw upgrade --no-agent
           # Upgrade can report compilation failures as warnings.
           gh aw compile
 
