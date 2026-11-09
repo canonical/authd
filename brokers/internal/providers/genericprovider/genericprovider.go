@@ -110,10 +110,11 @@ func (p GenericProvider) IsTokenExpiredError(err *oauth2.RetrieveError) bool {
 	}
 
 	expiredDescriptions := []string{
-		"Session not active",         // Keycloak: online user session expired
-		"Offline session not active", // Keycloak: offline session expired or revoked
-		"Token is not active",        // Keycloak: refresh token JWT expired (exp/nbf check)
-		"Stale token",                // Keycloak: token issued before not-before policy or reuse detected
+		"Session not active",                      // Keycloak: online user session expired
+		"Offline session not active",              // Keycloak: offline session expired or revoked
+		"Token is not active",                     // Keycloak: refresh token JWT expired (exp/nbf check)
+		"Stale token",                             // Keycloak: token issued before not-before policy or reuse detected
+		"The refresh token is invalid or expired", // Okta: refresh token expired, revoked, or already used
 	}
 
 	return slices.ContainsFunc(expiredDescriptions, func(desc string) bool {

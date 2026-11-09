@@ -126,6 +126,7 @@ func TestIsTokenExpiredError(t *testing.T) {
 		"Keycloak_offline_session_not_active": {errorCode: "invalid_grant", errorDescription: "Offline session not active", wantExpired: true},
 		"Keycloak_token_not_active":           {errorCode: "invalid_grant", errorDescription: "Token is not active", wantExpired: true},
 		"Keycloak_stale_token":                {errorCode: "invalid_grant", errorDescription: "Stale token", wantExpired: true},
+		"Okta_refresh_token_expired":          {errorCode: "invalid_grant", errorDescription: "The refresh token is invalid or expired.", wantExpired: true},
 
 		"Non_invalid_grant_error":           {errorCode: "access_denied", errorDescription: "Session not active", wantExpired: false},
 		"Keycloak_user_disabled":            {errorCode: "invalid_grant", errorDescription: "User disabled", wantExpired: false},
