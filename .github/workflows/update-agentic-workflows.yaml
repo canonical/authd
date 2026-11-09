@@ -78,3 +78,5 @@ jobs:
           jq --exit-status \
             '.user.login == "github-actions[bot]" and .draft == true' <<< "${pr}"
           printf 'Verified PR #%s at commit %s\n' "${PR_NUMBER}" "${HEAD_SHA}"
+
+# Temporary bot-signing permission fixture.
