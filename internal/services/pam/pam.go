@@ -241,6 +241,10 @@ func (s Service) GetBroker(ctx context.Context, req *authd.GBRequest) (*authd.GB
 	// Use the canonical account for in-memory broker state. A provider
 	// username and Unix username therefore share one broker selection.
 	if err == nil {
+		// Another NSS source owns this exact name, so it is not an authd alias.
+		if rejectForeignNSSAccount(username, identity) != nil {
+			return &authd.GBResponse{Broker: brokers.LocalBrokerName}, nil
+		}
 		username = identity.Name
 		if b := s.brokerManager.BrokerForUser(username); b != nil {
 			return &authd.GBResponse{Broker: b.ID}, nil

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,6 +17,7 @@ func TestSetAuthenticatedPamUser(t *testing.T) {
 
 	tests := map[string]struct {
 		release   string
+		unixName  string // defaults to "unix-user"
 		loginName string
 		ssh       bool
 		wantError bool
@@ -43,11 +45,24 @@ VERSION_ID="24.04"`,
 		"Leave_other_distributions_unchanged": {
 			release: "ID=debian\nVERSION_ID=24.04", loginName: "provider-alias", ssh: true,
 		},
+		// authd lowercases names with ToLower, so the guard must too. ς and σ
+		// are EqualFold-equal but ToLower-different, so they are different names.
+		"Reject_SSH_final_sigma_alias_on_24.04": {
+			release: "ID=ubuntu\nVERSION_ID=24.04", unixName: "σ", loginName: "ς", ssh: true, wantError: true,
+		},
+		// ToLower("İ") is "i", which authd resolves to the same account.
+		"Allow_SSH_dotted_capital_I_on_24.04": {
+			release: "ID=ubuntu\nVERSION_ID=24.04", unixName: "i", loginName: "İ", ssh: true,
+		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
+			unixName := tc.unixName
+			if unixName == "" {
+				unixName = "unix-user"
+			}
 			path := filepath.Join(t.TempDir(), "os-release")
 			require.NoError(t, os.WriteFile(path, []byte(tc.release), 0600))
 			var message string
@@ -64,27 +79,27 @@ VERSION_ID="24.04"`,
 				require.NoError(t, err)
 			}
 
-			err := setAuthenticatedPamUser(tx, "unix-user", originalName, path)
+			err := setAuthenticatedPamUser(tx, unixName, originalName, path)
 			if tc.wantError {
 				require.ErrorIs(t, err, pam.ErrAuth)
-				require.Equal(t, `Log in with your Unix username "unix-user" on Ubuntu 24.04.`, message)
+				require.Equal(t, fmt.Sprintf("Log in with your Unix username %q on Ubuntu 24.04.", unixName), message)
 				currentName, err := tx.GetItem(pam.User)
 				require.NoError(t, err)
 				require.Equal(t, tc.loginName, currentName, "a denied alias must not rewrite PAM_USER")
 
 				// Even if another module changes PAM_USER, retries must retain
 				// the SSH connection's original name.
-				require.NoError(t, tx.SetItem(pam.User, "unix-user"))
+				require.NoError(t, tx.SetItem(pam.User, unixName))
 				retryName, err := originalSSHLoginName(tx)
 				require.NoError(t, err)
 				require.Equal(t, tc.loginName, retryName)
-				require.ErrorIs(t, setAuthenticatedPamUser(tx, "unix-user", retryName, path), pam.ErrAuth)
+				require.ErrorIs(t, setAuthenticatedPamUser(tx, unixName, retryName, path), pam.ErrAuth)
 				return
 			}
 			require.NoError(t, err)
 			currentName, err := tx.GetItem(pam.User)
 			require.NoError(t, err)
-			require.Equal(t, "unix-user", currentName)
+			require.Equal(t, unixName, currentName)
 			require.Empty(t, message)
 		})
 	}

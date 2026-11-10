@@ -460,7 +460,7 @@ func setAuthenticatedPamUser(mTx pam.ModuleTransaction, unixName, sshLoginName, 
 	if unixName == "" {
 		return nil
 	}
-	if sshLoginName != "" && !strings.EqualFold(sshLoginName, unixName) {
+	if sshLoginName != "" && strings.ToLower(sshLoginName) != unixName {
 		release, err := ini.Load(osReleasePath)
 		if err != nil {
 			return fmt.Errorf("%w: could not read OS release: %v", pam.ErrSystem, err)

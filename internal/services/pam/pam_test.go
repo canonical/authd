@@ -415,6 +415,46 @@ func TestProviderAliasCollidingWithAnotherNSSAccountIsDenied(t *testing.T) {
 }
 
 // The mock broker uses a fixed session ID for this fixture, so don't run this test in parallel.
+func TestGetBrokerReturnsLocalBrokerForAliasOwnedByAnotherNSSAccount(t *testing.T) {
+	unixUsername := "unix-" + strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
+	alias := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_")) + "@example.com"
+	m := newPamManagerWithUser(t, unixUsername, alias, "providerid-"+alias)
+	client := newPamClient(t, m, globalBrokerManager)
+
+	tests := map[string]struct {
+		lookup     func(string) (*user.User, error)
+		wantBroker string
+	}{
+		"Another_NSS_source_owns_the_alias": {
+			lookup:     func(n string) (*user.User, error) { return &user.User{Username: n, Uid: "5000"}, nil },
+			wantBroker: brokers.LocalBrokerName,
+		},
+		"NSS_resolves_alias_to_authd_user": {
+			lookup:     func(n string) (*user.User, error) { return &user.User{Username: n, Uid: "1111"}, nil },
+			wantBroker: mockBrokerGeneratedID,
+		},
+		"NSS_does_not_know_the_alias": {
+			lookup:     func(n string) (*user.User, error) { return nil, user.UnknownUserError(n) },
+			wantBroker: mockBrokerGeneratedID,
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			var asked []string
+			t.Cleanup(pam.SetLookupUserByName(func(n string) (*user.User, error) {
+				asked = append(asked, n)
+				return tc.lookup(n)
+			}))
+
+			got, err := client.GetBroker(context.Background(), &authd.GBRequest{Username: alias})
+			require.NoError(t, err)
+			require.Equal(t, tc.wantBroker, got.GetBroker())
+			require.Equal(t, []string{alias}, asked, "GetBroker should check the typed name in NSS")
+		})
+	}
+}
+
+// The mock broker uses a fixed session ID for this fixture, so don't run this test in parallel.
 func TestProviderUsernameCollisionKeepsExistingAliasForMatchingIdentity(t *testing.T) {
 	unixUsername := "unix-" + strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
 	oldProviderUsername := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_")) +
