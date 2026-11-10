@@ -130,14 +130,13 @@ package versions.
 ## Formatting and checking Robot Framework files
 
 CI checks the test suites and shared resources with the locked version of
-Robocop. From the repository root, install and run the formatter and the test
-documentation check with `uv`:
+Robocop. From the repository root, run the formatter and the test documentation
+check with `uv`:
 
 ```bash
 git submodule update --init --depth=1 e2e-tests/.yarf
-uv sync --project e2e-tests --locked --only-group robocop
-uv run --project e2e-tests --no-sync robocop format --no-cache e2e-tests/tests e2e-tests/resources
-uv run --project e2e-tests --no-sync robocop check --select DOC02 --select LEN12 --no-cache e2e-tests/tests
+uv run --project e2e-tests --locked --only-group robocop robocop format --no-cache e2e-tests/tests e2e-tests/resources
+uv run --project e2e-tests --locked --only-group robocop robocop check --select DOC02 --select LEN12 --no-cache e2e-tests/tests
 ```
 
 ## Running the tests
