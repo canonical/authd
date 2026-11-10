@@ -122,7 +122,11 @@ Match User *@example.com
 ```
 
 ```{note}
-Replace `@example.com` with the domain of your identity provider.
+Replace `@example.com` with the domain of your identity provider. sshd matches
+`Match User` against the name typed at login. Users can also log in with their
+provider username after a rename (see
+[user management](explanation::user-management)), so the pattern must cover
+every provider domain and the Unix usernames.
 ```
 
 #### SSH password authentication

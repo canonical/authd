@@ -319,8 +319,14 @@ allowed_users = person1@email.com,person2@email.com
 ```
 
 Explicit usernames in `allowed_users` are provider usernames. Update these
-entries after a provider rename. The `OWNER` entry instead follows the stable
-Unix username and does not need to change.
+entries after a provider rename. For an account that authd already knows, the
+`OWNER` entry and the `owner` option refer to the stable Unix username, so they
+do not need to change after a rename. If `owner` names a provider alias, change
+it to the Unix username and restart the broker.
+
+The first login under a new provider username that authd has not learned yet
+does not match `OWNER`. The owner should log in once with the Unix username so
+that authd learns the new name.
 
 Alternatively, you can directly register someone as the owner by using the `owner`
 option:

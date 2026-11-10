@@ -56,7 +56,7 @@ ssh_allowed_suffixes_first_auth = @example.com,@ubuntu.com
 
 ## Usage
 
-Once this is all set up, you can ssh to the server in the same way that you would do with any server: `ssh <username>@<host>`. The format of `<username>` is the user handle on the provider, such as `user@domain.tld`.
+Once this is all set up, you can ssh to the server in the same way that you would do with any server: `ssh <username>@<host>`. The format of `<username>` is the user handle on the provider, such as `user@domain.tld`. If the handle changed at the provider, see [user management](explanation::user-management) for which name to use over SSH.
 
 For instance, here is an example using Microsoft Entra ID as a provider:
 

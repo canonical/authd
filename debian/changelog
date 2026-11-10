@@ -1,12 +1,20 @@
 authd (0.8.0) UNRELEASED; urgency=medium
 
-  * Keep Unix usernames stable when provider usernames change. Resolve the
-    new provider username as a login alias once authd learns it. Name-based
-    system configuration must use the Unix name. `authctl user` commands
-    accept either name. Before changing a provider username, make sure the
-    user has logged in online with authd 0.7.0 or later and broker 0.5.0 or
-    later. Process renames with authd 0.8.0 or later and a broker release
-    with provider-username rename support; broker 0.5.4 and earlier do not
+  * Keep Unix usernames stable when provider usernames change. authd stores
+    the new provider username as a login alias once it learns it. NSS and
+    `authctl user` accept either name.
+  * Set PAM_USER to the Unix username after a successful login.
+  * Name-based system configuration (sudoers, /etc/group, sshd AllowUsers)
+    must use the Unix name. sshd applies Match User to the name typed at
+    login.
+  * SSH login with a provider alias is not supported on Ubuntu 24.04.
+  * Migrate the user database to schema version 4, which adds the provider
+    username. Downgrading to 0.7.x keeps working, but 0.7.x renames the Unix
+    account again when a provider username changes.
+  * Before changing a provider username, make sure the user has logged in
+    online with authd 0.7.0 or later and broker 0.5.0 or later. Process
+    renames with authd 0.8.0 or later and a broker release with
+    provider-username rename support; broker 0.5.4 and earlier do not
     support renames. Upgrade both components and restart authd first.
 
  -- Adrian Dombeck <adrian.dombeck@canonical.com>  Thu, 22 Oct 2026 09:50:36 +0200

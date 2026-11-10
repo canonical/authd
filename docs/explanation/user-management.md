@@ -59,12 +59,20 @@ Users can log in with either their stable Unix username or their provider alias.
 SSH login on Ubuntu 24.04 does not support provider aliases. Use the stable
 Unix username instead.
 
-On Ubuntu 26.04, install OpenSSH updates before using provider aliases.
-Older packages can reject them. The stable Unix username still works.
+On Ubuntu 26.04, install `openssh-server` 1:10.2p1-2ubuntu3.7 or later before
+using provider aliases. Older packages can reject them. The stable Unix
+username still works.
+
+Over SSH, the first login under a new provider username that authd has not
+learned yet can fail once on Ubuntu 26.04. Log in with the stable Unix username
+first, or retry.
 ```
 
 authd learns a changed provider username after the user authenticates. Users
 can log in with their stable Unix username to let authd learn the new alias.
+This works with device code login. With the native Entra password flow
+(`entra_auth`), authd sends the stored provider username to Entra, which no
+longer knows it, so the user must enter the new provider username instead.
 
 ```{admonition} Version requirement
 :class: note
@@ -76,9 +84,19 @@ earlier do not support renames. Without the earlier online login, the new
 provider name may create a separate account.
 ```
 
+If the identity provider gives an old provider username to another person
+while the old account still has that name, the new person cannot log in. The
+broker sees a different provider ID than the one that is stored for the old
+account. Deleting the old account with `authctl user delete` frees the name.
+
 Use the Unix username in name-based configuration such as `sudoers`,
 `/etc/group`, and `sshd`'s `AllowUsers`. These settings refer to the Unix
-account, not provider login aliases. `authctl user` commands accept either the
+account, not provider login aliases. `sshd` reads the last `@` of an
+`AllowUsers` pattern as the start of a host pattern, so a Unix username that
+contains `@` needs a trailing host pattern, for example
+`AllowUsers alice@example.com@*`. `sshd` applies `Match User` to the name
+typed at login, so `Match User` patterns must cover the provider usernames
+as well as the Unix usernames. `authctl user` commands accept either the
 Unix username or its provider username. Applications that query supplementary
 groups directly by name must use the Unix username, not its provider alias.
 
