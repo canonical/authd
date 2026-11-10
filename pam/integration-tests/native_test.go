@@ -149,6 +149,7 @@ func TestNativeAuthenticate(t *testing.T) {
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				c.WaitFor(t, `Gimme your password`)
+				c.WaitForEchoOff(t)
 				c.SendLine(t, "goodpass")
 				nativeWaitForResult(t, c)
 			},
@@ -225,6 +226,7 @@ func TestNativeAuthenticate(t *testing.T) {
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				c.WaitFor(t, `Gimme your password`)
+				c.WaitForEchoOff(t)
 				c.SendLine(t, "r")
 				c.WaitFor(t, `Choose your authentication flow:`)
 				sendEchoedLine(t, c, "7")
@@ -1050,6 +1052,7 @@ func TestNativeChangeAuthTok(t *testing.T) {
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				c.WaitFor(t, `Gimme your password`)
+				c.WaitForEchoOff(t)
 				c.SendLine(t, "goodpass")
 				nativeChangePassword(t, c, "authd2404", "authd2404")
 				nativeWaitForChangeAuthTokResult(t, c)
@@ -1059,6 +1062,7 @@ func TestNativeChangeAuthTok(t *testing.T) {
 				ctx.run(t, nativePtySessionSpec{action: pam_test.RunnerActionLogin, clientOptions: ctx.baseSpec.clientOptions}, func(t *testing.T, c *ptytest.Console) {
 					t.Helper()
 					nativeWaitForLoginPasswordPrompt(t, c, `Gimme your password`)
+					c.WaitForEchoOff(t)
 					c.SendLine(t, "authd2404")
 					nativeWaitForResult(t, c)
 				})
@@ -1353,8 +1357,10 @@ func nativeQRCodeAuth(t *testing.T, c *ptytest.Console, method, username string,
 func nativeChangePassword(t *testing.T, c *ptytest.Console, newPassword string, confirm string) {
 	t.Helper()
 	c.WaitFor(t, `Enter your new password`)
+	c.WaitForEchoOff(t)
 	c.SendLine(t, newPassword)
 	c.WaitFor(t, `Confirm Password:`)
+	c.WaitForEchoOff(t)
 	c.SendLine(t, confirm)
 }
 
