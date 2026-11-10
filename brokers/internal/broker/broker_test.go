@@ -66,6 +66,9 @@ type mockEntraAuthProvider struct {
 	challengeInfo                 *himmelblau.MFAChallengeInfo
 	mfaTokenResult                *oauth2.Token
 	initErr                       error
+	initUsernameErrors            map[string]error
+	recordedInitUsernames         []string
+	recordedMFAUsernames          []string
 	recordedPollAttempts          []int
 	recordedChallengeData         []string
 	recordedInitAuthOpts          [][]himmelblau.AuthOption
@@ -124,17 +127,22 @@ func (p *mockGrantRevokedProvider) IsTokenExpiredError(err *oauth2.RetrieveError
 
 var mockDeviceRegistrationData = []byte(`{"device_id":"test-device-id","cert_key":"Y2VydA==","transport_key":"dHJhbnNwb3J0","auth_value":"test-auth-value","tpm_machine_key":"dHBtLW1hY2hpbmUta2V5"}`)
 
-func (p *mockEntraAuthProvider) InitiateEntraAuth(_ context.Context, _, _ string, _, password string, _ []byte, withDeviceScope bool, authOpts ...himmelblau.AuthOption) (*himmelblau.MFAFlowState, *himmelblau.MFAChallengeInfo, error) {
+func (p *mockEntraAuthProvider) InitiateEntraAuth(_ context.Context, _, _ string, username, password string, _ []byte, withDeviceScope bool, authOpts ...himmelblau.AuthOption) (*himmelblau.MFAFlowState, *himmelblau.MFAChallengeInfo, error) {
+	p.recordedInitUsernames = append(p.recordedInitUsernames, username)
 	p.recordedInitAuthOpts = append(p.recordedInitAuthOpts, authOpts)
 	p.recordedInitPasswords = append(p.recordedInitPasswords, password)
 	p.recordedInitDevScopes = append(p.recordedInitDevScopes, withDeviceScope)
+	if err := p.initUsernameErrors[username]; err != nil {
+		return nil, nil, err
+	}
 	if p.initErr != nil {
 		return nil, nil, p.initErr
 	}
 	return p.flowState, p.challengeInfo, nil
 }
 
-func (p *mockEntraAuthProvider) AcquireTokenByMFAFlow(_ context.Context, _, _ string, _ string, _ *himmelblau.MFAFlowState, authData string, pollAttempt int, _ []byte) (*oauth2.Token, error) {
+func (p *mockEntraAuthProvider) AcquireTokenByMFAFlow(_ context.Context, _, _ string, username string, _ *himmelblau.MFAFlowState, authData string, pollAttempt int, _ []byte) (*oauth2.Token, error) {
+	p.recordedMFAUsernames = append(p.recordedMFAUsernames, username)
 	p.recordedPollAttempts = append(p.recordedPollAttempts, pollAttempt)
 	p.recordedChallengeData = append(p.recordedChallengeData, authData)
 	if p.mfaTokenResult == nil {
@@ -7404,6 +7412,107 @@ func TestIsAuthenticatedEntraAuthAllowsUsernameChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "renamed-user@email.com", cached.UserInfo.Name)
 	require.Equal(t, "saved-user-id", cached.UserInfo.ProviderID)
+}
+
+func TestEntraAuthRecoversProviderRenameBack(t *testing.T) {
+	t.Parallel()
+
+	const unixName = "test-user@email.com"
+	const staleAlias = "renamed-user@email.com"
+	for _, providerID := range []string{"saved-user-id", "different-user-id", ""} {
+		t.Run("ReturnedProviderID="+providerID, func(t *testing.T) {
+			t.Parallel()
+
+			authInfo := generateCachedInfo(t, tokenOptions{username: unixName, issuer: defaultIssuerURL})
+			provider := &mockEntraAuthProvider{
+				MockProvider: &testutils.MockProvider{},
+				initUsernameErrors: map[string]error{
+					staleAlias: &himmelblau.MFAError{AADSTS: 50034},
+				},
+				flowState: &himmelblau.MFAFlowState{},
+				challengeInfo: &himmelblau.MFAChallengeInfo{
+					Message: "Approve the sign-in request", PollingIntervalMs: 1, MaxPollAttempts: 1,
+				},
+				accessTokenUserInfo: &info.User{Name: unixName, ProviderID: providerID},
+				mfaTokenResult:      newMFATokenResult(authInfo.Token),
+			}
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config: broker.Config{DataDir: t.TempDir()}, allUsersAllowed: true,
+				provider: provider, issuerURL: defaultIssuerURL,
+			})
+			sessionID, key, err := b.NewSessionForUser(staleAlias, "en", sessionmode.Login, "saved-user-id", unixName)
+			require.NoError(t, err)
+			advanceToEntraMFAWait(t, b, sessionID, key)
+			require.Equal(t, []string{staleAlias, unixName}, provider.recordedInitUsernames)
+
+			access, _, err := b.IsAuthenticated(sessionID, "{}")
+			require.NoError(t, err)
+			require.Equal(t, []string{unixName}, provider.recordedMFAUsernames,
+				"MFA must continue with the name that started the fallback flow")
+			if providerID != "saved-user-id" {
+				require.Equal(t, broker.AuthDenied, access)
+				require.NoFileExists(t, b.TokenPathForSession(sessionID))
+				require.NoFileExists(t, b.PasswordFilepathForSession(sessionID))
+				return
+			}
+			require.Equal(t, broker.AuthGranted, access)
+			cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+			require.NoError(t, err)
+			require.Equal(t, unixName, cached.UserInfo.Name)
+			require.Equal(t, providerID, cached.UserInfo.ProviderID)
+		})
+	}
+}
+
+func TestEntraAuthLimitsUnixNameFallback(t *testing.T) {
+	t.Parallel()
+
+	const staleAlias = "renamed-user@email.com"
+	const unixName = "test-user@email.com"
+	notFound := &himmelblau.MFAError{AADSTS: 50034}
+	for name, tc := range map[string]struct {
+		providerID string
+		unixName   string
+		initErr    error
+		wantNames  []string
+	}{
+		"No_provider_ID": {unixName: unixName, initErr: notFound, wantNames: []string{staleAlias}},
+		"No_Unix_name":   {providerID: "saved-user-id", initErr: notFound, wantNames: []string{staleAlias}},
+		"Same_name": {
+			providerID: "saved-user-id", unixName: strings.ToUpper(staleAlias),
+			initErr: notFound, wantNames: []string{staleAlias},
+		},
+		"Incorrect_password": {
+			providerID: "saved-user-id", unixName: unixName,
+			initErr: &himmelblau.MFAError{AADSTS: 50126}, wantNames: []string{staleAlias},
+		},
+		"Network_failure": {
+			providerID: "saved-user-id", unixName: unixName,
+			initErr: errors.New("network failure"), wantNames: []string{staleAlias},
+		},
+		"Fallback_also_not_found": {
+			providerID: "saved-user-id", unixName: unixName,
+			initErr: notFound, wantNames: []string{staleAlias, unixName},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			provider := &mockEntraAuthProvider{MockProvider: &testutils.MockProvider{}, initErr: tc.initErr}
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config: broker.Config{DataDir: t.TempDir()}, allUsersAllowed: true,
+				provider: provider, issuerURL: defaultIssuerURL,
+			})
+			sessionID, key, err := b.NewSessionForUser(staleAlias, "en", sessionmode.Login, tc.providerID, tc.unixName)
+			require.NoError(t, err)
+			updateAuthModes(t, b, sessionID, authmodes.EntraAuth)
+			access, _, err := b.IsAuthenticated(sessionID, fmt.Sprintf(`{"%s":"%s"}`,
+				broker.AuthDataSecret, encryptSecret(t, "password", key)))
+			require.NoError(t, err)
+			require.NotEqual(t, broker.AuthGranted, access)
+			require.Equal(t, tc.wantNames, provider.recordedInitUsernames)
+		})
+	}
 }
 
 func TestIsAuthenticatedEntraAuthRejectsUsernameChangeWithoutBoundProviderID(t *testing.T) {
