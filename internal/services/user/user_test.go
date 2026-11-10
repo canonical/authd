@@ -613,8 +613,14 @@ func TestUserMutationsByProviderUsername(t *testing.T) {
 			userRow, groups, localGroups, err := database.UserWithGroups("user1@example.com")
 			require.NoError(t, err)
 			userRow.ProviderUsername = "renamed@example.com"
-			userRow.Locked = method == "UnlockUser"
 			require.NoError(t, database.UpdateUserEntry(userRow, groups, localGroups))
+			if method == "UnlockUser" {
+				// UpdateUserEntry ignores the locked field.
+				require.NoError(t, database.UpdateLockedFieldForUser(userRow.Name, true))
+				locked, err := database.UserByName(userRow.Name)
+				require.NoError(t, err)
+				require.True(t, locked.Locked, "Setup: user should start locked")
+			}
 
 			name := strings.ToUpper(userRow.ProviderUsername)
 			ctx := context.Background()

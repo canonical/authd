@@ -11,6 +11,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -387,8 +388,11 @@ func TestProviderAliasCollidingWithAnotherNSSAccountIsDenied(t *testing.T) {
 		"NSS_resolves_alias_to_authd_user":  "1111",
 	} {
 		t.Run(name, func(t *testing.T) {
+			// The stub runs on the gRPC handler goroutine, so only record the
+			// name there and assert it from the test goroutine.
+			var lookedUp atomic.Value
 			restore := pam.SetLookupUserByName(func(n string) (*user.User, error) {
-				require.Equal(t, alias, n)
+				lookedUp.Store(n)
 				return &user.User{Username: n, Uid: uid}, nil
 			})
 			t.Cleanup(restore)
@@ -398,6 +402,7 @@ func TestProviderAliasCollidingWithAnotherNSSAccountIsDenied(t *testing.T) {
 				Username: alias,
 				Mode:     authd.SessionMode_LOGIN,
 			})
+			require.Equal(t, alias, lookedUp.Load(), "NSS must be asked for the alias")
 			if uid == "1111" {
 				require.NoError(t, err)
 				_, err = client.EndSession(context.Background(), &authd.ESRequest{SessionId: response.GetSessionId()})

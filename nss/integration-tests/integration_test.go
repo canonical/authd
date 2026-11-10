@@ -180,7 +180,7 @@ func TestProviderAliasSupplementaryGroups(t *testing.T) {
 
 	nsswitch := filepath.Join(filepath.Dir(groupFile), "nsswitch.conf")
 	require.NoError(t, os.WriteFile(nsswitch, []byte("passwd: authd\ngroup: files authd\n"), 0600))
-	runLookup := func(database, name string) string {
+	runLookup := func(t *testing.T, database, name string) string {
 		t.Helper()
 		env := append(os.Environ(), rustCovEnv...)
 		env = append(env, "AUTHD_NSS_SOCKET="+socket, "LD_LIBRARY_PATH="+filepath.Dir(libPath))
@@ -196,14 +196,14 @@ func TestProviderAliasSupplementaryGroups(t *testing.T) {
 		require.NoError(t, cmd.Run())
 		return strings.TrimSpace(output.String())
 	}
-	require.Equal(t, "localgroup:x:45000:"+unixName, runLookup("group", "localgroup"))
+	require.Equal(t, "localgroup:x:45000:"+unixName, runLookup(t, "group", "localgroup"))
 	require.Equal(t, "commongroup::99999:user1@example.com,user2@example.com,user3@example.com",
-		runLookup("group", "commongroup"))
+		runLookup(t, "group", "commongroup"))
 	for _, name := range []string{unixName, providerName} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			groups := strings.Fields(runLookup("initgroups", name))
+			groups := strings.Fields(runLookup(t, "initgroups", name))
 			require.NotEmpty(t, groups)
 			require.Equal(t, name, groups[0])
 			if name == unixName {
