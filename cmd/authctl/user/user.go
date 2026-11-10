@@ -1,9 +1,7 @@
 // Package user provides utilities for managing user operations.
 package user
 
-import (
-	"github.com/spf13/cobra"
-)
+import "github.com/spf13/cobra"
 
 // UserCmd is a command to perform user-related operations.
 var UserCmd = &cobra.Command{

@@ -17,12 +17,12 @@ var unlockCmd = &cobra.Command{
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: completion.Users,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := client.NewUserServiceClient()
+		userClient, err := client.NewUserServiceClient()
 		if err != nil {
 			return err
 		}
 
-		_, err = client.UnlockUser(context.Background(), &authd.UnlockUserRequest{Name: args[0]})
+		_, err = userClient.UnlockUser(context.Background(), &authd.UnlockUserRequest{Name: args[0]})
 		if err != nil {
 			return err
 		}
