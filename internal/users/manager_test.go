@@ -692,6 +692,22 @@ users_to_groups:
 		require.NoError(t, err)
 		require.Equal(t, first, unchanged)
 	}
+
+	// The alias owner must keep working when its other info changes.
+	secondBefore, err := userstestutils.DBManager(m).UserByName("second")
+	require.NoError(t, err)
+	_, err = m.UpdateAuthenticatedUser(types.UserInfo{
+		Name: "first", BrokerID: "broker-id", ProviderID: "first-id", ProviderUsername: "second",
+		Gecos: "Changed gecos", Groups: []types.GroupInfo{{Name: "extra", UGID: "extra"}},
+	})
+	require.NoError(t, err)
+	updated, err := userstestutils.DBManager(m).UserByName("first")
+	require.NoError(t, err)
+	require.Equal(t, "second", updated.ProviderUsername)
+	require.Equal(t, "Changed gecos", updated.Gecos)
+	secondAfter, err := userstestutils.DBManager(m).UserByName("second")
+	require.NoError(t, err)
+	require.Equal(t, secondBefore, secondAfter)
 }
 
 func TestUpdateAuthenticatedUserRejectsAccountLockedAfterResolution(t *testing.T) {

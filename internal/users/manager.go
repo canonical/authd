@@ -380,7 +380,9 @@ func (m *Manager) updateUser(u *types.UserInfo, rejectLocked bool) (err error) {
 	}
 	loginNames = append(loginNames, u.ProviderUsername)
 	for _, name := range loginNames {
-		if name == "" {
+		// The account already owns its stored alias, even if a later account
+		// (for example one created by a downgrade) has the same Unix name.
+		if name == "" || (oldUserInfo != nil && name == oldUserInfo.ProviderUsername) {
 			continue
 		}
 		conflict, err := m.db.UserLoginNameConflict(name, u.UID)
