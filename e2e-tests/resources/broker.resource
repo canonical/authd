@@ -431,8 +431,15 @@ Check Configuration Value
 
 Check If Owner Was Registered
     [Arguments]    ${username}
+    ${token_path} =    SSH.Execute
+    ...    sudo find -L /var/snap/${BROKER_SNAP_NAME}/current -path '*/${username}/token.json'
+    Should Not Be Empty    ${token_path}
+    ...    msg=No token.json found for ${username}; login did not cache the user's identity.
+    ${provider_id} =    SSH.Execute    sudo jq -r '.UserInfo.provider_id // empty' '${token_path}'
+    Should Not Be Empty    ${provider_id}
+    ...    msg=No provider ID cached for ${username}; owner registration must bind to an account.
     ${content} =    SSH.Execute    cat ${BROKER_CFG_DIR}/20-owner-autoregistration.conf
-    Should Contain    ${content}    owner = ${username}
+    Should Contain    ${content}    owner = """provider-id:${provider_id}"""
 
 Check Home Directory
     [Arguments]    ${username}    ${base_dir}=/home

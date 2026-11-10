@@ -42,13 +42,17 @@ func authorizeRootCaller(sender dbus.Sender, uidForSender func(dbus.Sender) (uin
 //
 // This is the v3+ version that accepts the providerID identifier for cache directory resolution.
 func (s *Interface) NewSession(sender dbus.Sender, username, lang, mode, providerID string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
-	log.Debugf(context.Background(), "Creating new session (v3) (username=%s, lang=%s, mode=%s, provider_id=%s)", username, lang, mode, providerID)
-	if providerID != "" {
+	return s.newSession(sender, username, lang, mode, providerID, "")
+}
+
+func (s *Interface) newSession(sender dbus.Sender, username, lang, mode, providerID, unixUsername string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
+	log.Debugf(context.Background(), "Creating new session (username=%s, lang=%s, mode=%s, provider_id=%s, unix_username=%s)", username, lang, mode, providerID, unixUsername)
+	if providerID != "" || unixUsername != "" {
 		var uidForSender func(dbus.Sender) (uint32, error)
 		if s.service != nil {
 			uidForSender = s.service.uidForSender
 		}
-		if dbusErr := authorizeRootCaller(sender, uidForSender, "NewSession with a provider ID"); dbusErr != nil {
+		if dbusErr := authorizeRootCaller(sender, uidForSender, "NewSession with an existing identity"); dbusErr != nil {
 			return "", "", dbusErr
 		}
 	}
@@ -56,7 +60,7 @@ func (s *Interface) NewSession(sender dbus.Sender, username, lang, mode, provide
 	if err != nil {
 		return "", "", dbusErrorForBrokerCall(err)
 	}
-	sessionID, encryptionKey, err = b.NewSession(username, lang, mode, providerID)
+	sessionID, encryptionKey, err = b.NewSessionForUser(username, lang, mode, providerID, unixUsername)
 	if err != nil {
 		return "", "", dbus.MakeFailedError(err)
 	}
@@ -179,6 +183,16 @@ func (s *Interface) deleteUser(sender dbus.Sender, username, providerID string) 
 		return dbus.MakeFailedError(err)
 	}
 	return nil
+}
+
+// InterfaceV4 adds the existing Unix account name supplied by authd.
+type InterfaceV4 struct {
+	*Interface
+}
+
+// NewSession starts a session with separate provider and Unix usernames.
+func (s *InterfaceV4) NewSession(sender dbus.Sender, username, lang, mode, providerID, unixUsername string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
+	return s.newSession(sender, username, lang, mode, providerID, unixUsername)
 }
 
 // InterfaceV2 wraps Interface and exposes old methods that do not accept a providerID argument.

@@ -39,7 +39,7 @@ const (
 	// LatestAPIVersion is the latest API version supported by the broker. It should be incremented when a non backward
 	// compatible change is made to the API.
 	// Note: Remember to also bump the LatestAPIVersion in internal/brokers/dbusbroker.go.
-	LatestAPIVersion uint = 3
+	LatestAPIVersion uint = 4
 
 	maxAuthAttempts               = 3
 	maxRequestDuration            = 5 * time.Second
@@ -107,8 +107,9 @@ type Broker struct {
 }
 
 type session struct {
-	username   string
-	providerID string // stable provider identifier; empty until learned via auth or cache migration
+	username     string
+	unixUsername string // existing account name supplied by authd; empty for new accounts
+	providerID   string // stable provider identifier; empty until learned via auth or cache migration
 	// Keep the expected identity even when its cache directory is missing.
 	expectedProviderID string
 	lang               string
@@ -169,6 +170,9 @@ func (s *session) hasBoundProviderID(providerID string) bool {
 // verifyAuthenticatedIdentity permits a provider username change only when
 // the provider ID was already bound to this session.
 func (b *Broker) verifyAuthenticatedIdentity(session *session, userInfo info.User) error {
+	if session.expectedProviderID != "" && userInfo.ProviderID == "" {
+		return fmt.Errorf("%w for %q; contact your administrator", errProviderIDMismatch, session.username)
+	}
 	if err := session.verifyProviderID(userInfo.ProviderID); err != nil {
 		return err
 	}
@@ -266,7 +270,7 @@ func (b *Broker) populateAuthInfo(ctx context.Context, session *session, t *oaut
 		return nil, AuthDenied, errorMessageForDisplay(err, "Could not get user info")
 	}
 
-	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
+	if !b.authenticatedUserIsAllowed(authInfo.UserInfo) {
 		log.Warning(context.Background(), b.userNotAllowedLogMsg(authInfo.UserInfo.Name))
 		return nil, AuthDenied, errorMessage{Message: "Authentication failure: user not allowed in broker configuration"}
 	}
@@ -856,6 +860,12 @@ func (b *Broker) userDataDir(basePath string) (string, error) {
 // identifier from authd's database. It binds the session to that identity and is
 // used to locate the provider ID-keyed cache directory.
 func (b *Broker) NewSession(username, lang, mode, providerID string) (sessionID, encryptionKey string, err error) {
+	return b.NewSessionForUser(username, lang, mode, providerID, "")
+}
+
+// NewSessionForUser starts a session with the existing Unix account name supplied
+// by authd. An empty unixUsername means no existing account was selected.
+func (b *Broker) NewSessionForUser(username, lang, mode, providerID, unixUsername string) (sessionID, encryptionKey string, err error) {
 	if username == "" {
 		return "", "", errors.New("username is required")
 	}
@@ -863,6 +873,7 @@ func (b *Broker) NewSession(username, lang, mode, providerID string) (sessionID,
 	sessionID = uuid.New().String()
 	s := session{
 		username:           username,
+		unixUsername:       unixUsername,
 		expectedProviderID: providerID,
 		lang:               lang,
 		mode:               mode,
@@ -2721,16 +2732,13 @@ func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (s
 		log.Error(context.Background(), err.Error())
 		return AuthDenied, errorMessageForDisplay(err, accountIdentityChangedMessage)
 	}
-	if b.cfg.shouldRegisterOwner() {
-		if err := b.cfg.registerOwner(b.cfg.ConfigFile, authInfo.UserInfo.Name); err != nil {
-			// The user is not allowed if we fail to create the owner-autoregistration file.
-			// Otherwise the owner might change if the broker is restarted.
-			log.Errorf(context.Background(), "Failed to assign the owner role: %v", err)
-			return AuthDenied, unexpectedErrMsg("failed to assign the owner role")
-		}
+	if err := b.cfg.registerOwnerIfNeeded(b.cfg.ConfigFile, authInfo.UserInfo.Name, authInfo.UserInfo.ProviderID); err != nil {
+		// Deny if owner registration cannot survive a broker restart.
+		log.Errorf(context.Background(), "Failed to assign the owner role: %v", err)
+		return AuthDenied, unexpectedErrMsg("failed to assign the owner role")
 	}
 
-	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
+	if !b.authenticatedUserIsAllowed(authInfo.UserInfo) {
 		log.Warning(context.Background(), b.userNotAllowedLogMsg(authInfo.UserInfo.Name))
 		return AuthDenied, errorMessage{Message: "Authentication failure: user not allowed in broker configuration"}
 	}
@@ -2747,7 +2755,7 @@ func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (s
 			existingGroups[name] = struct{}{}
 		}
 	}
-	if b.isOwner(authInfo.UserInfo.Name) {
+	if b.isOwner(authInfo.UserInfo.Name, authInfo.UserInfo.ProviderID) {
 		for _, name := range b.cfg.ownerExtraGroups {
 			if _, exists := existingGroups[name]; !exists {
 				log.Debugf(context.Background(), "Adding owner extra group %q", name)
@@ -2819,14 +2827,16 @@ func (b *Broker) newPassword(session *session, secret string) (string, isAuthent
 	return b.finishAuth(session, authInfo)
 }
 
-// userNameIsAllowed checks whether the user's username is allowed to access the machine.
-func (b *Broker) userNameIsAllowed(userName string) bool {
-	return b.cfg.userNameIsAllowed(b.provider.NormalizeUsername(userName))
+func (b *Broker) authenticatedUserIsAllowed(userInfo info.User) bool {
+	return b.cfg.userNameIsAllowed(b.provider.NormalizeUsername(userInfo.Name), userInfo.ProviderID)
 }
 
 // isOwner returns true if the user is the owner of the machine.
-func (b *Broker) isOwner(userName string) bool {
-	return b.cfg.owner == b.provider.NormalizeUsername(userName)
+func (b *Broker) isOwner(userName, providerID string) bool {
+	b.cfg.ownerMutex.RLock()
+	defer b.cfg.ownerMutex.RUnlock()
+
+	return b.cfg.isOwnerLocked(userName, providerID)
 }
 
 func (b *Broker) userNotAllowedLogMsg(userName string) string {

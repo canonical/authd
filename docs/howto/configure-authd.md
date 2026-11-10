@@ -296,6 +296,10 @@ identity provider) are configured in the `users` section of the
 ## permitted to log in if 'OWNER' is included in the 'allowed_users'
 ## option.
 ##
+## After authentication, the name is replaced with 'provider-id:<ID>', with
+## the name kept in a comment. The same account then remains the
+## owner if its username changes.
+##
 ## If this option is left unset, the first user to successfully log in
 ## via this broker will automatically be assigned the owner role. A
 ## drop-in configuration file will be created in broker.conf.d/ to set
@@ -318,12 +322,20 @@ list of allowed users with the `allowed_users` option, while omitting the
 allowed_users = person1@email.com,person2@email.com
 ```
 
-Alternatively, you can directly register someone as the owner by using the `owner`
-option:
+Usernames in `allowed_users` are the the usernames from your identity provider.
+Update these entries if those usernames change.
+
+To choose the owner instead of assigning the first user to log in, set `owner`:
 
 ```text
 owner = your@email.com
 ```
+
+After login, the broker saves the owner's account ID and keeps the name in a
+comment. The same account remains the owner if its username changes.
+
+To change owners, set `owner` to the new owner's username at the identity
+provider and restart the broker.
 
 Explicitly setting an empty owner, has the same effect as omitting the `OWNER`
 keyword in `allowed_users`:

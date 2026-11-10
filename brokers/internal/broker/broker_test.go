@@ -2477,7 +2477,7 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 
 	idTokenClaims := []map[string]interface{}{}
 	for _, uname := range allUsers {
-		idTokenClaims = append(idTokenClaims, map[string]interface{}{"sub": "user", "name": "user", "email": uname})
+		idTokenClaims = append(idTokenClaims, map[string]interface{}{"sub": uname + "-id", "name": "user", "email": uname})
 	}
 
 	tests := map[string]struct {
@@ -2561,7 +2561,7 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 
 			for _, u := range allUsers {
 				sessionID, key := newSessionForTests(t, b, u, "")
-				token := tokenOptions{username: u, providerID: "user"}
+				token := tokenOptions{username: u, providerID: u + "-id"}
 				generateAndStoreCachedInfo(t, token, b.TokenPathForSession(sessionID))
 				err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID))
 				require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
@@ -3030,6 +3030,115 @@ func TestEndSessionReleasesPendingMFAFlow(t *testing.T) {
 	err = b.EndSession(sessionID)
 	require.NoError(t, err)
 	require.Equal(t, 1, released, "EndSession should release any pending MFA flow state")
+}
+
+func TestOwnerAccessSurvivesProviderUsernameChange(t *testing.T) {
+	t.Parallel()
+
+	for _, allUsersAllowed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("AllUsersAllowed=%t", allUsersAllowed), func(t *testing.T) {
+			t.Parallel()
+
+			const providerID = "saved-user-id"
+			provider := &mockEntraAuthProvider{
+				MockProvider:        &testutils.MockProvider{},
+				refreshResult:       &oauth2.Token{AccessToken: "new-access-token", RefreshToken: "new-refresh-token"},
+				accessTokenUserInfo: &info.User{Name: "renamed-user@email.com", ProviderID: providerID},
+			}
+			configFile := filepath.Join(t.TempDir(), "authd.conf")
+			allowedUsers := "OWNER"
+			if allUsersAllowed {
+				allowedUsers = "ALL"
+			}
+			require.NoError(t, os.WriteFile(configFile, []byte(fmt.Sprintf(
+				"[oidc]\nissuer = %s\nclient_id = test-client-id\n[users]\nallowed_users = %s\nowner = test-user@email.com\nowner_extra_groups = sudo\n",
+				defaultIssuerURL, allowedUsers)), 0600))
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config:           broker.Config{ConfigFile: configFile, DataDir: t.TempDir()},
+				owner:            "test-user@email.com",
+				ownerAllowed:     true,
+				allUsersAllowed:  allUsersAllowed,
+				ownerExtraGroups: []string{"sudo"},
+				provider:         provider,
+				issuerURL:        defaultIssuerURL,
+			})
+
+			for _, username := range []string{"test-user@email.com", "renamed-user@email.com"} {
+				provider.accessTokenUserInfo.Name = username
+				sessionID, key, err := b.NewSessionForUser(username, "some lang", sessionmode.Login, providerID, "test-user@email.com")
+				require.NoError(t, err)
+				generateAndStoreCachedInfo(t, tokenOptions{
+					username:             username,
+					obtainedViaEntraAuth: true,
+					providerID:           providerID,
+					issuer:               defaultIssuerURL,
+				}, b.TokenPathForSession(sessionID))
+				require.NoError(t, password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID)))
+				updateAuthModes(t, b, sessionID, authmodes.Password)
+				access, data, err := b.IsAuthenticated(sessionID, fmt.Sprintf(`{"%s":"%s"}`,
+					broker.AuthDataSecret, encryptSecret(t, "password", key)))
+				require.NoError(t, err)
+				require.Equal(t, broker.AuthGranted, access)
+				require.Contains(t, data, `"sudo"`)
+				require.NoError(t, b.EndSession(sessionID))
+			}
+			ownerConfig, err := os.ReadFile(configFile)
+			require.NoError(t, err)
+			require.Contains(t, string(ownerConfig), "provider-id:"+providerID)
+			require.Contains(t, string(ownerConfig), "# Owner name when bound: test-user@email.com")
+			require.NoDirExists(t, broker.GetDropInDir(configFile), "binding an existing owner must update its declaration")
+		})
+	}
+}
+
+func TestAdoptingOwnerProviderNameDoesNotGrantOwnerRights(t *testing.T) {
+	t.Parallel()
+
+	for _, allUsersAllowed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("AllUsersAllowed=%t", allUsersAllowed), func(t *testing.T) {
+			t.Parallel()
+
+			const ownerName = "owner@email.com"
+			const unixName = "other-user@email.com"
+			const providerID = "other-user-id"
+			provider := &mockEntraAuthProvider{
+				MockProvider:        &testutils.MockProvider{},
+				refreshResult:       &oauth2.Token{AccessToken: "new-access-token", RefreshToken: "new-refresh-token"},
+				accessTokenUserInfo: &info.User{Name: ownerName, ProviderID: providerID},
+			}
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config: broker.Config{DataDir: t.TempDir()},
+				owner:  "provider-id:owner-id", ownerAllowed: true, allUsersAllowed: allUsersAllowed,
+				ownerExtraGroups: []string{"sudo"}, provider: provider, issuerURL: defaultIssuerURL,
+			})
+			for _, loginName := range []string{unixName, ownerName} {
+				sessionID, key, err := b.NewSessionForUser(loginName, "en", sessionmode.Login, providerID, unixName)
+				require.NoError(t, err)
+				generateAndStoreCachedInfo(t, tokenOptions{
+					username: loginName, obtainedViaEntraAuth: true, providerID: providerID, issuer: defaultIssuerURL,
+				}, b.TokenPathForSession(sessionID))
+				require.NoError(t, password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID)))
+				updateAuthModes(t, b, sessionID, authmodes.Password)
+				access, data, err := b.IsAuthenticated(sessionID, fmt.Sprintf(`{"%s":"%s"}`,
+					broker.AuthDataSecret, encryptSecret(t, "password", key)))
+				require.NoError(t, err)
+				if allUsersAllowed {
+					require.Equal(t, broker.AuthGranted, access)
+					var response struct {
+						UserInfo info.User `json:"userinfo"`
+					}
+					require.NoError(t, json.Unmarshal([]byte(data), &response))
+					require.Equal(t, ownerName, response.UserInfo.Name)
+					for _, group := range response.UserInfo.Groups {
+						require.NotEqual(t, "sudo", group.Name)
+					}
+				} else {
+					require.Equal(t, broker.AuthDenied, access)
+				}
+				require.NoError(t, b.EndSession(sessionID))
+			}
+		})
+	}
 }
 
 func TestEndSessionDoesNotBlockOnInFlightMFA(t *testing.T) {
