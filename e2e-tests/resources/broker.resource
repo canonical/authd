@@ -289,13 +289,13 @@ Continue Log In With Remote User Through SSH: Define Local Password
     Match Text    ${username}@ubuntu:~$    120
 
 Log In With Remote User Through SSH: Local Password
-    [Arguments]    ${username}    ${local_password}
+    [Arguments]    ${username}    ${local_password}    ${expected_username}=${username}
     Hid.Type String    ssh ${username}@localhost
     Hid.Keys Combo    Return
     Match Text    regex:Enter\\s*your\\s*(?:local\\s*)?password:    120
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
-    Match Text    ${username}@ubuntu:~$    120
+    Match Text    ${expected_username}@ubuntu:~$    120
 
 Log In With Remote User Through GDM: QR Code
     [Arguments]    ${username}    ${local_password}

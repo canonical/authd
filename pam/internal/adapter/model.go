@@ -133,7 +133,7 @@ type StageChanged ChangeStage
 // NewUIModel creates and initializes the main model orchestrator.
 func NewUIModel(mTx pam.ModuleTransaction, clientType PamClientType, mode authd.SessionMode, conn *grpc.ClientConn, pamReturnValue *PamReturnValue) tea.Model {
 	var userServiceClient authd.UserServiceClient
-	if conn != nil && isSSHSession(mTx) {
+	if conn != nil && IsSSHSession(mTx) {
 		userServiceClient = authd.NewUserServiceClient(conn)
 	}
 
