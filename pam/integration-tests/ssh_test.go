@@ -275,7 +275,6 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			lxdOnly:        true,
 			skipUserChecks: true,
 			userPrefix:     examplebroker.UserIntegrationProviderAliasPrefix,
-			providerAlias:  true,
 			test:           sshPtyProviderUsernameAliasLaterLocalCollision,
 		},
 		"Authenticate_user_with_mfa": {
@@ -571,7 +570,6 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 				if userClient != nil {
 					var authdUser *authd.User
 					if tc.providerAlias {
-						var err error
 						aliasedUser, err := userClient.GetUserByName(context.Background(),
 							&authd.GetUserByNameRequest{Name: user, ShouldPreCheck: false})
 						require.NoError(t, err, "provider username alias should resolve")
@@ -1029,10 +1027,15 @@ func sshPtyProviderUsernameAliasLaterLocalCollision(t *testing.T, args sshPtyArg
 	c.RequireSuccessfulExit(t)
 
 	alias := strings.ToLower(args.user)
+	// Remove an account left behind by a killed run in the persistent container.
+	// #nosec:G204 - we control the command arguments in tests
+	_ = exec.Command("userdel", alias).Run()
+	// #nosec:G204 - we control the command arguments in tests
 	out, err := exec.Command("useradd", "--badname", "-M",
 		"-s", "/usr/sbin/nologin", alias).CombinedOutput()
 	require.NoError(t, err, "Setup: could not create the colliding local account: %s", out)
 	t.Cleanup(func() {
+		// #nosec:G204 - we control the command arguments in tests
 		_ = exec.Command("userdel", alias).Run()
 	})
 
@@ -1041,7 +1044,7 @@ func sshPtyProviderUsernameAliasLaterLocalCollision(t *testing.T, args sshPtyArg
 	output := c.RawOutput()
 	require.Contains(t, output, fmt.Sprintf("log in with the Unix username %q",
 		providerAliasUnixUsername(args.user)))
-	require.NotContains(t, output, "Inside SSH",
+	require.NotContains(t, output, "SSHD: Connected to ssh via authd module!",
 		"a login that sshd resolves to the local account must not succeed through authd")
 }
 
@@ -1059,7 +1062,7 @@ func sshPtyProviderUsernameAliasDenied(t *testing.T, args sshPtyArgs) {
 		c.WaitFor(t, regexp.QuoteMeta(fmt.Sprintf(
 			"Log in with your Unix username %q on Ubuntu 24.04.", unixUsername)))
 		c.RequireExitCode(t, 255)
-		require.NotContains(t, c.RawOutput(), "Inside SSH")
+		require.NotContains(t, c.RawOutput(), "SSHD: Connected to ssh via authd module!")
 	}
 
 	c := startSSHForPtyWithUser(t, args, unixUsername)
