@@ -294,7 +294,7 @@ func TestUpdateUserUsesProviderUsernamePreAuthUID(t *testing.T) {
 	m := newManagerForTests(t, t.TempDir())
 	t.Cleanup(func() { _ = m.Stop() })
 
-	preAuthUID, err := m.RegisterUserPreAuth(providerUsername)
+	preAuthUID, err := userstestutils.RegisterUserPreAuth(m, providerUsername)
 	require.NoError(t, err, "RegisterUserPreAuth should succeed")
 
 	err = m.UpdateUser(types.UserInfo{
@@ -996,9 +996,9 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 		require.Equal(t, "newuser1@example.com", updated.ProviderUsername)
 		require.True(t, updated.Locked, "locked state must be preserved across a provider username change")
 
-		stillLocked, err := m.IsUserLocked("newuser1@example.com")
-		require.NoError(t, err, "IsUserLocked should not return an error")
-		require.True(t, stillLocked, "the provider username must resolve to the locked account")
+		lockedUser, err := userstestutils.DBManager(m).UserByLoginName("newuser1@example.com")
+		require.NoError(t, err, "the provider username should resolve to the account")
+		require.True(t, lockedUser.Locked, "the provider username must resolve to the locked account")
 	})
 
 	t.Run("Keep_stored_provider_username_when_the_new_one_is_used_by_a_system_account", func(t *testing.T) {
@@ -1259,7 +1259,7 @@ func TestRegisterUserPreauth(t *testing.T) {
 			}
 			m := newManagerForTests(t, dbDir, managerOpts...)
 
-			uid, err := m.RegisterUserPreAuth(user.Name)
+			uid, err := userstestutils.RegisterUserPreAuth(m, user.Name)
 
 			requireErrorAssertions(t, err, nil, tc.wantErr)
 			if tc.wantErr {
@@ -1369,7 +1369,7 @@ func TestConcurrentUserUpdate(t *testing.T) {
 					t.Parallel()
 
 					t.Logf("Registering pre-auth user %q", userName)
-					uid, err := m.RegisterUserPreAuth(userName)
+					uid, err := userstestutils.RegisterUserPreAuth(m, userName)
 					require.NoError(t, err, "RegisterPreAuthUser should not fail but it did")
 					preauthUID.Store(uid)
 					t.Logf("Registered pre-auth user %q with UID %d", userName, uid)
@@ -1961,7 +1961,7 @@ func TestUserByIDAndName(t *testing.T) {
 			m := newManagerForTests(t, dbDir)
 
 			if tc.isTempUser {
-				tc.uid, err = m.RegisterUserPreAuth("tempuser1@example.com")
+				tc.uid, err = userstestutils.RegisterUserPreAuth(m, "tempuser1@example.com")
 				require.NoError(t, err, "RegisterUser should not return an error, but did")
 			}
 
@@ -2064,7 +2064,7 @@ func TestGroupByIDAndName(t *testing.T) {
 			}))
 
 			if tc.preAuthUser != "" {
-				tc.gid, err = m.RegisterUserPreAuth(tc.preAuthUser)
+				tc.gid, err = userstestutils.RegisterUserPreAuth(m, tc.preAuthUser)
 				require.NoError(t, err, "RegisterUserPreAuth should not fail for %q, but it did",
 					tc.preAuthUser)
 			}
@@ -2332,7 +2332,7 @@ func TestRegisterUserPreAuthWhenLocked(t *testing.T) {
 
 	m := newManagerForTests(t, dbDir)
 
-	uid, err := m.RegisterUserPreAuth("locked-user@example.com")
+	uid, err := userstestutils.RegisterUserPreAuth(m, "locked-user@example.com")
 	require.ErrorIs(t, err, userslocking.ErrLock)
 	require.Zero(t, uid, "Uid should be unset")
 }
@@ -2361,7 +2361,7 @@ func TestRegisterUserPreAuthAfterUnlock(t *testing.T) {
 
 	m := newManagerForTests(t, dbDir)
 
-	uid, err := m.RegisterUserPreAuth("locked-user@example.com")
+	uid, err := userstestutils.RegisterUserPreAuth(m, "locked-user@example.com")
 	require.NoError(t, err, "Registration should not fail")
 	require.NotZero(t, uid, "UID should be set")
 }

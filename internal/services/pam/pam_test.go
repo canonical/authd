@@ -364,9 +364,9 @@ func TestProviderUsernameChangeWithStableIDResolvesCanonicalAccount(t *testing.T
 
 	// Locking through either alias affects the same account.
 	require.NoError(t, m.LockUser("different_username@example.com"))
-	locked, err := m.IsUserLocked(unixUsername)
+	lockedUser, err := userstestutils.DBManager(m).UserByLoginName(unixUsername)
 	require.NoError(t, err)
-	require.True(t, locked)
+	require.True(t, lockedUser.Locked)
 
 	secondSession := selectBrokerForTest(t, client, unixUsername)
 	_, err = client.IsAuthenticated(context.Background(), &authd.IARequest{SessionId: secondSession})
@@ -512,7 +512,7 @@ func TestProviderIDRenameCleansUpPreAuthEntry(t *testing.T) {
 	providerID := "providerid-" + preAuthUsername
 	m := newPamManagerWithUser(t, unixUsername, oldProviderUsername, providerID)
 
-	preAuthUID, err := m.RegisterUserPreAuth(preAuthUsername)
+	preAuthUID, err := userstestutils.RegisterUserPreAuth(m, preAuthUsername)
 	require.NoError(t, err, "Setup: could not register the provider username as a pre-auth user")
 
 	client := newPamClient(t, m, globalBrokerManager)
@@ -548,7 +548,7 @@ func TestNewUserAuthenticationKeepsPreAuthUID(t *testing.T) {
 	t.Cleanup(func() { _ = m.Stop() })
 
 	username := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_")) + "@example.com"
-	preAuthUID, err := m.RegisterUserPreAuth(username)
+	preAuthUID, err := userstestutils.RegisterUserPreAuth(m, username)
 	require.NoError(t, err, "Setup: could not register the user for pre-authentication")
 
 	client := newPamClient(t, m, globalBrokerManager)

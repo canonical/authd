@@ -208,7 +208,7 @@ func newSessionForTests(t *testing.T, b *broker.Broker, username, mode string) (
 		mode = sessionmode.Login
 	}
 
-	id, key, err := b.NewSession(username, "some lang", mode, "")
+	id, key, err := b.NewSessionForUser(username, "some lang", mode, "", "")
 	require.NoError(t, err, "Setup: NewSession should not have returned an error")
 
 	return id, key

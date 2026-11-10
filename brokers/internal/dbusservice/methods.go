@@ -207,7 +207,7 @@ func (s *InterfaceV2) NewSession(username, lang, mode string) (sessionID, encryp
 	if err != nil {
 		return "", "", dbusErrorForBrokerCall(err)
 	}
-	sessionID, encryptionKey, err = b.NewSession(username, lang, mode, "")
+	sessionID, encryptionKey, err = b.NewSessionForUser(username, lang, mode, "", "")
 	if err != nil {
 		return "", "", dbus.MakeFailedError(err)
 	}

@@ -480,13 +480,6 @@ func (uc *userConfig) shouldRegisterOwner() bool {
 	return uc.ownerAllowed && uc.firstUserBecomesOwner && uc.owner == ""
 }
 
-func (uc *userConfig) registerOwner(cfgPath, userName string) error {
-	uc.ownerMutex.Lock()
-	defer uc.ownerMutex.Unlock()
-
-	return uc.registerOwnerLocked(cfgPath, userName)
-}
-
 func (uc *userConfig) registerOwnerIfNeeded(cfgPath, userName string) error {
 	uc.ownerMutex.Lock()
 	defer uc.ownerMutex.Unlock()

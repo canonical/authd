@@ -1109,16 +1109,6 @@ func (m *Manager) DeleteGroup(groupname string) error {
 	return m.db.DeleteGroup(groupRow.GID)
 }
 
-// IsUserLocked returns true if the user with the given user name is locked, false otherwise.
-func (m *Manager) IsUserLocked(username string) (bool, error) {
-	u, err := m.db.UserByLoginName(strings.ToLower(username))
-	if err != nil {
-		return false, err
-	}
-
-	return u.Locked, nil
-}
-
 // UserByName returns the user information for the given user name.
 func (m *Manager) UserByName(username string) (types.UserEntry, error) {
 	usr, err := m.db.UserByName(username)
@@ -1420,17 +1410,11 @@ func (m *Manager) AllShadows() ([]types.ShadowEntry, error) {
 	return shadowEntries, err
 }
 
-// RegisterUserPreAuth registers a temporary user with a unique UID in our NSS handler (in memory, not in the database).
+// RegisterUserPreAuthEntry returns the stored account if the requested login
+// name now exists. Otherwise it gives the broker's pre-check entry a temporary UID.
 //
 // The temporary user record is removed when UpdateUser is called with a user
 // whose canonical or provider username matches the registered name.
-func (m *Manager) RegisterUserPreAuth(name string) (uid uint32, err error) {
-	entry, err := m.RegisterUserPreAuthEntry(name, types.UserEntry{Name: name})
-	return entry.UID, err
-}
-
-// RegisterUserPreAuthEntry returns the stored account if the requested login
-// name now exists. Otherwise it gives the broker's pre-check entry a temporary UID.
 func (m *Manager) RegisterUserPreAuthEntry(loginName string, entry types.UserEntry) (_ types.UserEntry, err error) {
 	defer decorate.OnError(&err, "failed to register pre-auth user %q", loginName)
 	m.userManagementMu.Lock()

@@ -870,15 +870,10 @@ func (b *Broker) providerIDDataDir(providerID string) (string, error) {
 	return b.userDataDir(providerID)
 }
 
-// NewSession creates a new session for the user. providerID is the stable provider
+// NewSessionForUser starts a session for the user. providerID is the stable provider
 // identifier from authd's database. It binds the session to that identity and is
-// used to locate the provider ID-keyed cache directory.
-func (b *Broker) NewSession(username, lang, mode, providerID string) (sessionID, encryptionKey string, err error) {
-	return b.NewSessionForUser(username, lang, mode, providerID, "")
-}
-
-// NewSessionForUser starts a session with the existing Unix account name supplied
-// by authd. An empty unixUsername means no existing account was selected.
+// used to locate the provider ID-keyed cache directory. unixUsername is the existing
+// Unix account name supplied by authd; empty means no existing account was selected.
 func (b *Broker) NewSessionForUser(username, lang, mode, providerID, unixUsername string) (sessionID, encryptionKey string, err error) {
 	if username == "" {
 		return "", "", errors.New("username is required")

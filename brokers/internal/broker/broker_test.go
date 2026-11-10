@@ -597,7 +597,7 @@ func TestNewSession(t *testing.T) {
 				username = "test-user"
 			}
 
-			id, _, err := b.NewSession(username, "lang", sessionmode.Login, "")
+			id, _, err := b.NewSessionForUser(username, "lang", sessionmode.Login, "", "")
 			t.Logf("NewSession returned id: %q, err: %v", id, err)
 			if tc.wantErr {
 				require.Error(t, err, "NewSession should have returned an error")
@@ -636,7 +636,7 @@ func TestNewSessionRecoversFromDanglingCacheSymlink(t *testing.T) {
 	_, statErr := os.Stat(userDataDir)
 	require.Error(t, statErr, "Setup: the symlink should be dangling")
 
-	sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, "")
+	sessionID, _, err := b.NewSessionForUser(username, "lang", sessionmode.Login, "", "")
 	require.NoError(t, err, "NewSession should not error on a dangling symlink")
 
 	// The dangling symlink must have been removed so the path can be recreated as a real directory.
@@ -675,7 +675,7 @@ func TestProviderIDCacheWithUnsafePathCharacters(t *testing.T) {
 			require.Equal(t, filepath.Dir(usernameDir), filepath.Dir(paths.UserDataDir))
 			require.Equal(t, providerID, paths.ProviderID)
 
-			sessionID, _, err := b.NewSession("renamed-user@example.com", "en", sessionmode.Login, providerID)
+			sessionID, _, err := b.NewSessionForUser("renamed-user@example.com", "en", sessionmode.Login, providerID, "")
 			require.NoError(t, err)
 			require.Equal(t, paths.UserDataDir, b.UserDataDirForSession(sessionID))
 			offline, err := b.IsOffline(sessionID)
@@ -712,7 +712,7 @@ func TestProviderIDCacheKeyDoesNotAliasEncodedSubject(t *testing.T) {
 	require.NoError(t, token.CacheAuthInfo(original.TokenPath, cached))
 
 	secondID := filepath.Base(original.UserDataDir)
-	sessionID, _, err := b.NewSession("second@example.com", "en", sessionmode.Login, secondID)
+	sessionID, _, err := b.NewSessionForUser("second@example.com", "en", sessionmode.Login, secondID, "")
 	require.NoError(t, err, "an encoded key belonging to another ID is not a legacy cache for this account")
 	second := b.EnsureProviderIDCacheDir("second@example.com", b.UserDataDirForSession(sessionID), secondID)
 	require.NoError(t, second.Err)
@@ -736,7 +736,7 @@ func TestNewSessionMigratesReservedProviderIDCacheKey(t *testing.T) {
 	require.NoError(t, token.CacheAuthInfo(filepath.Join(legacyDir, "token.json"), cached))
 	require.NoError(t, os.WriteFile(filepath.Join(legacyDir, "password"), []byte("offline-password"), 0600))
 
-	sessionID, _, err := b.NewSession("renamed@example.com", "en", sessionmode.Login, providerID)
+	sessionID, _, err := b.NewSessionForUser("renamed@example.com", "en", sessionmode.Login, providerID, "")
 	require.NoError(t, err)
 	newDir := b.UserDataDirForSession(sessionID)
 	require.NotEqual(t, legacyDir, newDir)
@@ -808,7 +808,7 @@ func TestNewSessionWithProviderIDRepairsUsernameCompatibilityPath(t *testing.T) 
 	require.NoError(t, os.MkdirAll(providerIDDir, 0700), "Setup: creating provider ID cache dir should not fail")
 	writeCachedToken(providerIDDir)
 
-	sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, providerID)
+	sessionID, _, err := b.NewSessionForUser(username, "lang", sessionmode.Login, providerID, "")
 	require.NoError(t, err, "NewSession should not error when repairing a stale username cache dir")
 	require.Equal(t, providerIDDir, b.UserDataDirForSession(sessionID), "Session should use the provider ID cache dir")
 
@@ -888,7 +888,7 @@ func TestNewSessionRejectsConflictingCacheIdentityBeforeConsolidation(t *testing
 				require.NoError(t, err, "Setup: reading cached credentials should not fail")
 			}
 
-			sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, providerID)
+			sessionID, _, err := b.NewSessionForUser(username, "lang", sessionmode.Login, providerID, "")
 			require.ErrorContains(t, err, "provider ID does not match the existing user")
 			require.Empty(t, sessionID, "a conflicting cache must not create a session")
 
@@ -928,7 +928,7 @@ func TestNewSessionWithProviderIDEqualToUsernameKeepsCacheDirectory(t *testing.T
 	passwordBefore, err := os.ReadFile(passwordPath)
 	require.NoError(t, err, "Setup: reading password should not fail")
 
-	sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, username)
+	sessionID, _, err := b.NewSessionForUser(username, "lang", sessionmode.Login, username, "")
 	require.NoError(t, err, "NewSession should accept a provider ID equal to the username")
 	t.Cleanup(func() { require.NoError(t, b.EndSession(sessionID)) })
 	require.Equal(t, userDataDir, b.UserDataDirForSession(sessionID), "the session should use the existing cache dir")
@@ -989,7 +989,7 @@ func TestNewSessionRejectsConflictingLegacyCacheDuringMigration(t *testing.T) {
 		require.NoError(t, err, "Setup: reading cache files should not fail")
 	}
 
-	sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, "")
+	sessionID, _, err := b.NewSessionForUser(username, "lang", sessionmode.Login, "", "")
 	require.ErrorContains(t, err, "provider ID does not match the existing user")
 	require.Empty(t, sessionID, "conflicting caches must not create a session")
 
@@ -1022,7 +1022,7 @@ func TestNewSessionRejectsMalformedCachedAuthInfo(t *testing.T) {
 	passwordBefore, err := os.ReadFile(passwordPath)
 	require.NoError(t, err, "Setup: reading the cached password should not fail")
 
-	sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, "")
+	sessionID, _, err := b.NewSessionForUser(username, "lang", sessionmode.Login, "", "")
 	require.ErrorContains(t, err, "could not unmarshal token")
 	require.Empty(t, sessionID, "a cache with an unreadable identity must not create a session")
 
@@ -1073,7 +1073,7 @@ func TestNewSessionRemovesUnsafeCacheSymlink(t *testing.T) {
 			}
 			require.NoError(t, os.Symlink(target, userDataDir), "Setup: create unsafe compat symlink")
 
-			sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, "")
+			sessionID, _, err := b.NewSessionForUser(username, "lang", sessionmode.Login, "", "")
 			require.NoError(t, err, "NewSession should not error on an unsafe symlink")
 
 			_, lstatErr := os.Lstat(userDataDir)
@@ -2372,7 +2372,7 @@ func TestIsAuthenticatedProviderIDConflict(t *testing.T) {
 				if source == "cache_only" {
 					databaseID = ""
 				}
-				sessionID, key, err := b.NewSession(username, "en", sessionmode.Login, databaseID)
+				sessionID, key, err := b.NewSessionForUser(username, "en", sessionmode.Login, databaseID, "")
 				require.NoError(t, err)
 				t.Cleanup(func() { require.NoError(t, b.EndSession(sessionID)) })
 
@@ -3303,7 +3303,7 @@ func TestV3SessionCannotAdoptOwnerProviderName(t *testing.T) {
 					ownerExtraGroups: []string{"sudo"}, provider: provider, issuerURL: defaultIssuerURL,
 				})
 
-				sessionID, key, err := b.NewSession(userName, "en", sessionmode.Login, providerID)
+				sessionID, key, err := b.NewSessionForUser(userName, "en", sessionmode.Login, providerID, "")
 				require.NoError(t, err)
 				generateAndStoreCachedInfo(t, tokenOptions{
 					username: userName, obtainedViaEntraAuth: true, providerID: providerID, issuer: defaultIssuerURL,
@@ -6505,7 +6505,7 @@ func TestDeviceAuthRedirectsToExistingProviderIDDir(t *testing.T) {
 
 	// authd has not been updated, so it does not pass a provider ID to NewSession, and
 	// the username path does not resolve to the provider ID dir yet.
-	sessionID, key, err := b.NewSession(username, "some lang", sessionmode.Login, "")
+	sessionID, key, err := b.NewSessionForUser(username, "some lang", sessionmode.Login, "", "")
 	require.NoError(t, err, "NewSession should not fail")
 	require.Equal(t, usernameDir, b.UserDataDirForSession(sessionID),
 		"Before device auth the session should still resolve to the username dir")
@@ -6629,7 +6629,7 @@ func TestOfflineLoginCacheDirectoryResolution(t *testing.T) {
 					"Setup: writing the legacy token without a provider ID")
 			}
 
-			sessionID, _, err := b.NewSession(username, "some lang", sessionmode.Login, "")
+			sessionID, _, err := b.NewSessionForUser(username, "some lang", sessionmode.Login, "", "")
 			require.NoError(t, err, "NewSession should not fail offline")
 
 			gotOffline, err := b.IsOffline(sessionID)

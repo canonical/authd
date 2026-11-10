@@ -669,7 +669,7 @@ func TestNewBrokersParsesConfigOnce(t *testing.T) {
 	require.Len(t, reported, 1)
 	require.ErrorContains(t, reported[0], `unknown section "future"`)
 
-	require.NoError(t, brokers[0].cfg.registerOwner("", "first-user"))
+	require.NoError(t, brokers[0].cfg.registerOwnerLocked("", "first-user"))
 	require.Equal(t, "first-user", brokers[0].cfg.owner)
 	require.Empty(t, brokers[1].cfg.owner)
 }
@@ -1101,7 +1101,7 @@ func TestRegisterOwner(t *testing.T) {
 			}
 
 			cfg := userConfig{firstUserBecomesOwner: true, ownerAllowed: true, provider: p, ownerMutex: &sync.RWMutex{}}
-			err = cfg.registerOwner(confPath, userName)
+			err = cfg.registerOwnerLocked(confPath, userName)
 			if tc.wantErr != "" {
 				require.ErrorContains(t, err, tc.wantErr)
 				return
@@ -1126,7 +1126,7 @@ func TestRegisterOwnerSurvivesReload(t *testing.T) {
 			require.NoError(t, os.WriteFile(cfgPath, []byte(configTypes["valid"]), 0600))
 			uc, err := parseConfigFromPath(cfgPath, &testutils.MockProvider{}, false, nil)
 			require.NoError(t, err)
-			require.NoError(t, uc.registerOwner(cfgPath, name))
+			require.NoError(t, uc.registerOwnerLocked(cfgPath, name))
 			reloaded, err := parseConfigFromPath(cfgPath, uc.provider, false, nil)
 			require.NoError(t, err)
 			require.Equal(t, name, reloaded.owner)
@@ -1148,7 +1148,7 @@ func TestRegisterOwnerKeepsExistingConfigurationOnFailure(t *testing.T) {
 			require.NoError(t, os.WriteFile(cfgPath, []byte(configTypes["valid"]), 0600))
 			uc, err := parseConfigFromPath(cfgPath, &testutils.MockProvider{}, false, nil)
 			require.NoError(t, err)
-			require.NoError(t, uc.registerOwner(cfgPath, "old-owner"))
+			require.NoError(t, uc.registerOwnerLocked(cfgPath, "old-owner"))
 			dropInDir := GetDropInDir(cfgPath)
 			ownerPath := filepath.Join(dropInDir, ownerAutoRegistrationConfigPath)
 			before, err := os.ReadFile(ownerPath)
@@ -1159,7 +1159,7 @@ func TestRegisterOwnerKeepsExistingConfigurationOnFailure(t *testing.T) {
 				require.NoError(t, os.Chmod(dropInDir, 0500))       //nolint:gosec // Exercise a failed owner-file write.
 				t.Cleanup(func() { _ = os.Chmod(dropInDir, 0700) }) //nolint:gosec // Restore directory access for cleanup.
 			}
-			require.Error(t, uc.registerOwner(cfgPath, "new-owner"))
+			require.Error(t, uc.registerOwnerLocked(cfgPath, "new-owner"))
 			after, err := os.ReadFile(ownerPath)
 			require.NoError(t, err)
 			require.Equal(t, before, after)
@@ -1199,7 +1199,7 @@ func TestRegisterOwnerRejectsInvalidChars(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			err := uc.registerOwner(cfgPath, tc.username)
+			err := uc.registerOwnerLocked(cfgPath, tc.username)
 			require.ErrorContains(t, err, "invalid characters")
 		})
 	}
