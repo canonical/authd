@@ -4,6 +4,7 @@ package dbusservice_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,9 +19,12 @@ import (
 	"github.com/canonical/authd/brokers/internal/broker/sessionmode"
 	"github.com/canonical/authd/brokers/internal/consts"
 	"github.com/canonical/authd/brokers/internal/dbusservice"
+	"github.com/canonical/authd/brokers/internal/providers/info"
 	"github.com/canonical/authd/brokers/internal/testutils"
+	"github.com/canonical/authd/brokers/internal/token"
 	"github.com/godbus/dbus/v5"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2"
 )
 
 func TestQueuedActivationCallDoesNotBlockInitialization(t *testing.T) {
@@ -148,12 +152,16 @@ entra_auth = false
 
 	const username = "user@example.com"
 	const providerID = "provider-id"
+	const opaqueProviderID = "invalid/../provider-id"
+	opaqueCacheKey := fmt.Sprintf(".authd-provider-id-%x", sha256.Sum256([]byte(opaqueProviderID)))
+	cacheKeys := []string{username, providerID, opaqueCacheKey}
 	tests := []struct {
 		name             string
 		method           string
 		args             []any
 		deletedCacheKeys []string
 		wantErrorName    string
+		opaqueTokenState string
 	}{
 		{
 			name: "v1 deletes username cache", method: "com.ubuntu.authd.Broker.DeleteUser",
@@ -184,18 +192,38 @@ entra_auth = false
 			args: []any{"invalid/../user", ""}, wantErrorName: "org.freedesktop.DBus.Error.Failed",
 		},
 		{
-			name: "v3 rejects invalid provider ID", method: "com.ubuntu.authd.Broker3.DeleteUser",
-			args: []any{username, "invalid/../provider-id"}, wantErrorName: "org.freedesktop.DBus.Error.Failed",
+			name: "v3 deletes opaque provider ID cache", method: "com.ubuntu.authd.Broker3.DeleteUser",
+			args: []any{username, opaqueProviderID}, deletedCacheKeys: []string{username, opaqueCacheKey},
+		},
+		{
+			name: "v3 reports missing encoded ownership token", method: "com.ubuntu.authd.Broker3.DeleteUser",
+			args: []any{username, opaqueProviderID}, deletedCacheKeys: []string{username},
+			wantErrorName: "org.freedesktop.DBus.Error.Failed", opaqueTokenState: "missing",
+		},
+		{
+			name: "v3 reports malformed encoded ownership token", method: "com.ubuntu.authd.Broker3.DeleteUser",
+			args: []any{username, opaqueProviderID}, deletedCacheKeys: []string{username},
+			wantErrorName: "org.freedesktop.DBus.Error.Failed", opaqueTokenState: "malformed",
 		},
 	}
 	issuerDir := filepath.Join(dataDir, strings.ReplaceAll(strings.TrimPrefix(defaultIssuerURL, "http://"), ":", "_"))
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			for _, cacheKey := range []string{username, providerID} {
+			for _, cacheKey := range cacheKeys {
 				cacheDir := filepath.Join(issuerDir, cacheKey)
 				require.NoError(t, os.MkdirAll(cacheDir, 0700), "Setup: creating the cache directory should not fail")
 				require.NoError(t, os.WriteFile(filepath.Join(cacheDir, "password"), []byte("cached-password"), 0600),
 					"Setup: writing cached data should not fail")
+			}
+			tokenPath := filepath.Join(issuerDir, opaqueCacheKey, "token.json")
+			require.NoError(t, token.CacheAuthInfo(tokenPath, &token.AuthCachedInfo{
+				Token: &oauth2.Token{}, UserInfo: info.User{ProviderID: opaqueProviderID},
+			}))
+			switch tc.opaqueTokenState {
+			case "missing":
+				require.NoError(t, os.Remove(tokenPath))
+			case "malformed":
+				require.NoError(t, os.WriteFile(tokenPath, []byte("{"), 0600))
 			}
 
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -213,7 +241,7 @@ entra_auth = false
 				require.Equal(t, wantErrorName, dbusErr.Name)
 			}
 
-			for _, cacheKey := range []string{username, providerID} {
+			for _, cacheKey := range cacheKeys {
 				cacheDir := filepath.Join(issuerDir, cacheKey)
 				if os.Geteuid() == 0 && slices.Contains(tc.deletedCacheKeys, cacheKey) {
 					require.NoDirExists(t, cacheDir, "The requested cache directory should be deleted")
