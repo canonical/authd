@@ -1054,29 +1054,67 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 		require.ErrorIs(t, err, db.NoDataFoundError{}, "a rejected new user must not be stored")
 	})
 
-	t.Run("Keep_old_username_in_local_groups_when_rename_fails", func(t *testing.T) {
+	t.Run("Keep_local_groups_when_the_database_update_fails", func(t *testing.T) {
 		destGroupFile := localgroupstestutils.SetupGroupMock(t,
 			filepath.Join("testdata", "groups", "single_localgroup_user1.group"))
 
 		dbDir := t.TempDir()
-		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "two_users_with_providerid_and_local_group.db.yaml"), dbDir)
+		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_and_group_with_providerid_and_local_group.db.yaml"), dbDir)
 		require.NoError(t, err, "Setup: could not create database from testdata")
 
+		// The generated GID of the new group belongs to the private group of user1.
+		m := newManagerForTests(t, dbDir, users.WithIDGenerator(&users.IDGeneratorMock{
+			GIDsToGenerate: []uint32{11111},
+		}))
+
+		// The update also drops user1 from localgroup1, which would rewrite the group file.
+		err = m.UpdateUser(newUser("user1@example.com", "providerid-user1",
+			types.GroupInfo{Name: "newgroup1", UGID: "new-ugid"}))
+		require.ErrorContains(t, err, `GID for group "newgroup1" already in use`,
+			"UpdateUser should fail when the database rejects the new group")
+
+		// The group file is written only after the database was updated.
+		require.NoFileExists(t, destGroupFile,
+			"local groups must not be modified when the database update fails")
+	})
+
+	// An alias that is equal to a system user name can be stored by an older daemon
+	// or after a system user was added. The account must keep working by its Unix name.
+	t.Run("Keep_login_working_when_the_stored_alias_is_a_system_user_name", func(t *testing.T) {
+		dbDir := t.TempDir()
+		err := db.Z_ForTests_CreateDBFromYAMLReader(strings.NewReader(`
+schema_version: 4
+users:
+  - name: user1@example.com
+    uid: 1111
+    gid: 1111
+    broker_id: broker-id
+    provider_id: providerid-user1
+    provider_username: root
+groups:
+  - name: user1@example.com
+    gid: 1111
+    ugid: user1@example.com
+users_to_groups:
+  - uid: 1111
+    gid: 1111
+`), dbDir)
+		require.NoError(t, err, "Setup: could not create database from testdata")
 		m := newManagerForTests(t, dbDir)
 
-		// Changing the provider username to newuser1@example.com must fail because that login name
-		// already belongs to a different account. The existing local group membership must remain.
-		err = m.UpdateUser(newUser("newuser1@example.com", "providerid-user1", types.GroupInfo{Name: "localgroup1", UGID: ""}))
-		require.Error(t, err, "UpdateUser should return an error when the rename collides with an existing user")
+		u := newUser("user1@example.com", "providerid-user1")
+		u.ProviderUsername = "root"
+		u.Gecos = "A new gecos"
+		for range 2 {
+			updated, err := m.UpdateAuthenticatedUser(u)
+			require.NoError(t, err, "an unchanged alias must not be checked against the system users")
+			require.Equal(t, uint32(1111), updated.UID)
+		}
 
-		stillThere, err := userstestutils.DBManager(m).UserByName("user1@example.com")
-		require.NoError(t, err, "old username should still exist after the failed rename")
-		require.Equal(t, "providerid-user1", stillThere.ProviderID, "old user should keep its provider ID")
-
-		// The group file must not have been mutated at all: no membership was rewritten or removed,
-		// so the old user remains in localgroup1 exactly as before.
-		require.NoFileExists(t, destGroupFile,
-			"local groups must not be modified when the rename fails")
+		stored, err := userstestutils.DBManager(m).UserByName("user1@example.com")
+		require.NoError(t, err)
+		require.Equal(t, "root", stored.ProviderUsername)
+		require.Equal(t, "A new gecos", stored.Gecos, "other changes must still be stored")
 	})
 
 	t.Run("Provider_ID_match_is_scoped_by_broker", func(t *testing.T) {
@@ -2804,4 +2842,56 @@ func TestUpdateAuthenticatedUserWithoutChangesDoesNotWaitForUserManagementLock(t
 			require.NoError(t, err)
 		})
 	}
+}
+
+func TestUpdateAuthenticatedUserStoresProviderUsernameInLowerCase(t *testing.T) {
+	t.Parallel()
+
+	m := newManagerForTests(t, t.TempDir())
+	t.Cleanup(func() { _ = m.Stop() })
+
+	_, err := m.UpdateAuthenticatedUser(types.UserInfo{
+		Name: "carol", ProviderUsername: "Carol@Example.COM", BrokerID: "broker-id", ProviderID: "carol-id",
+		Gecos: "Carol", Dir: "/home/carol", Shell: "/bin/bash",
+	})
+	require.NoError(t, err)
+
+	stored, err := userstestutils.DBManager(m).UserByName("carol")
+	require.NoError(t, err)
+	require.Equal(t, "carol@example.com", stored.ProviderUsername)
+
+	byAlias, err := m.UserByLoginName("CAROL@example.com")
+	require.NoError(t, err, "the alias must resolve in any case")
+	require.Equal(t, "carol", byAlias.Name)
+}
+
+func TestResolveAuthenticatedIdentityByAliasWithoutProviderID(t *testing.T) {
+	t.Parallel()
+
+	dbDir := t.TempDir()
+	err := db.Z_ForTests_CreateDBFromYAMLReader(strings.NewReader(`
+schema_version: 4
+users:
+  - name: legacy-user
+    uid: 1111
+    gid: 1111
+    broker_id: broker-id
+    provider_username: alias@example.com
+groups:
+  - name: legacy-user
+    gid: 1111
+    ugid: legacy-user
+users_to_groups:
+  - uid: 1111
+    gid: 1111
+`), dbDir)
+	require.NoError(t, err)
+	m := newManagerForTests(t, dbDir)
+	t.Cleanup(func() { _ = m.Stop() })
+
+	identity, err := m.ResolveAuthenticatedIdentity(
+		"alias@example.com", "broker-id", "", "alias@example.com", "proposed-name")
+	require.NoError(t, err, "the stored alias must select the account when there is no provider ID")
+	require.Equal(t, "legacy-user", identity.Name)
+	require.Equal(t, uint32(1111), identity.UID)
 }

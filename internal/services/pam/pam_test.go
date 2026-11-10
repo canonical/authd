@@ -10,7 +10,9 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -501,6 +503,89 @@ func TestProviderUsernameCollisionKeepsExistingAliasForMatchingIdentity(t *testi
 		"a login using the conflicting account name must still be denied")
 	_, err = client.EndSession(context.Background(), &authd.ESRequest{SessionId: conflictingSession})
 	require.NoError(t, err)
+}
+
+// The mock broker uses a fixed session ID for this fixture, so don't run this test in parallel.
+func TestLockedAccountRenamedAtProviderIsDeniedUnderUnknownNewName(t *testing.T) {
+	prefix := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_"))
+	unixUsername := "unix-" + strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
+	oldAlias := prefix + testutils.IDSeparator + "ia_info_mismatching_user_name@example.com"
+	m := newPamManagerWithUser(t, unixUsername, oldAlias, "providerid-different_username@example.com")
+	require.NoError(t, m.LockUser(unixUsername), "Setup: could not lock the user")
+	client := newPamClient(t, m, globalBrokerManager)
+
+	// authd does not know this name. Only the provider ID selects the locked account.
+	newName := prefix + "_new" + testutils.IDSeparator + "ia_info_mismatching_user_name@example.com"
+	_, err := m.UserByLoginName(newName)
+	require.Error(t, err, "Setup: the new name must be unknown to authd")
+
+	sessionID := selectBrokerForTest(t, client, newName)
+	_, err = client.IsAuthenticated(context.Background(), &authd.IARequest{SessionId: sessionID})
+	require.ErrorContains(t, err, "is locked",
+		"a locked account must stay locked when the provider renamed it")
+	_, err = client.EndSession(context.Background(), &authd.ESRequest{SessionId: sessionID})
+	require.NoError(t, err)
+}
+
+func TestLoginAsUnixNameRenamesStoredAliasBack(t *testing.T) {
+	t.Parallel()
+
+	unixUsername := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_")) + "@example.com"
+	// The broker session uses the stored alias; the mock broker reports the part after the separator.
+	oldAlias := "old-alias" + testutils.IDSeparator + unixUsername
+	m := newPamManagerWithUser(t, unixUsername, oldAlias, "providerid-"+unixUsername)
+	client := newPamClient(t, m, globalBrokerManager)
+
+	sessionID := selectBrokerForTest(t, client, unixUsername)
+	response, err := client.IsAuthenticated(context.Background(), &authd.IARequest{SessionId: sessionID})
+	require.NoError(t, err)
+	require.Equal(t, auth.Granted, response.GetAccess())
+	require.Equal(t, unixUsername, response.GetPamUser())
+	_, err = client.EndSession(context.Background(), &authd.ESRequest{SessionId: sessionID})
+	require.NoError(t, err)
+
+	stored, err := userstestutils.DBManager(m).UserByName(unixUsername)
+	require.NoError(t, err)
+	require.Equal(t, unixUsername, stored.ProviderUsername, "the alias must follow the name the provider reports")
+	require.Equal(t, uint32(1111), stored.UID, "the account must not change")
+}
+
+// The mock broker uses a fixed session ID for this fixture, so don't run this test in parallel.
+func TestSelectBrokerReportsNSSLookupFailure(t *testing.T) {
+	unixUsername := "unix-" + strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
+	alias := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_")) + "@example.com"
+	m := newPamManagerWithUser(t, unixUsername, alias, "providerid-"+alias)
+	client := newPamClient(t, m, globalBrokerManager)
+
+	// The stub runs on the gRPC handler goroutine, so only record the names there.
+	var mu sync.Mutex
+	var asked []string
+	t.Cleanup(pam.SetLookupUserByName(func(n string) (*user.User, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		asked = append(asked, n)
+		return nil, errors.New("nss is down")
+	}))
+	askedNames := func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(asked)
+	}
+
+	_, err := client.SelectBroker(context.Background(), &authd.SBRequest{
+		BrokerId: mockBrokerGeneratedID,
+		Username: alias,
+		Mode:     authd.SessionMode_LOGIN,
+	})
+	require.ErrorContains(t, err, fmt.Sprintf("could not check name %q in NSS", alias),
+		"a failing NSS lookup must deny the login")
+	require.Equal(t, []string{alias}, askedNames())
+
+	// The Unix name is canonical, so NSS is not asked.
+	sessionID := selectBrokerForTest(t, client, unixUsername)
+	_, err = client.EndSession(context.Background(), &authd.ESRequest{SessionId: sessionID})
+	require.NoError(t, err)
+	require.Equal(t, []string{alias}, askedNames(), "the Unix name must not be looked up in NSS")
 }
 
 func TestProviderIDRenameCleansUpPreAuthEntry(t *testing.T) {

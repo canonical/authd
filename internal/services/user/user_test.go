@@ -148,6 +148,26 @@ func TestGetUserByProviderUsernameReturnsCanonicalIdentity(t *testing.T) {
 		"supplementary group membership must use the Unix username")
 }
 
+func TestGetUserByNameWithPreCheckUsesStoredAlias(t *testing.T) {
+	userslocking.Z_ForTests_OverrideLockingWithCleanup(t)
+
+	client, manager := newUserServiceClient(t, "")
+	// The mock broker denies this name in a pre-check, so a pre-check before the
+	// database lookup would fail the request.
+	const alias = "provider-user@example.com"
+	user := db.UserRow{
+		Name: "unix-user", UID: 12345, GID: 12345, Dir: "/home/unix-user", Shell: "/bin/bash",
+		ProviderUsername: alias,
+	}
+	group := db.GroupRow{Name: "unix-user", GID: 12345, UGID: "unix-user"}
+	require.NoError(t, userstestutils.DBManager(manager).UpdateUserEntry(user, []db.GroupRow{group}, nil))
+
+	got, err := client.GetUserByName(context.Background(), &authd.GetUserByNameRequest{Name: alias, ShouldPreCheck: true})
+	require.NoError(t, err)
+	require.Equal(t, "unix-user", got.GetName(), "a stored alias must resolve without asking the brokers")
+	require.Equal(t, uint32(12345), got.GetUid())
+}
+
 //nolint:dupl // This is not a duplicate test
 func TestGetUserByID(t *testing.T) {
 	tests := map[string]struct {
@@ -676,6 +696,23 @@ func TestDeleteUserUsesProviderUsernameForBrokerCleanup(t *testing.T) {
 	require.NoError(t, err, "DeleteUser should still succeed when broker cleanup fails")
 	require.Len(t, resp.GetWarnings(), 1,
 		"broker cleanup should receive the provider username for a v2 user")
+}
+
+func TestDeleteUserFallsBackToUnixNameForBrokerCleanup(t *testing.T) {
+	userslocking.Z_ForTests_OverrideLockingWithCleanup(t)
+
+	// The mock broker fails the cleanup when the name has "delete_error". The user
+	// has no provider username, so the broker can only get the Unix name.
+	const username = "delete_error@example.com"
+	client, manager := newUserServiceClient(t, "delete-user-without-provider-username.db.yaml")
+	stored, err := userstestutils.DBManager(manager).UserByName(username)
+	require.NoError(t, err, "Setup: could not load user")
+	require.Empty(t, stored.ProviderUsername, "Setup: the user must have no provider username")
+
+	resp, err := client.DeleteUser(context.Background(), &authd.DeleteUserRequest{Name: username})
+	require.NoError(t, err, "DeleteUser should still succeed when broker cleanup fails")
+	require.Len(t, resp.GetWarnings(), 1,
+		"broker cleanup should receive the Unix name when no provider username is stored")
 }
 
 func TestDeleteGroup(t *testing.T) {
