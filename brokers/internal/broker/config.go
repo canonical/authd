@@ -495,6 +495,20 @@ func (uc *userConfig) registerOwnerIfNeeded(cfgPath, userName string) error {
 		return nil
 	}
 
+	// Each D-Bus interface has its own copy of the config, so another one may
+	// have registered an owner since this copy was read.
+	if cfgPath != "" {
+		onDisk, err := parseConfigFromPath(cfgPath, uc.provider, true, nil)
+		if err != nil {
+			return err
+		}
+		if onDisk.owner != "" {
+			uc.owner = onDisk.owner
+			uc.firstUserBecomesOwner = false
+			return nil
+		}
+	}
+
 	return uc.registerOwnerLocked(cfgPath, userName)
 }
 

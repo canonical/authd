@@ -3001,10 +3001,15 @@ func (b *Broker) DeleteUser(username, providerID string) error {
 				}
 			}
 		}
-		if err := os.RemoveAll(providerIDDir); err != nil {
-			return fmt.Errorf("could not remove provider ID-keyed user data directory %q: %w", providerIDDir, err)
+		cached, err := token.LoadAuthInfo(filepath.Join(providerIDDir, "token.json"))
+		if err == nil && cached.UserInfo.ProviderID != "" && cached.UserInfo.ProviderID != providerID {
+			log.Warningf(context.Background(), "Not removing %q: it holds the cache of another provider ID", providerIDDir)
+		} else {
+			if err := os.RemoveAll(providerIDDir); err != nil {
+				return fmt.Errorf("could not remove provider ID-keyed user data directory %q: %w", providerIDDir, err)
+			}
+			log.Debugf(context.Background(), "Deleted broker data for provider ID %q at %q", providerID, providerIDDir)
 		}
-		log.Debugf(context.Background(), "Deleted broker data for provider ID %q at %q", providerID, providerIDDir)
 	}
 
 	if username != "" {

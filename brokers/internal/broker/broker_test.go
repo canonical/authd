@@ -2,6 +2,7 @@ package broker_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -749,6 +750,37 @@ func TestNewSessionMigratesReservedProviderIDCacheKey(t *testing.T) {
 	require.ErrorIs(t, err, os.ErrNotExist)
 	_, err = os.Lstat(legacyDir)
 	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func TestDeleteUserKeepsProviderIDDirOfAnotherUser(t *testing.T) {
+	t.Parallel()
+
+	for name, providerID := range map[string]string{
+		"Plain_ID":    "some-id",
+		"Reserved_ID": "tenant/subject",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			b := newBrokerForTests(t, &brokerForTestConfig{issuerURL: defaultIssuerURL})
+			dirName := providerID
+			if strings.Contains(providerID, "/") {
+				dirName = fmt.Sprintf(".authd-provider-id-%x", sha256.Sum256([]byte(providerID)))
+			}
+			dir, err := b.UserDataDir(dirName)
+			require.NoError(t, err)
+			require.NoError(t, os.MkdirAll(dir, 0700))
+			tokenPath := filepath.Join(dir, "token.json")
+			require.NoError(t, token.CacheAuthInfo(tokenPath, generateCachedInfo(t, tokenOptions{providerID: "other-id"})))
+
+			require.NoError(t, b.DeleteUser("", providerID))
+			require.FileExists(t, tokenPath, "a cache that belongs to another provider ID must survive")
+
+			require.NoError(t, token.CacheAuthInfo(tokenPath, generateCachedInfo(t, tokenOptions{providerID: providerID})))
+			require.NoError(t, b.DeleteUser("", providerID))
+			require.NoDirExists(t, dir, "the cache of the requested provider ID must be removed")
+		})
+	}
 }
 
 func TestNewSessionWithProviderIDRepairsUsernameCompatibilityPath(t *testing.T) {

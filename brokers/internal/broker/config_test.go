@@ -674,6 +674,24 @@ func TestNewBrokersParsesConfigOnce(t *testing.T) {
 	require.Empty(t, brokers[1].cfg.owner)
 }
 
+func TestRegisterOwnerIfNeededSeesOwnerRegisteredByAnotherInterface(t *testing.T) {
+	t.Parallel()
+
+	configPath := filepath.Join(t.TempDir(), "broker.conf")
+	require.NoError(t, os.WriteFile(configPath, []byte(configTypes["valid"]), 0600))
+	brokers, err := NewBrokers(Config{ConfigFile: configPath, DataDir: t.TempDir()}, []string{"Broker", "Broker2"})
+	require.NoError(t, err)
+
+	require.NoError(t, brokers[0].cfg.registerOwnerIfNeeded(configPath, "first-user"))
+	require.NoError(t, brokers[1].cfg.registerOwnerIfNeeded(configPath, "second-user"))
+
+	require.Equal(t, "first-user", brokers[1].cfg.owner, "the first registered owner must win")
+	require.False(t, brokers[1].cfg.shouldRegisterOwner())
+	reloaded, err := parseConfigFromPath(configPath, brokers[0].cfg.provider, false, nil)
+	require.NoError(t, err)
+	require.Equal(t, "first-user", reloaded.owner, "a later registration must not rewrite the owner file")
+}
+
 func TestRegisterOwnerIfNeeded(t *testing.T) {
 	t.Parallel()
 
