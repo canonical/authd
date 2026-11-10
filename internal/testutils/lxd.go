@@ -140,6 +140,8 @@ func runTestInLXD(t *testing.T, ubuntuVersion string, always bool) bool {
 		lxdTestEnvVar + "=1",
 		"PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin",
 		"HOME=/home/ubuntu",
+		// Root does not own the bind-mounted tree, so git can refuse to report VCS status.
+		"GOFLAGS=-buildvcs=false",
 	}
 	if golden.UpdateEnabled() {
 		env = append(env, golden.UpdateGoldenFilesEnv+"=1")
