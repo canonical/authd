@@ -384,7 +384,8 @@ Continue Log In With Remote User Through GDM: Define Local Password
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
 
-    Wait Until Desktop Ready
+    # Saving the password can take nearly a minute on CI, before GNOME starts.
+    Wait Until Desktop Ready    timeout=2 min
 
 Log In With Remote User Through GDM: Entra Password
     [Arguments]    ${username}
