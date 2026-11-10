@@ -429,6 +429,24 @@ func TestResolveAuthenticatedIdentityKeepsNewUnixName(t *testing.T) {
 		"the provider username should remain a separate login alias")
 }
 
+func TestResolveAuthenticatedIdentityDefaultsNewUnixNameToProviderUsername(t *testing.T) {
+	t.Parallel()
+
+	m := newManagerForTests(t, t.TempDir())
+	t.Cleanup(func() { _ = m.Stop() })
+
+	got, err := m.ResolveAuthenticatedIdentity(
+		"bob@example.com", "broker-id", "pid", "bob@example.com", "")
+	require.NoError(t, err)
+	require.Equal(t, "bob@example.com", got.Name,
+		"a new account without a broker Unix name should use the provider username")
+
+	_, err = m.UpdateAuthenticatedUser(types.UserInfo{
+		Name: got.Name, BrokerID: got.BrokerID, ProviderID: got.ProviderID, ProviderUsername: got.ProviderUsername,
+	})
+	require.NoError(t, err)
+}
+
 func TestResolveAuthenticatedIdentityAllowsProviderUsernameCollisionForMatchingSession(t *testing.T) {
 	t.Parallel()
 

@@ -1165,6 +1165,9 @@ func (m *Manager) resolveIdentity(sessionUsername, brokerID, providerID, provide
 	sessionUsername = strings.ToLower(sessionUsername)
 	providerUsername = strings.ToLower(providerUsername)
 	newUnixName = strings.ToLower(newUnixName)
+	if newUnixName == "" {
+		newUnixName = providerUsername
+	}
 
 	var byProviderID, bySession, byProviderUsername types.LoginIdentity
 	var hasProviderID, hasSession, hasProviderUsername bool
