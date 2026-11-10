@@ -19,12 +19,18 @@ type mockBusObject struct {
 	callErr       error
 
 	lastCalledMethod string
+	lastArgs         []interface{}
+	body             []interface{}
 }
 
 func (m *mockBusObject) Call(method string, flags dbus.Flags, args ...interface{}) *dbus.Call {
 	m.lastCalledMethod = method
+	m.lastArgs = args
 	if m.callErr != nil {
 		return &dbus.Call{Err: m.callErr}
+	}
+	if m.body != nil {
+		return &dbus.Call{Body: m.body}
 	}
 	return &dbus.Call{Body: []interface{}{m.introspectXML}}
 }
@@ -63,6 +69,76 @@ func introspectionXML(interfaces ...string) string {
 	return string(data)
 }
 
+func TestRequiresStableProviderIDForNewUsers(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		interfaces []string
+		cached     dbusInterface
+		want       bool
+		wantErr    bool
+	}{
+		"Unversioned": {interfaces: []string{DbusBaseInterface}},
+		"API_v2":      {interfaces: []string{DbusBaseInterface + "2"}},
+		"API_v3":      {interfaces: []string{DbusBaseInterface + "3"}, want: true},
+		"Highest_supported_API": {
+			interfaces: []string{DbusBaseInterface + "2", DbusBaseInterface + "3"},
+			want:       true,
+		},
+		"Cached_API_v2": {
+			interfaces: []string{DbusBaseInterface + "3"},
+			cached:     dbusInterface{name: DbusBaseInterface + "2", version: 2},
+		},
+		"Unsupported_API": {interfaces: []string{DbusBaseInterface + "999"}, wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			b := Broker{brokerer: &dbusBroker{
+				dbusObject: &mockBusObject{introspectXML: introspectionXML(tc.interfaces...)},
+				iface:      tc.cached,
+			}}
+			got, err := b.RequiresStableProviderIDForNewUsers()
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestNewSessionPassesUnixNameOnlyToV4(t *testing.T) {
+	t.Parallel()
+
+	for _, version := range []uint{1, 2, 3, 4} {
+		t.Run(fmt.Sprint(version), func(t *testing.T) {
+			t.Parallel()
+
+			ifaceName := DbusBaseInterface
+			if version > 1 {
+				ifaceName += fmt.Sprint(version)
+			}
+			mock := &mockBusObject{body: []interface{}{"session-id", "key"}}
+			b := dbusBroker{dbusObject: mock, iface: dbusInterface{name: ifaceName, version: version}}
+			sessionID, _, err := b.NewSession(context.Background(), "provider-name", "en", "login", "provider-id", "unix-name")
+			require.NoError(t, err)
+			require.Equal(t, "session-id", sessionID)
+			require.Equal(t, ifaceName+".NewSession", mock.lastCalledMethod)
+			wantArgs := []interface{}{"provider-name", "en", "login"}
+			if version >= 3 {
+				wantArgs = append(wantArgs, "provider-id")
+			}
+			if version >= 4 {
+				wantArgs = append(wantArgs, "unix-name")
+			}
+			require.Equal(t, wantArgs, mock.lastArgs)
+		})
+	}
+}
+
 func TestGetInterface(t *testing.T) {
 	t.Parallel()
 
@@ -78,9 +154,9 @@ func TestGetInterface(t *testing.T) {
 			wantInterface: dbusInterface{name: "com.ubuntu.authd.Broker", version: 1},
 		},
 		"Returns_highest_supported_version": {
-			interfaces: []string{"com.ubuntu.authd.Broker1", "com.ubuntu.authd.Broker2", "com.ubuntu.authd.Broker3",
+			interfaces: []string{"com.ubuntu.authd.Broker1", "com.ubuntu.authd.Broker2", "com.ubuntu.authd.Broker3", "com.ubuntu.authd.Broker4",
 				"com.ubuntu.authd.Broker999"}, // This one should be ignored as it's above the latest supported API version.
-			wantInterface: dbusInterface{name: "com.ubuntu.authd.Broker3", version: 3},
+			wantInterface: dbusInterface{name: "com.ubuntu.authd.Broker4", version: 4},
 		},
 		"Versioned_interfaces_with_unversioned": {
 			interfaces:    []string{"com.ubuntu.authd.Broker2", "com.ubuntu.authd.Broker", "com.ubuntu.authd.Broker1"},
@@ -101,7 +177,7 @@ func TestGetInterface(t *testing.T) {
 			wantErr:    true,
 		},
 		"Error_when_all_interfaces_above_latest_version": {
-			interfaces: []string{"com.ubuntu.authd.Broker4", "com.ubuntu.authd.Broker5"},
+			interfaces: []string{"com.ubuntu.authd.Broker5", "com.ubuntu.authd.Broker6"},
 			wantErr:    true,
 		},
 		"Error_when_introspect_fails": {

@@ -22,7 +22,8 @@ const (
 	DbusBaseInterface string = "com.ubuntu.authd.Broker"
 
 	// LatestAPIVersion is the latest API version supported by authd.
-	LatestAPIVersion = 3
+	LatestAPIVersion     = 4
+	providerIDAPIVersion = 3
 )
 
 type dbusInterface struct {
@@ -201,19 +202,21 @@ func interfaceVersion(iface string) (int, error) {
 }
 
 // NewSession calls the corresponding method on the broker bus and returns the session ID and encryption key.
-// On API v3, the providerID (stable provider identifier) is passed so the broker can locate the
-// provider ID-keyed cache directory directly. v2 brokers receive only username, lang, and mode.
-func (b *dbusBroker) NewSession(ctx context.Context, username, lang, mode, providerID string) (sessionID, encryptionKey string, err error) {
+// API v4 also receives the existing Unix name, separately from the provider username.
+func (b *dbusBroker) NewSession(ctx context.Context, username, lang, mode, providerID, unixUsername string) (sessionID, encryptionKey string, err error) {
 	iface, err := b.resolveInterface()
 	if err != nil {
 		return "", "", brokerUnavailableError(b.name, err)
 	}
 
 	var call *dbus.Call
-	if iface.version < 3 {
+	switch {
+	case iface.version < 3:
 		call, err = b.call(ctx, "NewSession", username, lang, mode)
-	} else {
+	case iface.version == 3:
 		call, err = b.call(ctx, "NewSession", username, lang, mode, providerID)
+	default:
+		call, err = b.call(ctx, "NewSession", username, lang, mode, providerID, unixUsername)
 	}
 	if err != nil {
 		return "", "", err
@@ -334,6 +337,14 @@ func (b *dbusBroker) resolveInterface() (dbusInterface, error) {
 	}
 	b.iface = iface
 	return iface, nil
+}
+
+func (b *dbusBroker) requiresStableProviderIDForNewUsers() (bool, error) {
+	iface, err := b.resolveInterface()
+	if err != nil {
+		return false, fmt.Errorf("could not determine broker API version: %w", err)
+	}
+	return iface.version >= providerIDAPIVersion, nil
 }
 
 // call is an abstraction over dbus calls to ensure we wrap the returned error to an ErrorToDisplay.
