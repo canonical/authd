@@ -7,6 +7,8 @@ use tonic::Request;
 use crate::client::{self, authd};
 use authd::Group as AuthdGroup;
 
+mod initgroups;
+
 pub struct AuthdGroupHooks;
 impl GroupHooks for AuthdGroupHooks {
     /// get_all_entries returns all group entries.

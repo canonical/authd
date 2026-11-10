@@ -72,8 +72,7 @@ changes.
 ```
 
 Use the Unix username in name-based configuration such as `sudoers`,
-`/etc/group`, and `sshd`'s `AllowUsers`. These settings refer to the Unix
-account, not provider login aliases.
+`/etc/group`, and `sshd`'s `AllowUsers`.
 
 ## authd provides the authctl tool for managing users
 
