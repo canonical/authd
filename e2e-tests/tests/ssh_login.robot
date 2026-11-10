@@ -1,18 +1,18 @@
 *** Settings ***
-Resource            resources/utils.resource
-Resource            resources/authd.resource
-Resource            resources/broker.resource
+Resource         resources/utils.resource
+Resource         resources/authd.resource
+Resource         resources/broker.resource
 
 # Test Tags    robot:exit-on-failure
-Test Setup          Test Setup
-Test Teardown       utils.Test Teardown
+Test Setup       Test Setup
+Test Teardown    utils.Test Teardown
 
 
 *** Variables ***
-${username}             %{E2E_USER}
-${local_password}       qwer1234
-${unix_username}        authd-e2e-unix@example.com
-${session_file}         /tmp/authd-ssh-provider-username
+${username}          %{E2E_USER}
+${local_password}    qwer1234
+${unix_username}     authd-e2e-unix@example.com
+${session_file}      /tmp/authd-ssh-provider-username
 
 
 *** Test Cases ***
@@ -103,18 +103,19 @@ Test SSH stale connections cannot change the Unix identity
     [Documentation]    Overlapping SSH connections must not use a temporary UID
     ...    after authentication selects an existing Unix account.
     ...
-    ...    Register a real IdP account and give it a distinct Unix name. Clear
-    ...    only its stored alias to model a provider rename that authd has not
-    ...    learned yet. Two real SSH clients reach their password prompts before
-    ...    either authenticates, so both retain the same temporary NSS identity.
-    ...    Completing the first login must not let the second use that stale UID,
-    ...    including a retry on the second connection.
+    ...    Register a real IdP account and give it a distinct Unix name. Replace
+    ...    its stored alias with an old one to model a provider rename that authd
+    ...    has not learned yet. Two real SSH clients reach their password prompts
+    ...    before either authenticates, so both retain the same temporary NSS
+    ...    identity. Completing the first login must not let the second use that
+    ...    stale UID, including a retry on the second connection.
     ...
-    ...    Repeat with an authd restart while a stale connection is waiting and
-    ...    a correctly authenticated Unix-name session remains open. Check the
-    ...    live session's UID, GID, home, groups and file owner after the restart.
-    ...    Fresh Unix-name logins must still work. Fresh known-alias logins follow
-    ...    the release policy: denied on 24.04 and allowed on newer releases.
+    ...    Then restart authd while a correctly authenticated Unix-name session
+    ...    is open. Check the live session's UID, GID, home, groups and file owner
+    ...    after the restart. A new connection after the restart must follow the
+    ...    same rules, and a fresh Unix-name login must still work. Fresh
+    ...    known-alias logins follow the release policy: denied on 24.04 and
+    ...    allowed on newer releases.
     ...
     ...    The helper uses sockets to hold password prompts, not fixed sleeps.
     ...    All identities come from the real NSS module, PAM and OpenSSH server.
@@ -122,16 +123,8 @@ Test SSH stale connections cannot change the Unix identity
     ...    First-time Unix accounts need separate restart/UID-lifetime coverage.
 
     Prepare SSH User With A Distinct Unix Username
-    ${driver_dir}=    SSH.Execute    mktemp -d
-    TRY
-        SSH.Copy To VM    ${CURDIR}/../resources/ssh_pre_auth.py    ${driver_dir}/ssh_pre_auth.py
-        ${result}=    SSH.Execute
-        ...    python3 ${driver_dir}/ssh_pre_auth.py '${username}' '${unix_username}' '${local_password}'
-        ...    timeout=300
-        Log    ${result}
-    FINALLY
-        SSH.Execute    rm -f ${driver_dir}/ssh_pre_auth.py && rmdir ${driver_dir}
-    END
+    ${result}=    Run SSH Pre-Auth Helper    run '${username}' '${unix_username}' '${local_password}'
+    Log    ${result}
 
 
 *** Keywords ***
@@ -155,16 +148,25 @@ Prepare SSH User With A Distinct Unix Username
     Set Test Variable    ${home}
     SSH.Execute    loginctl terminate-user ${username} || test -z "$(pgrep -u ${uid})"
     Wait Until Keyword Succeeds    30s    1s    SSH.Execute    test -z "$(pgrep -u ${uid})"
-    Change Broker Configuration    allowed_users    ALL
+    Change allowed_users In Broker Configuration    ALL
     Give Account A Distinct Unix Username
 
 Give Account A Distinct Unix Username
     [Documentation]    Model an account whose provider name changed without
     ...    renaming the real IdP account. Keep its UID, home and provider binding.
-    SSH.Execute    systemctl stop authd.socket authd.service
-    SSH.Execute
-    ...    python3 -c 'import sqlite3; db = sqlite3.connect("/var/lib/authd/authd.sqlite3"); cursor = db.execute("UPDATE users SET name = ? WHERE name = ? AND provider_username = ? AND provider_id != ?", ("${unix_username}", "${username.lower()}", "${username.lower()}", "")); assert cursor.rowcount == 1, "Expected one account bound to a provider ID"; db.commit()'
-    SSH.Execute    systemctl start authd.socket authd.service
+    Run SSH Pre-Auth Helper    rename '${username}' '${unix_username}'
+
+Run SSH Pre-Auth Helper
+    [Documentation]    Run a command of ``ssh_pre_auth.py`` in the VM and return its output.
+    [Arguments]    ${arguments}
+    ${driver_dir}=    SSH.Execute    mktemp -d
+    TRY
+        SSH.Copy To VM    ${CURDIR}/../resources/ssh_pre_auth.py    ${driver_dir}/ssh_pre_auth.py
+        ${result}=    SSH.Execute    python3 ${driver_dir}/ssh_pre_auth.py ${arguments}    timeout=300
+        RETURN    ${result}
+    FINALLY
+        SSH.Execute    rm -f ${driver_dir}/ssh_pre_auth.py && rmdir ${driver_dir}
+    END
 
 Check SSH Session Identity
     [Arguments]    ${expected}

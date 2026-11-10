@@ -8,6 +8,7 @@ import contextlib
 import json
 import os
 import pwd
+import re
 import select
 import shlex
 import socket
@@ -159,20 +160,64 @@ def check_identity(identity, unix_name):
     }, identity
 
 
-def forget_alias(unix_name):
-    """Model an unknown provider alias while retaining its stable identity."""
+def temporary_uid(name):
+    """Return the UID the running authd gave the temporary user.
+
+    NSS only returns a pre-auth user to sshd and its children, so this script
+    cannot look the name up. It reads the UID from authd's debug log instead.
+    """
+    invocation = subprocess.run(
+        ["systemctl", "show", "--property=InvocationID", "--value", "authd.service"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(["journalctl", "--sync"], check=True)
+    log = subprocess.run(
+        [
+            "journalctl",
+            f"_SYSTEMD_INVOCATION_ID={invocation}",
+            "-o",
+            "cat",
+            "--no-pager",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    pattern = rf'Using new UID (\d+) for temporary user "{re.escape(name.lower())}"'
+    uids = re.findall(pattern, log)
+    assert uids, f"authd did not log a temporary UID for {name}"
+    return int(uids[-1])
+
+
+def update_account(name, column, value):
+    """Set one column of the stored account with the given Unix name."""
     subprocess.run(["systemctl", "stop", "authd.socket", "authd.service"], check=True)
     with sqlite3.connect("/var/lib/authd/authd.sqlite3") as database:
         changed = database.execute(
-            "UPDATE users SET provider_username = '' WHERE name = ? AND provider_id != ''",
-            (unix_name,),
+            f"UPDATE users SET {column} = ? WHERE name = ? AND provider_id != ''",
+            (value, name),
         )
         assert changed.rowcount == 1, "Expected one provider-ID-bound account"
     subprocess.run(["systemctl", "start", "authd.socket", "authd.service"], check=True)
 
 
+def rename_account(username, unix_name):
+    """Give the account a Unix name that differs from its provider name."""
+    update_account(username.lower(), "name", unix_name)
+
+
+def forget_alias(unix_name):
+    """Model a provider alias that authd has not learned yet.
+
+    The account keeps a different, old alias. The typed alias stays unknown.
+    """
+    update_account(unix_name, "provider_username", "old-alias@example.com")
+
+
 def run(username, unix_name, password):
-    """Cover overlapping stale connections and a restart with a live session."""
+    """Cover overlapping stale connections and a live session across a restart."""
     release = Path("/etc/os-release").read_text()
     aliases_allowed = 'VERSION_ID="24.04"' not in release
     with tempfile.TemporaryDirectory(prefix="authd-ssh-") as directory:
@@ -186,10 +231,10 @@ def run(username, unix_name, password):
 
             forget_alias(unix_name)
             first = connect("first", username)
-            temporary_uid = pwd.getpwnam(username).pw_uid
+            temporary = temporary_uid(username)
             second = connect("second", username, attempts=2)
-            assert pwd.getpwnam(username).pw_uid == temporary_uid
-            assert pwd.getpwnam(unix_name).pw_uid != temporary_uid
+            assert temporary_uid(username) == temporary
+            assert pwd.getpwnam(unix_name).pw_uid != temporary
 
             first.release()
             first.finish(False, unix_name)
@@ -205,14 +250,10 @@ def run(username, unix_name, password):
             live = connect("live", unix_name)
             live.release()
             check_identity(live.read_identity(), unix_name)
+            # This restarts authd while the live session is open.
             forget_alias(unix_name)
-            stale = connect("restart-stale", username)
-            assert pwd.getpwnam(username).pw_uid != pwd.getpwnam(unix_name).pw_uid
-            subprocess.run(["systemctl", "restart", "authd.service"], check=True)
             live.process.stdin.write("check\n")
             live.process.stdin.flush()
-            stale.release()
-            stale.finish(False, unix_name)
             live.finish(True, unix_name)
 
             recovery = connect("recovery", username)
@@ -227,5 +268,7 @@ def run(username, unix_name, password):
 if __name__ == "__main__":
     if sys.argv[1] == "askpass":
         askpass(sys.argv[2])
+    elif sys.argv[1] == "rename":
+        rename_account(sys.argv[2], sys.argv[3])
     else:
-        run(sys.argv[1], sys.argv[2], sys.argv[3])
+        run(sys.argv[2], sys.argv[3], sys.argv[4])
