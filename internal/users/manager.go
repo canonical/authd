@@ -400,7 +400,19 @@ func (m *Manager) updateUser(u *types.UserInfo, rejectLocked bool) (err error) {
 			return err
 		}
 		if !unique {
-			return fmt.Errorf("provider username %q is already used by a system user", u.ProviderUsername)
+			if oldUserInfo == nil {
+				return fmt.Errorf("provider username %q is already used by a system user", u.ProviderUsername)
+			}
+			// Failing here would block every login of an existing account, because the
+			// alias is never stored and the update is retried each time.
+			keptUsername := oldUserInfo.ProviderUsername
+			if keptUsername == "" {
+				keptUsername = oldUserInfo.Name
+			}
+			log.Warningf(context.Background(),
+				"Not updating provider username for user %q to %q because it is already used by a system user; keeping %q",
+				u.Name, u.ProviderUsername, keptUsername)
+			u.ProviderUsername = keptUsername
 		}
 	}
 

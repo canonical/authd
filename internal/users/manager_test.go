@@ -1001,23 +1001,39 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 		require.True(t, stillLocked, "the provider username must resolve to the locked account")
 	})
 
-	t.Run("Reject_provider_username_used_by_a_system_account", func(t *testing.T) {
+	t.Run("Keep_stored_provider_username_when_the_new_one_is_used_by_a_system_account", func(t *testing.T) {
 		dbDir := t.TempDir()
 		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_and_group_with_providerid.db.yaml"), dbDir)
 		require.NoError(t, err, "Setup: could not create database from testdata")
 
 		m := newManagerForTests(t, dbDir)
 
-		u := newUser("user1@example.com", "providerid-user1")
+		// The IdP username changed to a name that a local account owns. Every login of the existing
+		// account must still work and keep the stored alias, because the alias is never applied.
+		for range 3 {
+			u := newUser("user1@example.com", "providerid-user1")
+			u.ProviderUsername = "root"
+			_, err = m.UpdateAuthenticatedUser(u)
+			require.NoError(t, err, "a provider alias that a system user owns must not block the login")
+
+			stored, err := userstestutils.DBManager(m).UserByName("user1@example.com")
+			require.NoError(t, err)
+			require.Equal(t, "user1@example.com", stored.ProviderUsername,
+				"a rejected alias must not change the stored identity")
+		}
+	})
+
+	t.Run("Reject_new_user_with_provider_username_used_by_a_system_account", func(t *testing.T) {
+		m := newManagerForTests(t, t.TempDir())
+
+		u := newUser("newuser@example.com", "providerid-newuser")
 		u.ProviderUsername = "root"
-		err = m.UpdateUser(u)
+		err := m.UpdateUser(u)
 		require.ErrorContains(t, err, "already used by a system user",
 			"a provider alias must not shadow a local system account")
 
-		stored, err := userstestutils.DBManager(m).UserByName("user1@example.com")
-		require.NoError(t, err)
-		require.Equal(t, "user1@example.com", stored.ProviderUsername,
-			"a rejected alias must not change the stored identity")
+		_, err = userstestutils.DBManager(m).UserByName("newuser@example.com")
+		require.ErrorIs(t, err, db.NoDataFoundError{}, "a rejected new user must not be stored")
 	})
 
 	t.Run("Keep_old_username_in_local_groups_when_rename_fails", func(t *testing.T) {
