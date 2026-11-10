@@ -271,32 +271,39 @@ func (m *Manager) updateUser(u *types.UserInfo, rejectLocked bool) (err error) {
 		return true, nil
 	}
 
-	// Ordinary updates can avoid waiting on registration when nothing changed.
-	// Authenticated updates always resolve the identity under the lock.
-	var needsUpdate bool
-	if !rejectLocked {
-		needsUpdate, err = checkUserNeedsUpdate()
-		if err != nil {
-			return err
+	lockedError := func() error {
+		if rejectLocked && resolvedIdentity.Locked {
+			return fmt.Errorf("user %q is locked: %w", resolvedIdentity.Name, ErrUserLocked)
 		}
-		if !needsUpdate {
-			reportProviderUsernameConflict()
-			return nil
-		}
+		return nil
+	}
+
+	// Avoid waiting for the user-management lock when nothing changed.
+	needsUpdate, err := checkUserNeedsUpdate()
+	if err != nil {
+		return err
+	}
+	if err := lockedError(); err != nil {
+		return err
+	}
+	if !needsUpdate {
+		reportProviderUsernameConflict()
+		return nil
 	}
 
 	m.userManagementMu.Lock()
 	defer m.userManagementMu.Unlock()
 
 	// Now that we're locked, check again if meanwhile some other request
-	// created the same user, if not we can do all the kinds of locking since
-	// we're sure that the user needs to be added or updated in the database.
+	// created the same user or changed its lock state. If not, we can do all
+	// the kinds of locking since we're sure that the user needs to be added or
+	// updated in the database.
 	needsUpdate, err = checkUserNeedsUpdate()
 	if err != nil {
 		return err
 	}
-	if rejectLocked && resolvedIdentity.Locked {
-		return fmt.Errorf("user %q is locked: %w", resolvedIdentity.Name, ErrUserLocked)
+	if err := lockedError(); err != nil {
+		return err
 	}
 	reportProviderUsernameConflict()
 	if !needsUpdate {

@@ -726,6 +726,52 @@ func TestUpdateAuthenticatedUserRejectsAccountLockedAfterResolution(t *testing.T
 		"authentication must recheck the lock state under the user-management lock")
 }
 
+func TestUpdateAuthenticatedUserRejectsLockedAccountSelectedByProviderID(t *testing.T) {
+	t.Parallel()
+
+	m := newManagerForTests(t, t.TempDir())
+	t.Cleanup(func() { _ = m.Stop() })
+
+	alice := types.UserInfo{
+		Name: "alice", ProviderUsername: "alice", BrokerID: "broker-id", ProviderID: "alice-id",
+		Gecos: "Alice", Dir: "/home/alice", Shell: "/bin/bash",
+	}
+	require.NoError(t, m.UpdateUser(alice), "Setup: could not create the user")
+	require.NoError(t, m.LockUser("alice"), "Setup: could not lock the user")
+
+	// The provider ID selects alice, although the login name is another one.
+	renamed := alice
+	renamed.Name, renamed.ProviderUsername = "alice2", "alice-new"
+	_, err := m.UpdateAuthenticatedUser(renamed)
+	require.ErrorIs(t, err, users.ErrUserLocked, "the lock check must use the selected account")
+
+	stored, err := userstestutils.DBManager(m).UserByName("alice")
+	require.NoError(t, err)
+	require.Equal(t, "alice", stored.ProviderUsername, "a locked account must not be updated")
+}
+
+func TestUpdateAuthenticatedUserChangesOnlyProviderUsername(t *testing.T) {
+	t.Parallel()
+
+	m := newManagerForTests(t, t.TempDir())
+	t.Cleanup(func() { _ = m.Stop() })
+
+	alice := types.UserInfo{
+		Name: "alice", ProviderUsername: "alice", BrokerID: "broker-id", ProviderID: "alice-id",
+		Gecos: "Alice", Dir: "/home/alice", Shell: "/bin/bash",
+	}
+	_, err := m.UpdateAuthenticatedUser(alice)
+	require.NoError(t, err, "Setup: could not create the user")
+
+	alice.ProviderUsername = "alice-renamed"
+	_, err = m.UpdateAuthenticatedUser(alice)
+	require.NoError(t, err)
+
+	stored, err := userstestutils.DBManager(m).UserByName("alice")
+	require.NoError(t, err)
+	require.Equal(t, "alice-renamed", stored.ProviderUsername, "an alias-only change must be stored")
+}
+
 func TestUpdateAuthenticatedUserReturnsSelectedAccount(t *testing.T) {
 	t.Parallel()
 
@@ -2662,4 +2708,50 @@ func TestMain(m *testing.M) {
 	defer userslocking.Z_ForTests_RestoreLocking()
 
 	m.Run()
+}
+
+func TestUpdateAuthenticatedUserWithoutChangesDoesNotWaitForUserManagementLock(t *testing.T) {
+	t.Parallel()
+
+	for name, locked := range map[string]bool{"Unlocked_user": false, "Locked_user": true} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			m := newManagerForTests(t, t.TempDir())
+			t.Cleanup(func() { _ = m.Stop() })
+
+			user := types.UserInfo{
+				Name: "user1", ProviderUsername: "user1", BrokerID: "broker-id", ProviderID: "provider-id",
+				Gecos: "User 1", Dir: "/home/user1", Shell: "/bin/bash",
+			}
+			require.NoError(t, m.UpdateUser(user), "Setup: could not create the user")
+			if locked {
+				require.NoError(t, m.LockUser(user.Name), "Setup: could not lock the user")
+			}
+
+			// Registrations and admin operations hold this lock while they wait for the system user database.
+			release := m.HoldUserManagementLock()
+			var releaseOnce sync.Once
+			t.Cleanup(func() { releaseOnce.Do(release) })
+
+			done := make(chan error, 1)
+			go func() {
+				_, err := m.UpdateAuthenticatedUser(user)
+				done <- err
+			}()
+
+			var err error
+			select {
+			case err = <-done:
+			case <-time.After(testutils.MultipliedSleepDuration(10 * time.Second)):
+				releaseOnce.Do(release)
+				require.FailNow(t, "UpdateAuthenticatedUser waited for the user-management lock")
+			}
+			if locked {
+				require.ErrorIs(t, err, users.ErrUserLocked)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }

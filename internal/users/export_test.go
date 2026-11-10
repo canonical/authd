@@ -34,3 +34,9 @@ const (
 	SystemdDynamicUIDMin = systemdDynamicUIDMin
 	SystemdDynamicUIDMax = systemdDynamicUIDMax
 )
+
+// HoldUserManagementLock takes the user-management lock until the returned function is called.
+func (m *Manager) HoldUserManagementLock() (release func()) {
+	m.userManagementMu.Lock()
+	return m.userManagementMu.Unlock
+}
