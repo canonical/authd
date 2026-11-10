@@ -83,6 +83,39 @@ func TestDeleteUserWarnsForCachedLegacyInterface(t *testing.T) {
 		"attempt legacy cleanup even when complete deletion cannot be verified")
 }
 
+func TestDeleteUserArgumentsPerAPIVersion(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		version    uint
+		providerID string
+		wantArgs   []interface{}
+		wantErr    bool
+	}{
+		"API_v2_without_provider_ID": {version: 2, wantArgs: []interface{}{"user"}},
+		"API_v2_with_provider_ID":    {version: 2, providerID: "id", wantArgs: []interface{}{"user"}, wantErr: true},
+		"API_v3":                     {version: 3, providerID: "id", wantArgs: []interface{}{"user", "id"}},
+		"API_v4":                     {version: 4, providerID: "id", wantArgs: []interface{}{"user", "id"}},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ifaceName := fmt.Sprintf("%s%d", DbusBaseInterface, tc.version)
+			mock := &mockBusObject{}
+			b := dbusBroker{dbusObject: mock, iface: dbusInterface{name: ifaceName, version: tc.version}}
+			err := b.DeleteUser(context.Background(), "user", tc.providerID)
+			if tc.wantErr {
+				require.ErrorContains(t, err, "old username caches may remain")
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, ifaceName+".DeleteUser", mock.lastCalledMethod)
+			require.Equal(t, tc.wantArgs, mock.lastArgs)
+		})
+	}
+}
+
 func TestRequiresStableProviderIDForNewUsers(t *testing.T) {
 	t.Parallel()
 

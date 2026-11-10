@@ -402,6 +402,8 @@ type MockProvider struct {
 	SecondCallDelay               int
 	GetGroupsFails                bool
 	RequireNameClaimOnInitialAuth bool
+	// ValidateUsernameFunc, when set, replaces the generic ValidateUsername.
+	ValidateUsernameFunc func(username string) error
 
 	numCalls     int
 	numCallsLock sync.Mutex
@@ -426,6 +428,14 @@ func (p *MockProvider) AuthOptions() []oauth2.AuthCodeOption {
 // NormalizeUsername parses a username into a normalized version.
 func (p *MockProvider) NormalizeUsername(username string) string {
 	return strings.ToLower(username)
+}
+
+// ValidateUsername calls ValidateUsernameFunc if set, otherwise accepts every name.
+func (p *MockProvider) ValidateUsername(username string) error {
+	if p.ValidateUsernameFunc != nil {
+		return p.ValidateUsernameFunc(username)
+	}
+	return p.GenericProvider.ValidateUsername(username)
 }
 
 // GetUserInfo returns the user info parsed from the provided Claimer.

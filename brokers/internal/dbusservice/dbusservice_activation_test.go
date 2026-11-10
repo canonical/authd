@@ -20,6 +20,7 @@ import (
 	"github.com/canonical/authd/brokers/internal/dbusservice"
 	"github.com/canonical/authd/brokers/internal/testutils"
 	"github.com/godbus/dbus/v5"
+	"github.com/godbus/dbus/v5/introspect"
 	"github.com/stretchr/testify/require"
 )
 
@@ -237,6 +238,51 @@ entra_auth = false
 			}
 		})
 	}
+}
+
+func TestServiceExportsAllBrokerInterfaces(t *testing.T) {
+	cleanup, err := testutils.StartSystemBusMock()
+	require.NoError(t, err, "Setup: starting the mock bus should not fail")
+	defer cleanup()
+
+	configPath := filepath.Join(t.TempDir(), "broker.conf")
+	require.NoError(t, os.WriteFile(configPath, []byte(`[oidc]
+issuer = `+defaultIssuerURL+`
+client_id = test-client-id
+
+[flows]
+entra_auth = false
+`), 0600), "Setup: writing the broker config should not fail")
+	service, err := dbusservice.New(context.Background(), broker.Config{ConfigFile: configPath, DataDir: t.TempDir()})
+	require.NoError(t, err, "Setup: starting the D-Bus service should not fail")
+	defer func() { _ = service.Stop() }()
+
+	client, err := testutils.GetSystemBusConnection(t)
+	require.NoError(t, err, "Setup: connecting to the mock bus should not fail")
+	defer client.Close()
+
+	xml, err := introspect.Call(client.Object(consts.DbusName, dbus.ObjectPath(consts.DbusObject)))
+	require.NoError(t, err)
+
+	newSessionArgs := map[string][]string{}
+	for _, iface := range xml.Interfaces {
+		for _, m := range iface.Methods {
+			if m.Name != "NewSession" {
+				continue
+			}
+			for _, arg := range m.Args {
+				if arg.Direction == "in" {
+					newSessionArgs[iface.Name] = append(newSessionArgs[iface.Name], arg.Name)
+				}
+			}
+		}
+	}
+	require.Equal(t, map[string][]string{
+		"com.ubuntu.authd.Broker":  {"username", "lang", "mode"},
+		"com.ubuntu.authd.Broker2": {"username", "lang", "mode"},
+		"com.ubuntu.authd.Broker3": {"username", "lang", "mode", "provider_id"},
+		"com.ubuntu.authd.Broker4": {"username", "lang", "mode", "provider_id", "unix_username"},
+	}, newSessionArgs, "every API version must export NewSession with its arguments in order")
 }
 
 func TestQueuedActivationCallReceivesInitializationFailure(t *testing.T) {

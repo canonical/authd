@@ -289,3 +289,10 @@ func (b *Broker) HandleIsAuthenticated(ctx context.Context, sessionID string, au
 var RegistrationIsStale = registrationIsStale
 
 const DeviceRegistrationReplicationWindow = deviceRegistrationReplicationWindow
+
+// Owner returns the owner currently registered in the broker configuration.
+func (b *Broker) Owner() string {
+	b.cfg.ownerMutex.Lock()
+	defer b.cfg.ownerMutex.Unlock()
+	return b.cfg.owner
+}
