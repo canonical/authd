@@ -2043,7 +2043,7 @@ func TestIsAuthenticated(t *testing.T) {
 			if tc.sessionProviderID == "" {
 				sessionID, key = newSessionForTests(t, b, tc.username, tc.sessionMode)
 			} else {
-				sessionID, key, err = b.NewSession(tc.username, "some lang", tc.sessionMode, tc.sessionProviderID)
+				sessionID, key, err = b.NewSessionForUser(tc.username, "some lang", tc.sessionMode, tc.sessionProviderID, tc.username)
 				require.NoError(t, err, "Setup: NewSession should not have returned an error")
 			}
 
@@ -3242,6 +3242,54 @@ func TestAdoptingOwnerProviderNameDoesNotGrantOwnerRights(t *testing.T) {
 				require.NoError(t, b.EndSession(sessionID))
 			}
 		})
+	}
+}
+
+// TestV3SessionCannotAdoptOwnerProviderName covers authd callers that use the
+// v3 API and so start sessions without a Unix account name. A bound provider
+// ID must not let such a session take the owner's name and the owner's rights.
+func TestV3SessionCannotAdoptOwnerProviderName(t *testing.T) {
+	t.Parallel()
+
+	const ownerName = "owner@email.com"
+	const userName = "bob@email.com"
+	const providerID = "bob-id"
+
+	for _, allUsersAllowed := range []bool{false, true} {
+		for _, authenticatedName := range []string{ownerName, userName} {
+			t.Run(fmt.Sprintf("AllUsersAllowed=%t/AuthenticatedName=%s", allUsersAllowed, authenticatedName), func(t *testing.T) {
+				t.Parallel()
+
+				provider := &mockEntraAuthProvider{
+					MockProvider:        &testutils.MockProvider{},
+					refreshResult:       &oauth2.Token{AccessToken: "new-access-token", RefreshToken: "new-refresh-token"},
+					accessTokenUserInfo: &info.User{Name: authenticatedName, ProviderID: providerID},
+				}
+				b := newBrokerForTests(t, &brokerForTestConfig{
+					Config: broker.Config{DataDir: t.TempDir()},
+					owner:  ownerName, ownerAllowed: true, allUsersAllowed: allUsersAllowed,
+					ownerExtraGroups: []string{"sudo"}, provider: provider, issuerURL: defaultIssuerURL,
+				})
+
+				sessionID, key, err := b.NewSession(userName, "en", sessionmode.Login, providerID)
+				require.NoError(t, err)
+				generateAndStoreCachedInfo(t, tokenOptions{
+					username: userName, obtainedViaEntraAuth: true, providerID: providerID, issuer: defaultIssuerURL,
+				}, b.TokenPathForSession(sessionID))
+				require.NoError(t, password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID)))
+				updateAuthModes(t, b, sessionID, authmodes.Password)
+				access, data, err := b.IsAuthenticated(sessionID, fmt.Sprintf(`{"%s":"%s"}`,
+					broker.AuthDataSecret, encryptSecret(t, "password", key)))
+				require.NoError(t, err)
+
+				if authenticatedName == ownerName {
+					require.Equal(t, broker.AuthDenied, access, "a v3 session must not adopt another provider name")
+					return
+				}
+				require.Equal(t, allUsersAllowed, access == broker.AuthGranted)
+				require.NotContains(t, data, `"sudo"`, "only the owner gets the owner groups")
+			})
+		}
 	}
 }
 
@@ -4973,7 +5021,7 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshAllowsUsernameChange(t *testing
 		issuerURL:             defaultIssuerURL,
 	})
 
-	sessionID, key, err := b.NewSession("test-user@email.com", "some lang", sessionmode.Login, "saved-user-id")
+	sessionID, key, err := b.NewSessionForUser("test-user@email.com", "some lang", sessionmode.Login, "saved-user-id", "test-user@email.com")
 	require.NoError(t, err)
 	generateAndStoreCachedInfo(t, tokenOptions{
 		obtainedViaEntraAuth: true,
@@ -7495,7 +7543,7 @@ func TestIsAuthenticatedEntraAuthAllowsUsernameChange(t *testing.T) {
 		issuerURL:             defaultIssuerURL,
 	})
 
-	sessionID, key, err := b.NewSession(username, "some lang", sessionmode.Login, "saved-user-id")
+	sessionID, key, err := b.NewSessionForUser(username, "some lang", sessionmode.Login, "saved-user-id", username)
 	require.NoError(t, err)
 	advanceToEntraMFAWait(t, b, sessionID, key)
 

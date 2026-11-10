@@ -723,7 +723,7 @@ func TestFinishAuthRenameDoesNotBypassExplicitAllowlist(t *testing.T) {
 		}},
 		provider: p,
 	}
-	s := &session{username: "old-user", expectedProviderID: "user-id", isOffline: true}
+	s := &session{username: "old-user", unixUsername: "old-user", expectedProviderID: "user-id", isOffline: true}
 	authInfo := &token.AuthCachedInfo{UserInfo: info.User{Name: "new-user", ProviderID: "user-id"}}
 	access, _ := b.finishAuth(s, authInfo)
 	require.Equal(t, AuthDenied, access, "a bound rename must not bypass the current provider-name allowlist")

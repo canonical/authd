@@ -169,7 +169,10 @@ func (s *session) hasBoundProviderID(providerID string) bool {
 }
 
 // verifyAuthenticatedIdentity permits a provider username change only when
-// the provider ID was already bound to this session.
+// the provider ID was already bound to this session and authd named the
+// existing Unix account. Without a Unix account name (API v3), the owner
+// checks fall back to the authenticated name, so a rename would let the
+// session take over another provider name.
 func (b *Broker) verifyAuthenticatedIdentity(session *session, userInfo info.User) error {
 	if session.expectedProviderID != "" && userInfo.ProviderID == "" {
 		return fmt.Errorf("%w for %q; contact your administrator", errProviderIDMismatch, session.username)
@@ -177,10 +180,10 @@ func (b *Broker) verifyAuthenticatedIdentity(session *session, userInfo info.Use
 	if err := session.verifyProviderID(userInfo.ProviderID); err != nil {
 		return err
 	}
-	if session.hasBoundProviderID(userInfo.ProviderID) {
+	if b.provider.NormalizeUsername(session.username) == b.provider.NormalizeUsername(userInfo.Name) {
 		return nil
 	}
-	if b.provider.NormalizeUsername(session.username) == b.provider.NormalizeUsername(userInfo.Name) {
+	if session.unixUsername != "" && session.hasBoundProviderID(userInfo.ProviderID) {
 		return nil
 	}
 
