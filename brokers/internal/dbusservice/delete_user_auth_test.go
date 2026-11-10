@@ -2,6 +2,7 @@ package dbusservice
 
 import (
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/godbus/dbus/v5"
@@ -63,14 +64,29 @@ func TestAuthorizeDeleteUser(t *testing.T) {
 				lookup = nil
 			}
 
-			dbusErr := authorizeDeleteUser(tc.sender, lookup)
+			dbusErr := authorizeRootCaller(tc.sender, lookup, "DeleteUser")
 			if tc.wantErrorName == "" {
 				require.Nil(t, dbusErr)
 			} else {
 				require.NotNil(t, dbusErr)
 				require.Equal(t, tc.wantErrorName, dbusErr.Name)
 			}
+
 			require.Equal(t, tc.wantLookupCalls, lookupCalls)
 		})
 	}
+}
+
+func TestNewSessionRejectsUntrustedProviderID(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("requires a non-root D-Bus caller")
+	}
+	conn, err := dbus.ConnectSessionBus()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	service := &Service{conn: conn}
+	iface := Interface{service: service}
+	_, _, dbusErr := iface.NewSession(dbus.Sender(conn.Names()[0]), "owner", "en", "login", "attacker-id")
+	require.NotNil(t, dbusErr)
+	require.Equal(t, dbusAccessDeniedErrorName, dbusErr.Name)
 }

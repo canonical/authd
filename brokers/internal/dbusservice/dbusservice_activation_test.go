@@ -57,7 +57,7 @@ Exec=%s
 		"user@example.com",
 		"en",
 		sessionmode.Login,
-		"provider-id",
+		"",
 	)
 
 	require.Eventually(t, func() bool {
@@ -120,7 +120,7 @@ entra_auth = false
 	}
 }
 
-func TestDeleteUserOverSystemBusChecksCallerUID(t *testing.T) {
+func TestPrivilegedMethodsOverSystemBusCheckCallerUID(t *testing.T) {
 	cleanup, err := testutils.StartSystemBusMock()
 	require.NoError(t, err, "Setup: starting the mock bus should not fail")
 	defer cleanup()
@@ -156,6 +156,10 @@ entra_auth = false
 		wantErrorName    string
 	}{
 		{
+			name: "v3 accepts provider ID only from root", method: "com.ubuntu.authd.Broker3.NewSession",
+			args: []any{username, "en", sessionmode.Login, providerID},
+		},
+		{
 			name: "v1 deletes username cache", method: "com.ubuntu.authd.Broker.DeleteUser",
 			args: []any{username}, deletedCacheKeys: []string{username},
 		},
@@ -184,8 +188,8 @@ entra_auth = false
 			args: []any{"invalid/../user", ""}, wantErrorName: "org.freedesktop.DBus.Error.Failed",
 		},
 		{
-			name: "v3 rejects invalid provider ID", method: "com.ubuntu.authd.Broker3.DeleteUser",
-			args: []any{username, "invalid/../provider-id"}, wantErrorName: "org.freedesktop.DBus.Error.Failed",
+			name: "v3 encodes provider ID path characters", method: "com.ubuntu.authd.Broker3.DeleteUser",
+			args: []any{username, "invalid/../provider-id"}, deletedCacheKeys: []string{username},
 		},
 	}
 	issuerDir := filepath.Join(dataDir, strings.ReplaceAll(strings.TrimPrefix(defaultIssuerURL, "http://"), ":", "_"))
@@ -261,7 +265,7 @@ Exec=%s
 		"user@example.com",
 		"en",
 		sessionmode.Login,
-		"provider-id",
+		"",
 	)
 
 	require.Eventually(t, func() bool {
