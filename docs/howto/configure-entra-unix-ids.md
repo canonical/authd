@@ -15,8 +15,8 @@ The broker does not apply these values to the authd database
 during login. After reviewing the cached values, you can apply them individually
 with `authctl` or use the [provisioning helper](#apply-the-cached-values) to
 prepare the user's UID and remote-group GID updates from one cache for review.
-The helper is installed with the `authd` package; from a source checkout, run
-`scripts/apply-entra-unix-ids`.
+The helper is bundled with the `authd-msentraid` snap and runs on the host so
+it can call the host's `authctl`.
 
 ```{note}
 This feature is disabled unless `unix_uid_attribute` or
@@ -300,31 +300,40 @@ After you change the attribute configuration, log in as the user before you
 apply the values. The broker drops IDs from the old attribute only during a
 login.
 
-Review the cache first. The `apply-entra-unix-ids` command is installed with the
-`authd` package and needs `jq`, which the package recommends. See
-`man apply-entra-unix-ids` for all options, environment variables, and exit
+Review the cache first. The `authd-entra-unix-ids` helper is bundled in the
+`authd-msentraid` snap. Install the snap if needed, then create a host command
+symlink to the snap's `current` path. This path follows snap refreshes:
+
+```shell
+sudo snap install authd-msentraid  # Skip if the snap is already installed.
+sudo ln -sfn /snap/authd-msentraid/current/usr/bin/authd-entra-unix-ids \
+  /usr/local/bin/authd-entra-unix-ids
+```
+
+The helper needs `jq`, which the `authd` package recommends. See
+`man authd-entra-unix-ids` for all options, environment variables, and exit
 codes. Pass the attribute names from the `[msentraid]` section of the broker
 configuration:
 
 ```shell
-sudo apply-entra-unix-ids --uid-attribute extension_abc123_uidNumber \
+sudo authd-entra-unix-ids --uid-attribute extension_abc123_uidNumber \
   --gid-attribute extension_abc123_gidNumber /path/to/token.json
 ```
 
-From a source checkout, run `scripts/apply-entra-unix-ids` instead of the
-installed `apply-entra-unix-ids` command.
+From a source checkout, run `scripts/authd-entra-unix-ids` instead of the
+installed `authd-entra-unix-ids` command.
 
 For short attribute names, use the `client_id` from the `[oidc]` section:
 
 ```shell
-sudo apply-entra-unix-ids --uid-attribute uidNumber --gid-attribute gidNumber \
+sudo authd-entra-unix-ids --uid-attribute uidNumber --gid-attribute gidNumber \
   --client-id <APPLICATION_CLIENT_ID> /path/to/token.json
 ```
 
 Use `--apply` only after reviewing the planned changes:
 
 ```shell
-sudo apply-entra-unix-ids --apply --uid-attribute extension_abc123_uidNumber \
+sudo authd-entra-unix-ids --apply --uid-attribute extension_abc123_uidNumber \
   --gid-attribute extension_abc123_gidNumber /path/to/token.json
 ```
 

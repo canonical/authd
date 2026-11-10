@@ -26,7 +26,7 @@ func TestApplyEntraUnixIDsSkipsLocalMappings(t *testing.T) {
   "UnixAttributeNames": {"UID": "extension_uidNumber", "GID": "extension_gidNumber"}
 }`
 	output, calls, err := runApplyEntraUnixIDs(t, token, true)
-	require.NoError(t, err, "apply-entra-unix-ids failed: %s", output)
+	require.NoError(t, err, "authd-entra-unix-ids failed: %s", output)
 	require.Contains(t, output, "user set-uid -- alice@example.com 41001")
 	require.Contains(t, output, "group set-gid -- alice@example.com 41001")
 	require.Contains(t, output, "group set-gid -- engineering 42001")
@@ -69,7 +69,7 @@ func runApplyEntraUnixIDsWithArgs(t *testing.T, input string, apply bool, args [
 
 	jqPath, err := exec.LookPath("jq")
 	if err != nil {
-		t.Skip("jq is required to run apply-entra-unix-ids")
+		t.Skip("jq is required to run authd-entra-unix-ids")
 	}
 	dir := t.TempDir()
 	tokenPath := filepath.Join(dir, "token.json")
@@ -112,7 +112,7 @@ fi
 	scriptArgs = append(scriptArgs, args...)
 	scriptArgs = append(scriptArgs, "--authctl", authctlPath, tokenPath)
 	// #nosec:G204 - The script and arguments are controlled by this test.
-	cmd := exec.Command("bash", append([]string{"apply-entra-unix-ids"}, scriptArgs...)...)
+	cmd := exec.Command("bash", append([]string{"authd-entra-unix-ids"}, scriptArgs...)...)
 	cmd.Env = append(os.Environ(), "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"AUTHCTL_LOG="+logPath, "REAL_JQ="+jqPath, "TOKEN_PATH="+tokenPath, "READ_LOG="+readLogPath)
 	cmd.Env = append(cmd.Env, extraEnv...)

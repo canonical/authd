@@ -384,6 +384,61 @@ unix_uid_attribute = extension_explicit_uidNumber
 	require.Equal(t, "extension_explicit_uidNumber", cfg.unixUIDAttribute)
 }
 
+func TestParseConfigRejectsRequiredUnixAttributeWithoutAttribute(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		"UID": "unix_uid_required",
+		"GID": "unix_gid_required",
+	}
+	for name, requiredKey := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			configPath := filepath.Join(t.TempDir(), "broker.conf")
+			config := fmt.Sprintf(`
+[oidc]
+issuer = https://issuer.url.com
+client_id = client-id
+
+[msentraid]
+%s = true
+`, requiredKey)
+			require.NoError(t, os.WriteFile(configPath, []byte(config), 0600))
+
+			_, err := parseConfigFromPath(configPath, &testutils.MockProvider{}, false, nil)
+			require.ErrorContains(t, err, requiredKey+`" is required`)
+		})
+	}
+}
+
+func TestParseConfigRejectsShortUnixAttributeWithoutClientID(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		"UID": "unix_uid_attribute",
+		"GID": "unix_gid_attribute",
+	}
+	for name, attributeKey := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			configPath := filepath.Join(t.TempDir(), "broker.conf")
+			config := fmt.Sprintf(`
+[oidc]
+issuer = https://issuer.url.com
+
+[msentraid]
+%s = unixNumber
+`, attributeKey)
+			require.NoError(t, os.WriteFile(configPath, []byte(config), 0600))
+
+			_, err := parseConfigFromPath(configPath, &testutils.MockProvider{}, false, nil)
+			require.ErrorContains(t, err, "a client ID is required")
+		})
+	}
+}
+
 func TestResolveUnixAttributeName(t *testing.T) {
 	t.Parallel()
 

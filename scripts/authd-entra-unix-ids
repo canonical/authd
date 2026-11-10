@@ -12,15 +12,15 @@ uid_attribute_set=false
 gid_attribute_set=false
 
 fail() {
-	printf 'apply-entra-unix-ids: %s\n' "$1" >&2
+	printf 'authd-entra-unix-ids: %s\n' "$1" >&2
 	exit 1
 }
 
 usage() {
 	cat <<'EOF'
-apply-entra-unix-ids - apply cached Microsoft Entra Unix IDs
+authd-entra-unix-ids - apply cached Microsoft Entra Unix IDs
 
-Usage: apply-entra-unix-ids --uid-attribute NAME --gid-attribute NAME
+Usage: authd-entra-unix-ids --uid-attribute NAME --gid-attribute NAME
        [--client-id ID] [--apply] [--authctl PATH] TOKEN_JSON
 
 Read cached Microsoft Entra Unix IDs from one token.json file. Without
@@ -100,7 +100,7 @@ done
 
 [[ -n "$token_path" ]] || { usage >&2; exit 2; }
 if [[ "$uid_attribute_set" != true || "$gid_attribute_set" != true ]]; then
-	printf 'apply-entra-unix-ids: --uid-attribute and --gid-attribute are required\n' >&2
+	printf 'authd-entra-unix-ids: --uid-attribute and --gid-attribute are required\n' >&2
 	usage >&2
 	exit 2
 fi

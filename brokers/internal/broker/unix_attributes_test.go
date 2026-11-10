@@ -2,15 +2,38 @@ package broker
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/canonical/authd/brokers/internal/providers/info"
+	"github.com/canonical/authd/brokers/internal/testutils"
 	"github.com/canonical/authd/brokers/internal/token"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 )
+
+type unixAttributeTestProvider struct {
+	*testutils.MockProvider
+	groups       info.GroupFetchResult
+	groupsErr    error
+	user         info.User
+	enrichErr    error
+	beforeEnrich func()
+}
+
+func (p *unixAttributeTestProvider) GetGroups(_ context.Context, _, _ string, _ *oauth2.Token, _ map[string]interface{}, _ []byte, _ bool, _ string) (info.GroupFetchResult, error) {
+	return p.groups, p.groupsErr
+}
+
+func (p *unixAttributeTestProvider) EnrichUserWithUnixAttributes(_ context.Context, _ info.User, _ info.GroupFetchResult, _, _ string, _ *oauth2.Token, _ map[string]interface{}, _ []byte, _ info.UnixAttributeConfig) (info.User, error) {
+	if p.beforeEnrich != nil {
+		p.beforeEnrich()
+	}
+	return p.user, p.enrichErr
+}
 
 func TestUserInfoForResponseDoesNotMutateCachedUnixIDs(t *testing.T) {
 	t.Parallel()
@@ -92,6 +115,174 @@ func TestEnrichUserInfoOfflineUsesCachedUnixIDs(t *testing.T) {
 			require.Equal(t, tc.user, authInfo.UserInfo)
 		})
 	}
+}
+
+func TestEnrichUserInfoHandlesUnixAttributeErrors(t *testing.T) {
+	t.Parallel()
+
+	graphErr := errors.New("Graph request failed")
+	enriched := info.User{Name: "alice", Groups: []info.Group{{Name: "engineering"}}}
+	tests := map[string]struct {
+		groupsErr    error
+		enrichErr    error
+		forceCheck   bool
+		required     bool
+		wantErr      error
+		wantRequired bool
+		wantEnriched bool
+	}{
+		"required group lookup failure": {
+			groupsErr:    graphErr,
+			forceCheck:   true,
+			required:     true,
+			wantErr:      info.ErrGroupsUnavailable,
+			wantRequired: true,
+		},
+		"required attribute lookup failure": {
+			enrichErr:    graphErr,
+			forceCheck:   true,
+			required:     true,
+			wantErr:      info.ErrGroupsUnavailable,
+			wantRequired: true,
+		},
+		"optional attribute lookup failure": {
+			enrichErr: graphErr,
+			wantErr:   info.ErrGroupsUnavailable,
+		},
+		"missing attribute is always reported": {
+			enrichErr:    errors.Join(info.ErrUnixAttributePartial, info.ErrUnixAttributeMissing),
+			wantErr:      info.ErrUnixAttributePartial,
+			wantEnriched: true,
+		},
+		"unreadable optional attribute keeps cached fallback": {
+			enrichErr:    errors.Join(info.ErrUnixAttributePartial, graphErr),
+			wantEnriched: true,
+		},
+		"forced unreadable attribute is reported": {
+			enrichErr:    errors.Join(info.ErrUnixAttributePartial, graphErr),
+			forceCheck:   true,
+			wantErr:      info.ErrUnixAttributePartial,
+			wantEnriched: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			provider := &unixAttributeTestProvider{
+				MockProvider: &testutils.MockProvider{},
+				groups:       info.GroupFetchResult{},
+				groupsErr:    tc.groupsErr,
+				user:         enriched,
+				enrichErr:    tc.enrichErr,
+			}
+			broker := &Broker{
+				cfg: Config{userConfig: userConfig{
+					unixUIDAttribute:             "extension_uidNumber",
+					unixUIDRequired:              tc.required,
+					forceAccessCheckWithProvider: tc.forceCheck,
+				}},
+				provider: provider,
+			}
+			authInfo := &token.AuthCachedInfo{UserInfo: info.User{Name: "alice"}}
+
+			err := broker.enrichUserInfo(context.Background(), &session{}, authInfo, nil)
+
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+			if tc.wantRequired {
+				require.ErrorIs(t, err, info.ErrUnixAttributeRequired)
+			}
+			if tc.wantEnriched {
+				require.Equal(t, enriched, authInfo.UserInfo)
+				require.Equal(t, &token.UnixAttributeNames{UID: "extension_uidNumber"}, authInfo.UnixAttributeNames)
+			} else {
+				require.Equal(t, info.User{Name: "alice"}, authInfo.UserInfo)
+			}
+		})
+	}
+}
+
+func TestFetchUnixAttributesRequiresEnricher(t *testing.T) {
+	t.Parallel()
+
+	broker := &Broker{provider: &testutils.MockProvider{}}
+	_, err := broker.fetchUnixAttributes(context.Background(), &token.AuthCachedInfo{}, nil, info.GroupFetchResult{})
+	require.ErrorContains(t, err, "provider does not support Unix attribute enrichment")
+}
+
+func TestRefreshGroupsOrEnrichReportsCacheWriteErrors(t *testing.T) {
+	t.Parallel()
+
+	t.Run("preserving refreshed credentials", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		obstruction := filepath.Join(dir, "not-a-directory")
+		require.NoError(t, os.WriteFile(obstruction, nil, 0600))
+		broker := &Broker{cfg: Config{userConfig: userConfig{
+			unixUIDAttribute: "extension_uidNumber",
+		}}}
+
+		err := broker.refreshGroupsOrEnrich(
+			context.Background(),
+			&session{tokenPath: filepath.Join(obstruction, "token.json")},
+			&token.AuthCachedInfo{},
+			nil,
+			&token.AuthCachedInfo{},
+		)
+		require.ErrorContains(t, err, "could not preserve refreshed credentials")
+	})
+
+	t.Run("storing partial enrichment", func(t *testing.T) {
+		for _, returningUser := range []bool{false, true} {
+			t.Run(fmt.Sprintf("returning=%t", returningUser), func(t *testing.T) {
+				t.Parallel()
+
+				tokenPath := filepath.Join(t.TempDir(), "token.json")
+				provider := &unixAttributeTestProvider{
+					MockProvider: &testutils.MockProvider{},
+					user:         info.User{Name: "alice"},
+					enrichErr:    errors.Join(info.ErrUnixAttributePartial, errors.New("Graph request failed")),
+					beforeEnrich: func() {
+						if _, err := os.Stat(tokenPath); err == nil {
+							require.NoError(t, os.Remove(tokenPath))
+						} else {
+							require.ErrorIs(t, err, os.ErrNotExist)
+						}
+						require.NoError(t, os.Mkdir(tokenPath, 0700))
+					},
+				}
+				broker := &Broker{
+					cfg: Config{userConfig: userConfig{
+						unixUIDAttribute:             "extension_uidNumber",
+						forceAccessCheckWithProvider: true,
+					}},
+					provider: provider,
+				}
+				authInfo := &token.AuthCachedInfo{UserInfo: info.User{Name: "alice"}}
+				if !returningUser {
+					authInfo.DeviceRegistrationDataObtainedAt = 1
+				}
+				var oldAuthInfo *token.AuthCachedInfo
+				if returningUser {
+					oldAuthInfo = &token.AuthCachedInfo{UserInfo: info.User{Name: "alice"}}
+				}
+
+				err := broker.refreshGroupsOrEnrich(context.Background(), &session{tokenPath: tokenPath}, authInfo, nil, oldAuthInfo)
+				require.ErrorIs(t, err, info.ErrUnixAttributePartial)
+				if returningUser {
+					require.ErrorContains(t, err, "could not store partial Unix ID data")
+				} else {
+					require.ErrorContains(t, err, "could not store registration state")
+				}
+			})
+		}
+	})
 }
 
 func TestPreserveCachedUserInfoCopiesGroupsAndNames(t *testing.T) {

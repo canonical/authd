@@ -81,8 +81,8 @@ Test Entra Unix IDs are cached and can be applied
 
     Check Private Group Matches UID    ${username}    ${expected_uid}
 
-Test Entra Unix IDs can be applied with the bridge script
-    [Documentation]    Verify that apply-entra-unix-ids reads cached Entra UID/GID values,
+Test Entra Unix IDs can be applied with the snap helper
+    [Documentation]    Verify that authd-entra-unix-ids reads cached Entra UID/GID values,
     ...    shows the planned authctl commands, and applies them when --apply is specified.
     ...    The private group and primary GID must match the UID, including after a repeat application.
 
@@ -106,9 +106,11 @@ Test Entra Unix IDs can be applied with the bridge script
     SSH.Execute    loginctl terminate-user ${username} || true
     Wait Until Keyword Succeeds    30s    1s    SSH.Execute    test -z "$(pgrep -u ${username} || true)"
 
-    ${apply_command}=    Set Variable    apply-entra-unix-ids
+    ${helper_path}=    Set Variable    /snap/authd-msentraid/current/usr/bin/authd-entra-unix-ids
+    SSH.Execute    ln -sfn ${helper_path} /usr/local/bin/authd-entra-unix-ids
+    ${apply_command}=    Set Variable    authd-entra-unix-ids
     ${installed_path}=    SSH.Execute    command -v ${apply_command}
-    Should Be Equal As Strings    ${installed_path}    /usr/bin/apply-entra-unix-ids
+    Should Be Equal As Strings    ${installed_path}    /usr/local/bin/authd-entra-unix-ids
 
     ${attribute_args}=    Set Variable    --uid-attribute ${uid_attribute} --gid-attribute ${gid_attribute}
     ${dry_run_output}=    SSH.Execute    ${apply_command} ${attribute_args} --authctl authctl ${token_path}

@@ -3394,7 +3394,7 @@ func (b *Broker) dropStaleUnixIDs(authInfo *token.AuthCachedInfo) bool {
 
 // loadCachedAuthInfo loads the cached token for a login. If the cached Unix IDs
 // were read from other attribute names, it drops them and rewrites the cache, so
-// that neither a later login nor apply-entra-unix-ids can use them.
+// that neither a later login nor authd-entra-unix-ids can use them.
 func (b *Broker) loadCachedAuthInfo(session *session, path string) (*token.AuthCachedInfo, error) {
 	authInfo, err := session.loadAuthInfo(path)
 	if err != nil {

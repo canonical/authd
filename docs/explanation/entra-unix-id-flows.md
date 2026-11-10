@@ -333,7 +333,7 @@ commands do not check which attribute names produced the cached values. See the
 [configuration how-to](../howto/configure-entra-unix-ids) for the commands and
 safe application procedure.
 
-See `man apply-entra-unix-ids` for the command's options, dry-run behavior, and
+See `man authd-entra-unix-ids` for the command's options, dry-run behavior, and
 attribute-name checks. When a cached UID is present, the helper sets the user's
 UID and then the GID of the user's private group to that same value before
 applying remote group GIDs. It skips local groups and groups without a cached

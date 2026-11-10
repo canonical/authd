@@ -1,6 +1,9 @@
 package main
 
 import (
+	"flag"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/canonical/authd/internal/testutils/golden"
@@ -107,7 +110,7 @@ func TestRenderErrors(t *testing.T) {
 func TestRenderScriptHelp(t *testing.T) {
 	t.Parallel()
 
-	help, err := scriptHelp("../../apply-entra-unix-ids")
+	help, err := scriptHelp("../../authd-entra-unix-ids")
 	require.NoError(t, err)
 
 	got, err := render(help)
@@ -115,5 +118,55 @@ func TestRenderScriptHelp(t *testing.T) {
 
 	require.Contains(t, got, `.SH "EXIT STATUS"`)
 	require.Contains(t, got, `\-\-uid\-attribute`)
-	require.Contains(t, got, `\fBapply\-entra\-unix\-ids\fP`)
+	require.Contains(t, got, `\fBauthd\-entra\-unix\-ids\fP`)
+}
+
+func TestRunWritesManPage(t *testing.T) {
+	t.Parallel()
+
+	outPath := filepath.Join(t.TempDir(), "authd-entra-unix-ids.1")
+	require.NoError(t, run("../../authd-entra-unix-ids", outPath))
+
+	page, err := os.ReadFile(outPath)
+	require.NoError(t, err)
+	require.Contains(t, string(page), `.SH "EXIT STATUS"`)
+
+	fileInfo, err := os.Stat(outPath)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o600), fileInfo.Mode().Perm())
+}
+
+func TestRunReturnsScriptError(t *testing.T) {
+	t.Parallel()
+
+	err := run(filepath.Join(t.TempDir(), "missing-script"), filepath.Join(t.TempDir(), "manpage"))
+	require.ErrorContains(t, err, "running")
+}
+
+func TestRunReturnsRenderError(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "bad-help.sh")
+	require.NoError(t, os.WriteFile(scriptPath, []byte("printf 'not a valid summary\\n'\n"), 0600))
+
+	err := run(scriptPath, filepath.Join(dir, "manpage"))
+	require.ErrorContains(t, err, "one-line summary")
+}
+
+func TestMainWithArguments(t *testing.T) {
+	oldArgs := os.Args
+	oldCommandLine := flag.CommandLine
+	t.Cleanup(func() {
+		os.Args = oldArgs
+		flag.CommandLine = oldCommandLine
+	})
+
+	outPath := filepath.Join(t.TempDir(), "authd-entra-unix-ids.1")
+	os.Args = []string{"mangen", "-script", "../../authd-entra-unix-ids", "-out", outPath}
+	flag.CommandLine = flag.NewFlagSet("mangen", flag.ContinueOnError)
+
+	main()
+
+	require.FileExists(t, outPath)
 }

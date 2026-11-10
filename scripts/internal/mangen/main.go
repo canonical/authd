@@ -1,4 +1,4 @@
-// Package main writes the man page for apply-entra-unix-ids from the --help
+// Package main writes the man page for authd-entra-unix-ids from the --help
 // text of the script, so the wording lives in one place.
 package main
 
@@ -45,7 +45,7 @@ type labelledSection struct {
 func main() {
 	log.SetFlags(0)
 
-	script := flag.String("script", "", "path to the apply-entra-unix-ids script")
+	script := flag.String("script", "", "path to the authd-entra-unix-ids script")
 	out := flag.String("out", "", "path of the man page to write")
 	flag.Parse()
 
