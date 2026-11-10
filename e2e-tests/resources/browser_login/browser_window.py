@@ -410,8 +410,16 @@ class BrowserWindow(Gtk.Window):
         deadline = time.monotonic() + timeout_ms / 1000
         value = None
         while True:
-            remaining_ms = max(1, int((deadline - time.monotonic()) * 1000))
-            value = self.get_focused_input_value(timeout_ms=remaining_ms)
+            remaining_ms = int((deadline - time.monotonic()) * 1000)
+            if remaining_ms <= 0:
+                return value
+            try:
+                value = self.get_focused_input_value(timeout_ms=remaining_ms)
+            except TimeoutError:
+                if int((deadline - time.monotonic()) * 1000) > 0:
+                    raise
+                # An expired DOM read is still a mismatch, so send_text can retry.
+                return value
             if value == expected or time.monotonic() >= deadline:
                 return value
             self.wait_ms(min(poll_interval_ms, remaining_ms))
