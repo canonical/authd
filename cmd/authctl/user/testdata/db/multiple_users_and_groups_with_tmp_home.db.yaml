@@ -16,6 +16,7 @@ users:
       dir: /tmp/authd-delete-cmd-test/home/user2@example.com
       shell: /bin/dash
       broker_id: "2221040704"
+      provider_username: alias2@example.com
     - name: user3@example.com
       uid: 3333
       gid: 33333

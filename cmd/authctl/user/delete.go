@@ -53,19 +53,20 @@ func init() {
 }
 
 func runDeleteUser(cmd *cobra.Command, args []string) error {
-	name := args[0]
-
 	c, err := client.NewUserServiceClient()
 	if err != nil {
 		return err
 	}
 
-	if !deleteUserYes {
-		_, lookupErr := c.GetUserByName(context.Background(), &authd.GetUserByNameRequest{Name: name})
-		if lookupErr != nil {
-			return lookupErr
-		}
+	u, err := c.GetUserByName(context.Background(), &authd.GetUserByNameRequest{Name: args[0]})
+	if err != nil {
+		return err
+	}
+	// The argument may be a provider alias. Use the Unix name everywhere, so the
+	// confirmation names the account that is actually deleted.
+	name := u.GetName()
 
+	if !deleteUserYes {
 		log.Warning(warningMessage)
 		fmt.Fprintf(os.Stderr, "\nAre you sure you want to delete user %q? [y/N] ", name)
 
