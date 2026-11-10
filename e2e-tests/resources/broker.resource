@@ -431,7 +431,7 @@ Check Configuration Value
 Check If Owner Was Registered
     [Arguments]    ${username}
     ${content} =    SSH.Execute    cat ${BROKER_CFG_DIR}/20-owner-autoregistration.conf
-    Should Contain    ${content}    owner = ${username}
+    Should Contain    ${content}    owner = """${username}"""
 
 Check Home Directory
     [Arguments]    ${username}    ${base_dir}=/home
