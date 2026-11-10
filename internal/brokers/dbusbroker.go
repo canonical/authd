@@ -2,6 +2,7 @@ package brokers
 
 import (
 	"context"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"strconv"
@@ -28,6 +29,7 @@ const (
 type dbusInterface struct {
 	name    string
 	version uint
+	owner   string
 }
 
 // brokerUnavailableMessageError keeps the administrator-focused message in
@@ -80,14 +82,16 @@ func brokerUnavailableError(name string, cause error) error {
 
 type dbusBroker struct {
 	name       string
+	bus        *dbus.Conn
 	dbusObject dbus.BusObject
 
 	// iface is the broker D-Bus interface to call, resolved lazily on first
 	// use. We can't resolve it at construction time because that requires
 	// introspecting — and thus activating — the broker, which would drop a
 	// broker that fails to start from the available list. Deferring it keeps
-	// such a broker listed so the user gets a clear error on selection
-	// instead of the broker silently vanishing.
+	// such a broker listed so the user gets a clear error on selection.
+	// The cached interface belongs to a unique D-Bus owner and is refreshed
+	// when the broker restarts.
 	iface   dbusInterface
 	ifaceMu sync.Mutex
 }
@@ -125,6 +129,7 @@ func newDbusBroker(ctx context.Context, bus *dbus.Conn, configFile string) (b *d
 
 	dBroker := &dbusBroker{
 		name:       nameVal.String(),
+		bus:        bus,
 		dbusObject: bus.Object(dbusName.String(), dbus.ObjectPath(objectName.String())),
 	}
 
@@ -133,9 +138,13 @@ func newDbusBroker(ctx context.Context, bus *dbus.Conn, configFile string) (b *d
 
 // getInterface introspects the broker's D-Bus object and returns the interface with the highest version supported both
 // by the broker and authd.
-func getInterface(obj dbus.BusObject) (dbusInterface, error) {
-	node, err := introspect.Call(obj)
-	if err != nil {
+func getInterface(ctx context.Context, obj dbus.BusObject) (dbusInterface, error) {
+	var data string
+	if err := obj.CallWithContext(ctx, "org.freedesktop.DBus.Introspectable.Introspect", 0).Store(&data); err != nil {
+		return dbusInterface{}, fmt.Errorf("could not introspect broker: %w", err)
+	}
+	var node introspect.Node
+	if err := xml.Unmarshal([]byte(data), &node); err != nil {
 		return dbusInterface{}, fmt.Errorf("could not introspect broker: %v", err)
 	}
 
@@ -204,16 +213,16 @@ func interfaceVersion(iface string) (int, error) {
 // On API v3, the providerID (stable provider identifier) is passed so the broker can locate the
 // provider ID-keyed cache directory directly. v2 brokers receive only username, lang, and mode.
 func (b *dbusBroker) NewSession(ctx context.Context, username, lang, mode, providerID string) (sessionID, encryptionKey string, err error) {
-	iface, err := b.resolveInterface()
+	iface, err := b.resolveInterface(ctx)
 	if err != nil {
-		return "", "", brokerUnavailableError(b.name, err)
+		return "", "", err
 	}
 
 	var call *dbus.Call
 	if iface.version < 3 {
-		call, err = b.call(ctx, "NewSession", username, lang, mode)
+		call, err = b.callOnInterface(ctx, iface, "NewSession", username, lang, mode)
 	} else {
-		call, err = b.call(ctx, "NewSession", username, lang, mode, providerID)
+		call, err = b.callOnInterface(ctx, iface, "NewSession", username, lang, mode, providerID)
 	}
 	if err != nil {
 		return "", "", err
@@ -299,15 +308,15 @@ func (b *dbusBroker) UserPreCheck(ctx context.Context, username string) (userinf
 // On API v3, the providerID (stable provider identifier) is passed so the broker can locate the
 // provider ID-keyed cache directory even after an email change. v2 brokers receive only the username.
 func (b *dbusBroker) DeleteUser(ctx context.Context, username, providerID string) error {
-	iface, err := b.resolveInterface()
+	iface, err := b.resolveInterface(ctx)
 	if err != nil {
-		return brokerUnavailableError(b.name, err)
+		return err
 	}
 
 	if iface.version < 3 {
-		_, err = b.call(ctx, "DeleteUser", username)
+		_, err = b.callOnInterface(ctx, iface, "DeleteUser", username)
 	} else {
-		_, err = b.call(ctx, "DeleteUser", username, providerID)
+		_, err = b.callOnInterface(ctx, iface, "DeleteUser", username, providerID)
 	}
 	if err != nil {
 		return err
@@ -320,32 +329,81 @@ func (b *dbusBroker) DeleteUser(ctx context.Context, username, providerID string
 // caching it on first use. Detection introspects (and thus activates) the
 // broker, so it's deferred until a call is actually made rather than done at
 // construction time.
-func (b *dbusBroker) resolveInterface() (dbusInterface, error) {
+func (b *dbusBroker) resolveInterface(ctx context.Context) (dbusInterface, error) {
 	b.ifaceMu.Lock()
 	defer b.ifaceMu.Unlock()
+
+	obj := b.dbusObject
+	var owner string
+	if b.bus != nil {
+		var err error
+		owner, err = b.brokerOwner(ctx)
+		if err != nil {
+			b.iface = dbusInterface{}
+			return dbusInterface{}, b.wrapResolveError(err)
+		}
+		if b.iface.owner != owner {
+			b.iface = dbusInterface{}
+		}
+		obj = b.bus.Object(owner, obj.Path())
+	}
 
 	if b.iface.name != "" {
 		return b.iface, nil
 	}
 
-	iface, err := getInterface(b.dbusObject)
+	iface, err := getInterface(ctx, obj)
 	if err != nil {
-		return dbusInterface{}, err
+		return dbusInterface{}, b.wrapResolveError(err)
 	}
+	iface.owner = owner
 	b.iface = iface
 	return iface, nil
+}
+
+func (b *dbusBroker) wrapResolveError(err error) error {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	return brokerUnavailableError(b.name, err)
+}
+
+func (b *dbusBroker) brokerOwner(ctx context.Context) (string, error) {
+	var owner string
+	bus := b.bus.BusObject()
+	name := b.dbusObject.Destination()
+	err := bus.CallWithContext(ctx, "org.freedesktop.DBus.GetNameOwner", 0, name).Store(&owner)
+	var dbusErr dbus.Error
+	if errors.As(err, &dbusErr) && dbusErr.Name == "org.freedesktop.DBus.Error.NameHasNoOwner" {
+		if err := bus.CallWithContext(ctx, "org.freedesktop.DBus.StartServiceByName", 0, name, uint32(0)).Err; err != nil {
+			return "", err
+		}
+		err = bus.CallWithContext(ctx, "org.freedesktop.DBus.GetNameOwner", 0, name).Store(&owner)
+	}
+	if err != nil {
+		return "", fmt.Errorf("could not determine broker D-Bus owner: %w", err)
+	}
+	return owner, nil
 }
 
 // call is an abstraction over dbus calls to ensure we wrap the returned error to an ErrorToDisplay.
 // All wrapped errors will be logged, but not returned to the UI.
 func (b *dbusBroker) call(ctx context.Context, method string, args ...interface{}) (*dbus.Call, error) {
-	iface, err := b.resolveInterface()
+	iface, err := b.resolveInterface(ctx)
 	if err != nil {
-		return nil, brokerUnavailableError(b.name, err)
+		return nil, err
 	}
 
+	return b.callOnInterface(ctx, iface, method, args...)
+}
+
+func (b *dbusBroker) callOnInterface(ctx context.Context, iface dbusInterface, method string, args ...interface{}) (*dbus.Call, error) {
+	obj := b.dbusObject
+	if b.bus != nil && iface.owner != "" {
+		obj = b.bus.Object(iface.owner, obj.Path())
+	}
 	dbusMethod := iface.name + "." + method
-	call := b.dbusObject.CallWithContext(ctx, dbusMethod, 0, args...)
+	call := obj.CallWithContext(ctx, dbusMethod, 0, args...)
 	if err := call.Err; err != nil {
 		var dbusError dbus.Error
 		if errors.As(err, &dbusError) && dbusError.Name == "com.ubuntu.authd.Canceled" {
