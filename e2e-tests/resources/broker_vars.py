@@ -16,14 +16,20 @@ _BROKER_CONFIGS = {
         "PROVIDER_DISPLAY_NAME": "Microsoft Entra ID",
         "DEVICE_URL": "login.microsoft.com/device",
         # TODO: Once the stable channel ships the new URL:/Code: format, drop the
-        # optional-prefix fallbacks and simplify to r"URL:\s*(https://)?...\nCode[:\uFF1A]\s*([A-Za-z0-9]+)".
+        # optional-prefix fallbacks and simplify to r"URL:\s*(https://)?...\nCode[:\uFF1A]\s*([A-Za-z0-9]{9})".
         # They exist only for migration_broker.robot, which logs in before upgrading
         # from stable (old bare format) to edge (new labeled format).
         # The label can be rendered separately from the code, and OCR can drop
-        # its colon, render it full-width, or change its case. Require the
-        # value to end its OCR line so a label-only frame cannot capture
-        # adjacent dialog text.
-        "DEVICE_URL_REGEX": r"(?:URL:\s*)?(https://)?login.microsoft.com/device\n(?:(?i:Code|Login[ \t]*code)(?=[:\uFF1A][ \t]*|[ \t]+|\n)[:\uFF1A]?[ \t]*\n?|(?!(?i:CODE|LOGIN[ \t]*CODE)(?:[ \t]*[:\uFF1A]|[ \t]+|\n|$))\s*)([A-Za-z0-9]+)(?=[ \t]*(?:\n|$))",
+        # its colon, render it full-width, or change its case. OCR can also
+        # append noise to the label line before the separate code line.
+        # Require a full nine-character code on one line.
+        "DEVICE_URL_REGEX": (
+            r"(?:URL:\s*)?(https://)?login.microsoft.com/device\n"
+            r"(?:(?i:Code|Login[ \t]*code)(?=[:\uFF1A][ \t]*|[ \t]+|\n)"
+            r"[:\uFF1A]?[ \t]*(?:[A-Za-z0-9]{0,8}[ \t]*\n)?|"
+            r"(?!(?i:CODE|LOGIN[ \t]*CODE)(?:[ \t]*[:\uFF1A]|[ \t]+|\n|$))\s*)"
+            r"([A-Za-z0-9]{9})(?=[ \t]*(?:\n|$))"
+        ),
         "remote_group": "e2e-test-group",
     },
     "authd-google": {
