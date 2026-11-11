@@ -63,16 +63,24 @@ safe-outputs:
           | [$creates[] as $i | [($items[$i].temporary_id | temp_id), $i]] as $created
           | [range(0; $items | length) | select($items[.].type == "set_issue_type")] as $types
           | [$types[] as $i | [($items[$i].issue_number | temp_id), $i]] as $typed
-          | (($created | map(.[0]) | sort) == ($typed | map(.[0]) | sort))
+          | if (($created | map(.[0]) | sort) == ($typed | map(.[0]) | sort))
             and all($created[]; .[0] != null)
             and (($created | map(.[0]) | unique | length) == ($created | length))
-            and all($typed[]; . as $t | any($created[]; .[0] == $t[0] and .[1] < $t[1]))
             and all($types[]; ($items[.].issue_type | ascii_downcase) == "bug"
                  and (($items[.].suggest // false) == false))
-        ' "$GH_AW_AGENT_OUTPUT" > /dev/null; then
-          echo "::error::Each created issue needs one Bug type call after it"
+            then .items = [
+              $items[] | select(.type != "set_issue_type")
+              | ., (select(.type == "create_issue")
+                    | (.temporary_id | temp_id) as $id
+                    | $typed[] | select(.[0] == $id) | $items[.[1]])
+            ]
+            else empty end
+        ' "$GH_AW_AGENT_OUTPUT" > "$GH_AW_AGENT_OUTPUT.ordered"; then
+          rm -f "$GH_AW_AGENT_OUTPUT.ordered"
+          echo "::error::Each created issue needs one Bug type call"
           exit 1
         fi
+        mv "$GH_AW_AGENT_OUTPUT.ordered" "$GH_AW_AGENT_OUTPUT"
   create-issue:
     max: 20
     require-temporary-id: true

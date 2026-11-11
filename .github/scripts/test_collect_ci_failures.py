@@ -297,7 +297,7 @@ class CollectTests(unittest.TestCase):
                 missing_output,
             ),
         ]
-        invalid_type = "::error::Each created issue needs one Bug type call after it"
+        invalid_type = "::error::Each created issue needs one Bug type call"
         create = {"type": "create_issue", "temporary_id": "aw_bug1"}
         bug_type = {
             "type": "set_issue_type",
@@ -342,7 +342,7 @@ class CollectTests(unittest.TestCase):
                     invalid_type,
                 ),
                 (json.dumps({"items": [create]}), True, invalid_type),
-                (json.dumps({"items": [bug_type, create]}), True, invalid_type),
+                (json.dumps({"items": [bug_type, create]}), True, None),
                 (
                     json.dumps({"items": [create, bug_type, bug_type]}),
                     True,
@@ -425,12 +425,76 @@ class CollectTests(unittest.TestCase):
                 )
                 self.assertEqual(checked.returncode == 0, error is None, checked.stdout)
                 if error is None:
+                    items = json.loads(output.read_text())["items"]
+                    for index, item in enumerate(items):
+                        if item["type"] != "create_issue":
+                            continue
+                        typed = items[index + 1]
+                        self.assertEqual(typed["type"], "set_issue_type")
+                        self.assertEqual(
+                            typed["issue_number"].lstrip("#").lower(),
+                            item["temporary_id"].lstrip("#").lower(),
+                        )
                     continue
+                if content is not None:
+                    self.assertEqual(output.read_text(), content)
                 self.assertIn(error, checked.stdout)
                 result = self.collect([previous, failure], checkpoints=(90,))
                 self.assertTrue(result["bootstrap"])
                 self.assertEqual(result["since"], "2026-10-18T03:00:00+00:00")
                 self.assertEqual([item["key"] for item in result["failures"]], ["2:1"])
+
+    def test_triage_type_calls_follow_their_creations(self):
+        workflow = (
+            Path(__file__).parents[1] / "workflows/nightly-ci-triage.lock.yml"
+        ).read_text()
+        guard = workflow.split(
+            "      - name: Require agent output before applying safe outputs\n", 1
+        )[1].split("      - name: ", 1)[0]
+        script = textwrap.dedent(
+            guard.split("        run: |\n", 1)[1].split("        env:\n", 1)[0]
+        )
+        create = {"type": "create_issue", "temporary_id": "#aw_snapcdn"}
+        bug_type = {
+            "type": "set_issue_type",
+            "issue_number": "#aw_snapcdn",
+            "issue_type": "Bug",
+        }
+        other_create = {**create, "temporary_id": "aw_other"}
+        other_type = {**bug_type, "issue_number": "AW_OTHER"}
+        pr = {"type": "create_pull_request", "body": "Fixes #aw_snapcdn"}
+        update = {"type": "update_issue", "operation": "append", "body": "Occurrence"}
+        cases = [
+            ([bug_type, create, pr], [create, bug_type, pr]),
+            (
+                [other_type, bug_type, create, update, other_create, pr],
+                [create, bug_type, update, other_create, other_type, pr],
+            ),
+        ]
+        for queued, expected in cases:
+            with (
+                self.subTest(queued=queued),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                output = Path(directory) / "agent_output.json"
+                output.write_text(json.dumps({"items": queued, "errors": []}))
+                checked = subprocess.run(
+                    [
+                        "bash",
+                        "-euo",
+                        "pipefail",
+                        "-c",
+                        script.replace("/tmp/gh-aw", directory),
+                    ],
+                    env={**os.environ, "GH_AW_AGENT_OUTPUT": str(output)},
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
+                self.assertEqual(
+                    json.loads(output.read_text()), {"items": expected, "errors": []}
+                )
 
     def test_first_failed_triage_window_is_retried(self):
         previous = run(
