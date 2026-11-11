@@ -110,7 +110,12 @@ sleep when there is genuinely no observable signal to poll on.
 4. **Develop any new OCR matches in the interactive console** (see "Developing
    OCR matches").
 5. **Run the test and read the live trace** (see "Running and reading results").
-6. Iterate.
+6. **Run the locked Robocop formatter and documentation check** after editing
+   any `.robot` or `.resource` file. Use the commands in
+   [TESTING.md](TESTING.md#formatting-and-checking-robot-framework-files).
+   Keep `--locked --only-group robocop` and do not add `--no-sync`: an existing
+   local environment may contain an older version than CI uses.
+7. Iterate.
 
 ## Documenting tests
 
