@@ -24,6 +24,7 @@ network:
     - go
     - rust
     - python
+    - authd-e2e-test-logs.adrian-dombeck.workers.dev
 tools:
   github:
     mode: gh-proxy
@@ -97,6 +98,8 @@ safe-outputs:
       - ".github/workflows/**"
       - ".github/scripts/collect_ci_failures.py"
       - ".github/scripts/test_collect_ci_failures.py"
+      - ".github/scripts/attach_ci_recordings.py"
+      - ".github/scripts/test_attach_ci_recordings.py"
     allowed-files:
       - ".github/actions/**"
       - ".github/scripts/**"
@@ -143,8 +146,48 @@ post-steps:
       path: /tmp/gh-aw/ci-triage/*.json
       if-no-files-found: ignore
 jobs:
-  verify_triage_writes:
+  attach_triage_recordings:
     needs: [agent, safe_outputs]
+    if: >-
+      needs.safe_outputs.result == 'success' &&
+      needs.safe_outputs.outputs.process_safe_outputs_status == 'success' &&
+      needs.safe_outputs.outputs.process_safe_outputs_items_deferred == '0' &&
+      needs.safe_outputs.outputs.process_safe_outputs_items_skipped == '0' &&
+      needs.safe_outputs.outputs.process_safe_outputs_items_failed == '0' &&
+      needs.safe_outputs.outputs.process_safe_outputs_items_cancelled == '0'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Download recording requests
+        uses: actions/download-artifact@v8
+        with:
+          name: ci-triage-manifests
+          path: ${{ runner.temp }}/ci-triage-downloads/manifests
+      - name: Download published issue requests
+        uses: actions/download-artifact@v8
+        with:
+          pattern: "{agent,agent-output-fallback}"
+          merge-multiple: true
+          path: ${{ runner.temp }}/ci-triage-downloads/agent
+      - name: Download safe-output results
+        uses: actions/download-artifact@v8
+        with:
+          name: safe-outputs-items
+          path: ${{ runner.temp }}/ci-triage-downloads/safe-outputs
+      - name: Attach recordings with the Actions token
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_TRIAGE_DOWNLOADS: ${{ runner.temp }}/ci-triage-downloads
+        run: python3 .github/scripts/attach_ci_recordings.py
+  verify_triage_writes:
+    needs: [agent, safe_outputs, attach_triage_recordings]
     if: always()
     # This job only reads safe-output results, even when detection warns.
     detection-gate: status-only
@@ -155,15 +198,17 @@ jobs:
         env:
           SAFE_OUTPUTS_RESULT: ${{ needs.safe_outputs.result }}
           SAFE_OUTPUTS_STATUS: ${{ needs.safe_outputs.outputs.process_safe_outputs_status }}
+          RECORDINGS_RESULT: ${{ needs.attach_triage_recordings.result }}
           ITEMS_DEFERRED: ${{ needs.safe_outputs.outputs.process_safe_outputs_items_deferred }}
           ITEMS_SKIPPED: ${{ needs.safe_outputs.outputs.process_safe_outputs_items_skipped }}
           ITEMS_FAILED: ${{ needs.safe_outputs.outputs.process_safe_outputs_items_failed }}
           ITEMS_CANCELLED: ${{ needs.safe_outputs.outputs.process_safe_outputs_items_cancelled }}
         run: |
           if [ "$SAFE_OUTPUTS_RESULT" != "success" ] || [ "$SAFE_OUTPUTS_STATUS" != "success" ] ||
+             [ "$RECORDINGS_RESULT" != "success" ] ||
              [ "$ITEMS_DEFERRED" != "0" ] || [ "$ITEMS_SKIPPED" != "0" ] ||
              [ "$ITEMS_FAILED" != "0" ] || [ "$ITEMS_CANCELLED" != "0" ]; then
-            echo "::error::Incomplete safe outputs; leave this window for the next run"
+            echo "::error::Incomplete triage writes; leave this window for the next run"
             exit 1
           fi
 ---
@@ -185,9 +230,10 @@ workflows. Do not narrow this window or skip entries.
 The agent has 50 minutes within the 60-minute job limit, leaving time for
 setup, completion checks, and artifact uploads. The `ci-triage-manifests`
 artifact retains `failures.json` and any `completed.json`, even on failure.
-After safe-output processing, a final job requires successful processing with
-no deferred, skipped, failed, or cancelled items. Missing results also fail
-the run, leaving the window for retry even if the completion file is present.
+After safe-output processing and recording uploads, a final job requires both
+to succeed, with no deferred, skipped, failed, or cancelled safe-output items.
+Missing results also fail the run, leaving the window for retry even if the
+completion file is present.
 
 ## Investigate and group
 
@@ -203,6 +249,46 @@ Group occurrences by the actual error, test, component, and likely root cause.
 Do not match solely on workflow names, generic exit codes, or similar titles.
 Keep run attempt and job links so reruns remain distinguishable. Distinguish
 transient infrastructure failures from code regressions, but track both.
+
+## Link to failure evidence
+
+For e2e issues and appended occurrences, put `[HTML test log](URL)` before
+Actions links. Find it in job logs, annotations, or commit statuses and
+match the run, attempt, release, and broker. If missing, use the job link.
+
+Request inline uploads of the failed test's VM (GDM/terminal) or webview
+(browser) recording, or both, using paths from the report or artifact. Do not
+add hosted recording links to issue reports. Keep the HTML test-log link and
+note missing recordings. Download and inspect the Actions artifacts for HTML
+logs and recordings; do not try hosted access first.
+
+For available MP4 recordings, write `/tmp/gh-aw/ci-triage/recordings.json` as a
+JSON list of requests, for example:
+
+```json
+[
+  {
+    "issue": "aw_example",
+    "failure_key": "123456:2",
+    "artifact": "e2e-tests-noble-google-123456-2",
+    "path": "suite/VM_Recording_failed_test.mp4"
+  }
+]
+```
+
+Use the issue's numeric ID for a known issue, or its `temporary_id` for a new
+issue or continuation. Use the destination that receives this occurrence.
+Copy the exact artifact name and relative recording path from the failed
+attempt's artifacts; do not guess paths. Include only recordings for the failed
+test, at most 40 requests per triage run. Write `[]` if none are available.
+Never put local file paths in issue bodies.
+
+After successful safe outputs, a separate job attaches those recordings
+using the built-in Actions token. It only targets issues successfully created
+or updated in this triage run. Every requested recording must be uploaded and
+verified before triage is complete. Upload failures, missing files, and videos
+over 100 MB fail the run and leave the window for retry. The agent does not
+have attachment-upload permissions.
 
 ## Match existing issues before creating anything
 
