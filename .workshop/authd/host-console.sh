@@ -7,8 +7,6 @@ set -euo pipefail
 # GUI program. Workshop manages the VM on the host LXD daemon; this script
 # only attaches to its virtual console.
 
-readonly WORKSHOP_NAME=authd-dev
-
 die() {
     echo "host-console.sh: $*" >&2
     exit 1
@@ -17,12 +15,17 @@ die() {
 # The lock identifies this checkout's Workshop project, even in a worktree.
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(cd -- "${script_dir}/../.." && pwd)"
+workshop_file="${project_dir}/.workshop.yaml"
+[ -r "${workshop_file}" ] || workshop_file="${project_dir}/workshop.yaml"
+[ -r "${workshop_file}" ] || die "Workshop definition is missing in ${project_dir}"
+workshop_name="$(sed -n 's/^name:[[:space:]]*//p' "${workshop_file}" | head -n 1)"
+[ -n "${workshop_name}" ] || die "Workshop definition has no name: ${workshop_file}"
 if [ ! -r "${project_dir}/.workshop.lock" ]; then
     die "Workshop project lock file is missing; launch the workshop first"
 fi
 project_id="$(<"${project_dir}/.workshop.lock")"
 [ -n "${project_id}" ] || die "Workshop project lock file is empty"
-readonly VM_NAME="${WORKSHOP_NAME}-${project_id}"
+readonly VM_NAME="${workshop_name}-${project_id}"
 
 [ "$#" -eq 0 ] || die "this command does not accept arguments"
 command -v remote-viewer >/dev/null 2>&1 ||
