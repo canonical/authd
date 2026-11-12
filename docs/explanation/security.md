@@ -122,7 +122,12 @@ Match User *@example.com
 ```
 
 ```{note}
-Replace `@example.com` with the domain of your identity provider.
+Replace `@example.com` with the domain of your identity provider. `sshd` applies
+`Match User` to the name typed at login, not the Unix username returned by NSS.
+Users can also log in with their provider username after a rename (see
+[user management](explanation::user-management)). The patterns must cover every
+Unix username and provider alias users can use to log in, including all their
+domains. An alias outside the patterns can still use SSH keys.
 ```
 
 #### SSH password authentication
@@ -153,7 +158,9 @@ Match User *@example.com
 ```
 
 ```{note}
-Replace `@example.com` with the domain of your identity provider.
+Replace `@example.com` with the domain of your identity provider. As with
+[public key authentication](ref::ssh-public-key-authentication), `Match User`
+patterns must cover both Unix usernames and provider aliases.
 ```
 
 ### UID and GID conflicts

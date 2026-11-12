@@ -30,6 +30,11 @@ func (m *Manager) UsersWithPrimaryGroup(gid uint32) ([]string, error) {
 	return m.usersWithPrimaryGroup(gid)
 }
 
+func (m *Manager) HoldUserManagementLock() (release func()) {
+	m.userManagementMu.Lock()
+	return m.userManagementMu.Unlock
+}
+
 const (
 	SystemdDynamicUIDMin = systemdDynamicUIDMin
 	SystemdDynamicUIDMax = systemdDynamicUIDMax

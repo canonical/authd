@@ -4,11 +4,13 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/canonical/authd/internal/testutils"
 	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/internal/users/db"
 	"github.com/stretchr/testify/require"
 )
 
@@ -150,6 +152,130 @@ func TestIntegration(t *testing.T) {
 			}
 		})
 	}
+}
+
+//nolint:tparallel // Subtests change the same passwd and group files in sequence.
+func TestProviderAliasSupplementaryGroups(t *testing.T) {
+	t.Parallel()
+
+	const unixName = "user1@example.com"
+	const providerName = "renamed-user1@example.com"
+	libPath, rustCovEnv := testutils.BuildRustNSSLib(t, false)
+	dbDir := filepath.Join(t.TempDir(), "db")
+	require.NoError(t, os.Mkdir(dbDir, 0700))
+	fixture, err := os.ReadFile(filepath.Join("testdata", "db", "multiple_users_and_groups.db.yaml"))
+	require.NoError(t, err)
+	content := strings.Replace(string(fixture), "    - name: "+unixName+"\n",
+		"    - name: "+unixName+"\n      provider_username: "+providerName+"\n", 1)
+	require.NoError(t, db.Z_ForTests_CreateDBFromYAMLReader(strings.NewReader(content), dbDir))
+
+	groupFile := filepath.Join(t.TempDir(), "group")
+	localMemberships := "localgroup:x:45000:" + unixName + "\n" +
+		"duplicate:x:99999:" + unixName + "\n"
+	require.NoError(t, os.WriteFile(groupFile, []byte(localMemberships), 0600))
+	passwdFile := filepath.Join(filepath.Dir(groupFile), "passwd")
+	require.NoError(t, os.WriteFile(passwdFile, nil, 0600))
+	socket := testutils.StartAuthd(t, daemonPath, testutils.WithDBPath(dbDir),
+		testutils.WithGroupFile(groupFile), testutils.WithCurrentUserAsRoot)
+	unixEntry, status := getentOutputForLib(t, libPath, socket, rustCovEnv, false, "passwd", unixName)
+	require.Zero(t, status)
+	aliasEntry, status := getentOutputForLib(t, libPath, socket, rustCovEnv, false, "passwd", providerName)
+	require.Zero(t, status)
+	require.Equal(t, unixEntry, aliasEntry)
+	require.True(t, strings.HasPrefix(aliasEntry, unixName+":"))
+
+	nsswitch := filepath.Join(filepath.Dir(groupFile), "nsswitch.conf")
+	require.NoError(t, os.WriteFile(nsswitch, []byte("passwd: files authd\ngroup: files authd\n"), 0600))
+	runLookup := func(t *testing.T, database, name string) string {
+		t.Helper()
+		env := append(os.Environ(), rustCovEnv...)
+		cmd := testutils.BubbleWrapCommand(t, env)
+		cmd.Args = append(cmd.Args,
+			"--setenv", "AUTHD_NSS_SOCKET", socket,
+			"--setenv", "LD_LIBRARY_PATH", filepath.Dir(libPath),
+			"--ro-bind", filepath.Dir(groupFile), "/etc",
+			"--ro-bind", filepath.Dir(socket), filepath.Dir(socket),
+			"--ro-bind", filepath.Dir(libPath), filepath.Dir(libPath),
+			"/usr/bin/getent", database, name,
+		)
+		var output strings.Builder
+		cmd.Stdout = &output
+		require.NoError(t, cmd.Run())
+		return strings.TrimSpace(output.String())
+	}
+	require.Equal(t, "localgroup:x:45000:"+unixName, runLookup(t, "group", "localgroup"))
+	require.Equal(t, "commongroup::99999:user1@example.com,user2@example.com,user3@example.com",
+		runLookup(t, "group", "commongroup"))
+	checkGroups := func(t *testing.T, name string, want []string) {
+		t.Helper()
+		groups := strings.Fields(runLookup(t, "initgroups", name))
+		require.NotEmpty(t, groups)
+		require.Equal(t, name, groups[0])
+		require.ElementsMatch(t, want, groups[1:])
+	}
+	t.Run("Both_names_include_authd_and_local_groups", func(t *testing.T) {
+		for _, name := range []string{unixName, providerName, strings.ToUpper(providerName)} {
+			checkGroups(t, name, []string{"11111", "45000", "99999"})
+		}
+	})
+	t.Run("Unix_name_lookup_grows_the_group_buffer", func(t *testing.T) {
+		var memberships strings.Builder
+		want := []string{"11111", "99999"}
+		for gid := 45000; gid < 45020; gid++ {
+			id := strconv.Itoa(gid)
+			memberships.WriteString("local" + id + ":x:" + id + ":" + unixName + "\n")
+			want = append(want, id)
+		}
+		require.NoError(t, os.WriteFile(groupFile, []byte(memberships.String()), 0600))
+		for _, name := range []string{unixName, providerName} {
+			checkGroups(t, name, want)
+		}
+	})
+	t.Run("Removing_local_membership_revokes_access_for_both_names", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(groupFile, []byte("localgroup:x:45000:\n"), 0600))
+		for _, name := range []string{unixName, providerName} {
+			checkGroups(t, name, []string{"11111", "99999"})
+		}
+	})
+	t.Run("Local_membership_requires_the_files_source", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(groupFile, []byte(localMemberships), 0600))
+		require.NoError(t, os.WriteFile(nsswitch, []byte("passwd: files authd\ngroup: files authd\ninitgroups: authd\n"), 0600))
+		checkGroups(t, providerName, []string{"11111", "99999"})
+	})
+	t.Run("Local_membership_respects_NSS_return_actions", func(t *testing.T) {
+		for _, database := range []string{"group", "initgroups"} {
+			for _, services := range []string{
+				"authd [SUCCESS=return] files",
+				"authd [SUCCESS=continue] files",
+				"files [SUCCESS=continue] authd [SUCCESS=return]",
+				"authd [!UNAVAIL=return] files",
+			} {
+				t.Run(database+"/"+services, func(t *testing.T) {
+					config := "passwd: files authd\n"
+					if database == "initgroups" {
+						config += "group: files authd\n"
+					}
+					require.NoError(t, os.WriteFile(nsswitch, []byte(config+database+": "+services+"\n"), 0600))
+					want := []string{"11111", "99999"}
+					// Without an initgroups entry, glibc ignores SUCCESS return actions.
+					if database == "group" || services == "authd [SUCCESS=continue] files" ||
+						services == "files [SUCCESS=continue] authd [SUCCESS=return]" {
+						want = append(want, "45000")
+					}
+					for _, name := range []string{unixName, providerName, strings.ToUpper(providerName)} {
+						checkGroups(t, name, want)
+					}
+				})
+			}
+		}
+	})
+	t.Run("Local_account_claiming_alias_does_not_inherit_authd_groups", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(nsswitch, []byte("passwd: files authd\ngroup: files authd\n"), 0600))
+		require.NoError(t, os.WriteFile(passwdFile, []byte(providerName+":x:2222:22222::/:/bin/sh\n"), 0600))
+		require.NoError(t, os.WriteFile(groupFile, []byte(localMemberships+"alias-local:x:45001:"+providerName+"\n"), 0600))
+		checkGroups(t, providerName, []string{"45001"})
+		checkGroups(t, unixName, []string{"11111", "45000", "99999"})
+	})
 }
 
 func TestMain(m *testing.M) {

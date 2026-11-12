@@ -20,8 +20,10 @@ Test that owner is auto-updated in broker configuration
     ...    owner.
     ...
     ...    The default ``allowed_users = OWNER`` policy starts with no owner. On
-    ...    the first remote login, the broker writes an ``owner`` entry to
-    ...    ``20-owner-autoregistration.conf``. Later users are denied until an
+    ...    the first remote login, the broker writes a quoted ``provider-id:``
+    ...    owner entry to ``20-owner-autoregistration.conf``. The test checks that
+    ...    it matches the provider ID cached for the user, so ownership follows
+    ...    the account rather than its login name. Later users are denied until an
     ...    administrator changes allowed_users.
     ...
     ...    Registration happens during login, so the test polls for the drop-in.

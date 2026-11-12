@@ -57,7 +57,7 @@ Exec=%s
 		"user@example.com",
 		"en",
 		sessionmode.Login,
-		"provider-id",
+		"",
 	)
 
 	require.Eventually(t, func() bool {
@@ -120,7 +120,7 @@ entra_auth = false
 	}
 }
 
-func TestDeleteUserOverSystemBusChecksCallerUID(t *testing.T) {
+func TestPrivilegedMethodsOverSystemBusCheckCallerUID(t *testing.T) {
 	cleanup, err := testutils.StartSystemBusMock()
 	require.NoError(t, err, "Setup: starting the mock bus should not fail")
 	defer cleanup()
@@ -155,6 +155,18 @@ entra_auth = false
 		deletedCacheKeys []string
 		wantErrorName    string
 	}{
+		{
+			name: "v3 accepts provider ID only from root", method: "com.ubuntu.authd.Broker3.NewSession",
+			args: []any{"session-user@example.com", "en", sessionmode.Login, "session-provider-id"},
+		},
+		{
+			name: "v4 accepts Unix name only from root", method: "com.ubuntu.authd.Broker4.NewSession",
+			args: []any{"session-user@example.com", "en", sessionmode.Login, "session-provider-id", "unix-user"},
+		},
+		{
+			name: "v4 accepts ID-less Unix name only from root", method: "com.ubuntu.authd.Broker4.NewSession",
+			args: []any{"session-user@example.com", "en", sessionmode.Login, "", "unix-user"},
+		},
 		{
 			name: "v1 deletes username cache", method: "com.ubuntu.authd.Broker.DeleteUser",
 			args: []any{username}, deletedCacheKeys: []string{username},
@@ -261,7 +273,7 @@ Exec=%s
 		"user@example.com",
 		"en",
 		sessionmode.Login,
-		"provider-id",
+		"",
 	)
 
 	require.Eventually(t, func() bool {

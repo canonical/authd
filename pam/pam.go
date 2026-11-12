@@ -26,6 +26,7 @@ import (
 	"github.com/msteinert/pam/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"gopkg.in/ini.v1"
 )
 
 // pamModule is the structure that implements the pam.ModuleHandler interface
@@ -42,6 +43,8 @@ const (
 
 	// loggingInitializedKey indicates logging was already initialized.
 	loggingInitializedKey = "authd.logging-initialized-flag"
+
+	sshLoginNameKey = "authd.ssh-login-name"
 
 	// gdmServiceName is the name of the service that is loaded by GDM.
 	// Keep this in sync with the service file installed by the package.
@@ -344,6 +347,14 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 		return pam.ErrIgnore
 	}
 
+	var sshLoginName string
+	if mode == authd.SessionMode_LOGIN && adapter.IsSSHSession(mTx) {
+		sshLoginName, err = originalSSHLoginName(mTx)
+		if err != nil {
+			return err
+		}
+	}
+
 	forceNativeClient := parsedArgs["force_native_client"] == "true"
 	if !forceNativeClient && gdm.IsPamExtensionSupported(gdm.PamExtensionCustomJSON) {
 		pamClientType = adapter.Gdm
@@ -387,6 +398,9 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 
 	switch returnValue := pamReturnValue.(type) {
 	case adapter.PamSuccess:
+		if err := setAuthenticatedPamUser(mTx, returnValue.User, sshLoginName, "/etc/os-release"); err != nil {
+			return err
+		}
 		sendReturnMessageToPam(mTx, pamClientType, returnValue)
 		if returnValue.AuthTok != "" {
 			if err := mTx.SetItem(pam.Authtok, returnValue.AuthTok); err != nil {
@@ -412,6 +426,61 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 		sendReturnMessageToPam(mTx, pamClientType, returnValue)
 		return fmt.Errorf("%w: unknown exit code: %#v", pam.ErrSystem, returnValue)
 	}
+}
+
+func originalSSHLoginName(mTx pam.ModuleTransaction) (string, error) {
+	saved, err := mTx.GetData(sshLoginNameKey)
+	if err == nil {
+		name, ok := saved.(string)
+		if !ok || name == "" {
+			return "", fmt.Errorf("%w: invalid original SSH login name", pam.ErrSystem)
+		}
+		return name, nil
+	}
+	if !errors.Is(err, pam.ErrNoModuleData) {
+		return "", err
+	}
+
+	name, err := mTx.GetItem(pam.User)
+	if err != nil {
+		return "", err
+	}
+	if name == "" {
+		return "", fmt.Errorf("%w: missing SSH login name", pam.ErrUserUnknown)
+	}
+	// PAM_USER may change during authentication. Keep the name sshd received
+	// across retries on the same PAM transaction.
+	if err := mTx.SetData(sshLoginNameKey, name); err != nil {
+		return "", err
+	}
+	return name, nil
+}
+
+func setAuthenticatedPamUser(mTx pam.ModuleTransaction, unixName, sshLoginName, osReleasePath string) error {
+	if unixName == "" {
+		return nil
+	}
+	if sshLoginName != "" && !strings.EqualFold(sshLoginName, unixName) {
+		release, err := ini.Load(osReleasePath)
+		if err != nil {
+			return fmt.Errorf("%w: could not read OS release: %v", pam.ErrSystem, err)
+		}
+		if release.Section("").Key("ID").String() == "ubuntu" &&
+			release.Section("").Key("VERSION_ID").String() == "24.04" {
+			// Ubuntu 24.04's OpenSSH can retain the temporary UID from its
+			// initial alias lookup. Rewriting PAM_USER cannot safely switch
+			// it to the existing Unix account, so require the Unix username
+			// from the start.
+			// For the PAM username check added in newer OpenSSH, see:
+			// https://github.com/openssh/openssh-portable/pull/521
+			msg := fmt.Sprintf("Log in with your Unix username %q on Ubuntu 24.04.", unixName)
+			if err := showPamMessage(mTx, pam.ErrorMsg, msg); err != nil {
+				log.Warningf(context.TODO(), "Impossible to show SSH login message: %v", err)
+			}
+			return fmt.Errorf("%w: %s", pam.ErrAuth, msg)
+		}
+	}
+	return mTx.SetItem(pam.User, unixName)
 }
 
 // AcctMgmt is ignored because broker selection is now handled server-side during IsAuthenticated.

@@ -50,6 +50,30 @@ authd's NSS module gets information from its local database of the identity
 provider's users and groups. This is discussed in the [overview of authd's
 architecture](explanation::authd-architecture).
 
+authd keeps a user's Unix username stable when their username in the identity
+provider changes. It stores the current provider username as a login alias.
+Once authd learns the alias, NSS resolves both names to the same Unix account.
+Users can log in with either their stable Unix username or their provider alias.
+
+```{note}
+SSH login on Ubuntu 24.04 does not support provider aliases. Use the stable
+Unix username instead.
+```
+
+authd learns a changed provider username after the user authenticates. Users
+can log in with their stable Unix username to let authd learn the new alias.
+
+```{admonition} Version requirement
+:class: note
+Keeping the same Unix account after a provider username change requires
+authd 0.8.0 or later and broker 0.6.0 or later.
+Users must log in online with these versions before their provider username
+changes.
+```
+
+Use the Unix username in name-based configuration such as `sudoers`,
+`/etc/group`, and `sshd`'s `AllowUsers`.
+
 ## authd provides the authctl tool for managing users
 
 For authd-managed users and groups, you can use [`authctl`](reference::cli), a

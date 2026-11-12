@@ -223,6 +223,11 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		socketPath       string
 		interactiveShell bool
 		ubuntuVersion    string
+		providerAlias    bool
+		lxdOnly          bool
+		// The name resolves to a local account, so authd's records can't be
+		// compared with what NSS returns for it.
+		skipUserChecks bool
 
 		wantUserAlreadyExist  bool
 		wantUserNotInDatabase bool
@@ -253,6 +258,26 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			user: "USER-SSH2@example.com",
 			test: sshPtySimpleAuth,
 		},
+		"Authenticate_with_provider_alias_and_canonical_name_on_ubuntu_24.04": {
+			ubuntuVersion: "24.04",
+			userPrefix:    examplebroker.UserIntegrationProviderAliasPrefix,
+			providerAlias: true,
+			test:          sshPtyProviderUsernameAliasDenied,
+		},
+		"Authenticate_with_provider_alias_and_canonical_name_on_ubuntu_26.04": {
+			ubuntuVersion: "26.04",
+			userPrefix:    examplebroker.UserIntegrationProviderAliasPrefix,
+			providerAlias: true,
+			test:          sshPtyProviderUsernameAlias,
+		},
+		"Reject_provider_alias_acquired_by_a_local_account_later_on_ubuntu_26.04": {
+			ubuntuVersion:  "26.04",
+			lxdOnly:        true,
+			skipUserChecks: true,
+			userPrefix:     examplebroker.UserIntegrationProviderAliasPrefix,
+			providerAlias:  true,
+			test:           sshPtyProviderUsernameAliasLaterLocalCollision,
+		},
 		"Authenticate_user_with_mfa": {
 			userPrefix: examplebroker.UserIntegrationMfaPrefix,
 			test:       sshPtyMfaAuth,
@@ -267,6 +292,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			userPrefix: examplebroker.UserIntegrationNeedsResetPrefix,
 			test:       sshPtyMandatoryPasswordReset,
 		},
+		// The canonical PAM username also allows uppercase re-login after a password reset.
 		"Authenticate_user_and_reset_password_then_allow_uppercase_re-login": {
 			user: testUserNameFull(t,
 				examplebroker.UserIntegrationNeedsResetPrefix+
@@ -397,8 +423,14 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			t.Parallel()
 
 			// If this test is version-specific, delegate to LXD if needed.
-			if tc.ubuntuVersion != "" && testutils.RunTestInLXD(t, tc.ubuntuVersion) {
-				return
+			if tc.ubuntuVersion != "" {
+				runInLXD := testutils.RunTestInLXD
+				if tc.lxdOnly {
+					runInLXD = testutils.RunTestInLXDOnly
+				}
+				if runInLXD(t, tc.ubuntuVersion) {
+					return
+				}
 			}
 
 			if !sshTestsPrepared.Load() {
@@ -535,13 +567,27 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 				if nssLibrary != "" {
 					requireGetEntExists(t, nssLibrary, socketPath, user, tc.isLocalUser)
 				}
-			} else {
+			} else if !tc.skipUserChecks {
 				if userClient != nil {
-					authdUser := requireAuthdUser(t, userClient, user)
+					var authdUser *authd.User
+					if tc.providerAlias {
+						var err error
+						aliasedUser, err := userClient.GetUserByName(context.Background(),
+							&authd.GetUserByNameRequest{Name: user, ShouldPreCheck: false})
+						require.NoError(t, err, "provider username alias should resolve")
+						authdUser = requireAuthdUser(t, userClient, providerAliasUnixUsername(user))
+						require.Equal(t, authdUser, aliasedUser,
+							"the provider username should resolve to the same canonical user record")
+					} else {
+						authdUser = requireAuthdUser(t, userClient, user)
+					}
 					group := requireAuthdGroup(t, userClient, authdUser.Gid)
 					require.Contains(t, group.Members, authdUser.Name,
 						"Group lacks of the expected user")
 
+					if tc.providerAlias {
+						userHome = authdUser.Homedir
+					}
 					if nssLibrary != "" {
 						userHome = authdUser.Homedir
 
@@ -939,6 +985,95 @@ func sshPtySimpleAuth(t *testing.T, args sshPtyArgs) {
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 	golden.CheckOrUpdate(t, got)
+}
+
+func providerAliasUnixUsername(providerUsername string) string {
+	return "unix-" + strings.TrimPrefix(providerUsername, examplebroker.UserIntegrationProviderAliasPrefix)
+}
+
+func sshPtyProviderUsernameAlias(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+	c.SendLine(t, "goodpass")
+	sshPtyWaitForSSHConnection(t, c)
+	c.RequireSuccessfulExit(t)
+
+	// The preloader gives all fake users the same UID, so this only checks
+	// PAM_USER. ssh_login.robot covers sshd's UID check with the real NSS module.
+	unixUsername := providerAliasUnixUsername(args.user)
+	require.Contains(t, c.RawOutput(), fmt.Sprintf("finished for user '%s'", unixUsername),
+		"PAM_USER should be set to the Unix username after authenticating the provider alias")
+
+	c2 := startSSHForPtyWithUser(t, args, unixUsername)
+	c2.WaitFor(t, `Gimme your password`)
+	c2.SendLine(t, "goodpass")
+	sshPtyWaitForSSHConnection(t, c2)
+	c2.RequireSuccessfulExit(t)
+}
+
+// sshPtyProviderUsernameAliasLaterLocalCollision creates a local account with
+// the name of a stored provider alias. sshd then resolves the alias to the
+// local UID, so authd must not authenticate the login as its own account.
+// It runs as root in the LXD container so it can run useradd.
+func sshPtyProviderUsernameAliasLaterLocalCollision(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+	c.SendLine(t, "goodpass")
+	sshPtyWaitForSSHConnection(t, c)
+	c.RequireSuccessfulExit(t)
+
+	alias := strings.ToLower(args.user)
+	//nolint:gosec // G204 - alias is a controlled test username, not external input.
+	out, err := exec.Command("useradd", "--badname", "-M",
+		"-s", "/usr/sbin/nologin", alias).CombinedOutput()
+	require.NoError(t, err, "Setup: could not create the colliding local account: %s", out)
+	t.Cleanup(func() {
+		//nolint:gosec // G204 - alias is the same controlled test username passed to useradd.
+		_ = exec.Command("userdel", alias).Run()
+	})
+
+	c = startSSHForPty(t, args)
+	c.WaitFor(t, `using local broker`)
+	c.WaitFor(t, `Password:`)
+	// GetBroker leaves the colliding name to pam_unix. The broker password
+	// must not authenticate this local account.
+	c.SendLine(t, "goodpass")
+	c.RequireExitCode(t, 255)
+	output := c.RawOutput()
+	require.NotContains(t, output, "Gimme your password",
+		"the colliding local account must not use the broker's password prompt")
+	require.NotContains(t, output, "SSHD: Connected to ssh via authd module!",
+		"a login that sshd resolves to the local account must not succeed through authd")
+}
+
+func sshPtyProviderUsernameAliasDenied(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	unixUsername := providerAliasUnixUsername(args.user)
+	for attempt := range 2 {
+		c := startSSHForPty(t, args)
+		if attempt == 0 {
+			sshPtySelectBroker(t, c)
+		}
+		c.WaitFor(t, `Gimme your password`)
+		c.SendLine(t, "goodpass")
+		c.WaitFor(t, regexp.QuoteMeta(fmt.Sprintf(
+			"Log in with your Unix username %q on Ubuntu 24.04.", unixUsername)))
+		c.RequireExitCode(t, 255)
+		require.NotContains(t, c.RawOutput(), "Inside SSH")
+	}
+
+	c := startSSHForPtyWithUser(t, args, unixUsername)
+	c.WaitFor(t, `Gimme your password`)
+	c.SendLine(t, "goodpass")
+	sshPtyWaitForSSHConnection(t, c)
+	c.RequireSuccessfulExit(t)
 }
 
 func sshPtyAuthWithShell(t *testing.T, args sshPtyArgs) {

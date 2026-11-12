@@ -16,6 +16,8 @@ type schemaMigration struct {
 	migrate     func(*Manager) error
 }
 
+const schemaVersionWithProviderUsername = 4
+
 var schemaMigrations = []schemaMigration{
 	{
 		description: "Migrate to lowercase user and group names",
@@ -133,6 +135,43 @@ var schemaMigrations = []schemaMigration{
 			if exists {
 				log.Debug(context.Background(), "'provider_id' column already exists in users table, ensured provider ID index")
 			}
+			return nil
+		},
+	},
+	{
+		description: "Add provider username to users table",
+		migrate: func(m *Manager) (err error) {
+			tx, err := m.db.Begin()
+			if err != nil {
+				return fmt.Errorf("failed to start transaction: %w", err)
+			}
+
+			defer func() {
+				err = commitOrRollBackTransaction(err, tx)
+			}()
+
+			var exists bool
+			err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM pragma_table_info('users') WHERE name = 'provider_username')").Scan(&exists)
+			if err != nil {
+				return fmt.Errorf("failed to check if 'provider_username' column exists: %w", err)
+			}
+			if exists {
+				log.Infof(context.Background(), "'provider_username' column already exists in users table")
+				return nil
+			}
+
+			if _, err = tx.Exec(`ALTER TABLE users ADD COLUMN provider_username TEXT NOT NULL DEFAULT ''`); err != nil {
+				return fmt.Errorf("failed to add 'provider_username' column to users table: %w", err)
+			}
+
+			if _, err = tx.Exec(`UPDATE users SET provider_username = name WHERE provider_username IS NULL OR provider_username = ''`); err != nil {
+				return fmt.Errorf("failed to backfill provider usernames: %w", err)
+			}
+
+			if _, err = tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS "idx_user_provider_username" ON users ("provider_username") WHERE provider_username != ''`); err != nil {
+				return fmt.Errorf("failed to create unique provider username index: %w", err)
+			}
+
 			return nil
 		},
 	},

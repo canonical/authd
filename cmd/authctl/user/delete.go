@@ -53,16 +53,16 @@ func init() {
 }
 
 func runDeleteUser(cmd *cobra.Command, args []string) error {
-	name := args[0]
-
 	c, err := client.NewUserServiceClient()
 	if err != nil {
 		return err
 	}
 
-	if _, err = c.GetUserByName(context.Background(), &authd.GetUserByNameRequest{Name: name}); err != nil {
+	u, err := c.GetUserByName(context.Background(), &authd.GetUserByNameRequest{Name: args[0]})
+	if err != nil {
 		return err
 	}
+	name := u.GetName()
 
 	if !deleteUserYes {
 		log.Warning(warningMessage)

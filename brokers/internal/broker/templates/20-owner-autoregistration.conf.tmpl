@@ -10,4 +10,8 @@
 ## successful authentication, delete this file.
 
 [users]
-owner = {{ .Owner }}
+{{ if .OwnerName }}# Owner name when bound: {{ .OwnerName }}
+# The ID below identifies this account at the identity provider.
+# The same account remains the owner if its name changes.
+{{ end -}}
+owner = """{{ .Owner }}"""

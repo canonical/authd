@@ -28,7 +28,11 @@ func TestSetShellCommand(t *testing.T) {
 
 		expectedExitCode int
 	}{
-		"Set_shell_success": {args: []string{"set-shell", "user1@example.com", "/bin/bash"}, expectedExitCode: 0},
+		"Set_shell_success": {args: []string{"set-shell", "user1", "/bin/bash"}, expectedExitCode: 0},
+		"Set_shell_via_provider_username": {
+			args:             []string{"set-shell", "user1@example.com", "/bin/bash"},
+			expectedExitCode: 0,
+		},
 
 		"Error_when_user_does_not_exist": {
 			args:             []string{"set-shell", "invaliduser", "/bin/bash"},

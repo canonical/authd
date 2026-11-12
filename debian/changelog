@@ -1,3 +1,14 @@
+authd (0.8.0) UNRELEASED; urgency=medium
+
+  * Keep Unix usernames stable after provider renames, using login aliases.
+    See docs/explanation/user-management.md for upgrade requirements and
+    configuration guidance.
+  * Review sshd Match User patterns before allowing provider aliases. They
+    match the name typed at login and must cover both Unix usernames and
+    provider aliases, or an alias can bypass SSH public key restrictions.
+
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Thu, 22 Oct 2026 09:50:36 +0200
+
 authd (0.7.1) stonking; urgency=medium
 
   * CVE-2026-102631: Prevent recycled usernames from inheriting existing

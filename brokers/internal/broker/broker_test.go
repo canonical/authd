@@ -66,6 +66,9 @@ type mockEntraAuthProvider struct {
 	challengeInfo                 *himmelblau.MFAChallengeInfo
 	mfaTokenResult                *oauth2.Token
 	initErr                       error
+	initUsernameErrors            map[string]error
+	recordedInitUsernames         []string
+	recordedMFAUsernames          []string
 	recordedPollAttempts          []int
 	recordedChallengeData         []string
 	recordedInitAuthOpts          [][]himmelblau.AuthOption
@@ -124,17 +127,22 @@ func (p *mockGrantRevokedProvider) IsTokenExpiredError(err *oauth2.RetrieveError
 
 var mockDeviceRegistrationData = []byte(`{"device_id":"test-device-id","cert_key":"Y2VydA==","transport_key":"dHJhbnNwb3J0","auth_value":"test-auth-value","tpm_machine_key":"dHBtLW1hY2hpbmUta2V5"}`)
 
-func (p *mockEntraAuthProvider) InitiateEntraAuth(_ context.Context, _, _ string, _, password string, _ []byte, withDeviceScope bool, authOpts ...himmelblau.AuthOption) (*himmelblau.MFAFlowState, *himmelblau.MFAChallengeInfo, error) {
+func (p *mockEntraAuthProvider) InitiateEntraAuth(_ context.Context, _, _ string, username, password string, _ []byte, withDeviceScope bool, authOpts ...himmelblau.AuthOption) (*himmelblau.MFAFlowState, *himmelblau.MFAChallengeInfo, error) {
+	p.recordedInitUsernames = append(p.recordedInitUsernames, username)
 	p.recordedInitAuthOpts = append(p.recordedInitAuthOpts, authOpts)
 	p.recordedInitPasswords = append(p.recordedInitPasswords, password)
 	p.recordedInitDevScopes = append(p.recordedInitDevScopes, withDeviceScope)
+	if err := p.initUsernameErrors[username]; err != nil {
+		return nil, nil, err
+	}
 	if p.initErr != nil {
 		return nil, nil, p.initErr
 	}
 	return p.flowState, p.challengeInfo, nil
 }
 
-func (p *mockEntraAuthProvider) AcquireTokenByMFAFlow(_ context.Context, _, _ string, _ string, _ *himmelblau.MFAFlowState, authData string, pollAttempt int, _ []byte) (*oauth2.Token, error) {
+func (p *mockEntraAuthProvider) AcquireTokenByMFAFlow(_ context.Context, _, _ string, username string, _ *himmelblau.MFAFlowState, authData string, pollAttempt int, _ []byte) (*oauth2.Token, error) {
+	p.recordedMFAUsernames = append(p.recordedMFAUsernames, username)
 	p.recordedPollAttempts = append(p.recordedPollAttempts, pollAttempt)
 	p.recordedChallengeData = append(p.recordedChallengeData, authData)
 	if p.mfaTokenResult == nil {
@@ -1367,6 +1375,7 @@ func TestIsAuthenticated(t *testing.T) {
 		sessionMode                        string
 		sessionOffline                     bool
 		username                           string
+		sessionProviderID                  string
 		forceAccessCheckWithProvider       bool
 		userDoesNotBecomeOwner             bool
 		allUsersAllowed                    bool
@@ -1738,8 +1747,11 @@ func TestIsAuthenticated(t *testing.T) {
 		},
 		"Error_when_empty_secret_is_provided_for_local_password":  {firstSecret: "-", wantSecondCall: true, secondSecret: "-"},
 		"Error_when_mode_is_newpassword_and_session_has_no_token": {firstMode: authmodes.NewPassword},
-		// This test case also tests that errors with double quotes are marshaled to JSON correctly.
-		"Error_when_selected_username_does_not_match_the_provider_one": {username: "not-matching", firstSecret: "-"},
+		"Authenticated_username_may_differ_from_selected_username": {
+			username:          "not-matching",
+			sessionProviderID: "test-user-id",
+			firstSecret:       "-",
+		},
 		"Error_when_user_is_disabled_and_session_is_offline": {
 			firstMode:      authmodes.Password,
 			token:          &tokenOptions{userIsDisabled: true},
@@ -1929,7 +1941,13 @@ func TestIsAuthenticated(t *testing.T) {
 			}
 			b := newBrokerForTests(t, cfg)
 
-			sessionID, key := newSessionForTests(t, b, tc.username, tc.sessionMode)
+			var sessionID, key string
+			if tc.sessionProviderID == "" {
+				sessionID, key = newSessionForTests(t, b, tc.username, tc.sessionMode)
+			} else {
+				sessionID, key, err = b.NewSession(tc.username, "some lang", tc.sessionMode, tc.sessionProviderID)
+				require.NoError(t, err, "Setup: NewSession should not have returned an error")
+			}
 
 			if tc.token != nil {
 				generateAndStoreCachedInfo(t, *tc.token, b.TokenPathForSession(sessionID))
@@ -2467,7 +2485,7 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 
 	idTokenClaims := []map[string]interface{}{}
 	for _, uname := range allUsers {
-		idTokenClaims = append(idTokenClaims, map[string]interface{}{"sub": "user", "name": "user", "email": uname})
+		idTokenClaims = append(idTokenClaims, map[string]interface{}{"sub": uname + "-id", "name": "user", "email": uname})
 	}
 
 	tests := map[string]struct {
@@ -2551,7 +2569,7 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 
 			for _, u := range allUsers {
 				sessionID, key := newSessionForTests(t, b, u, "")
-				token := tokenOptions{username: u, providerID: "user"}
+				token := tokenOptions{username: u, providerID: u + "-id"}
 				generateAndStoreCachedInfo(t, token, b.TokenPathForSession(sessionID))
 				err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID))
 				require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
@@ -3020,6 +3038,115 @@ func TestEndSessionReleasesPendingMFAFlow(t *testing.T) {
 	err = b.EndSession(sessionID)
 	require.NoError(t, err)
 	require.Equal(t, 1, released, "EndSession should release any pending MFA flow state")
+}
+
+func TestOwnerAccessSurvivesProviderUsernameChange(t *testing.T) {
+	t.Parallel()
+
+	for _, allUsersAllowed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("AllUsersAllowed=%t", allUsersAllowed), func(t *testing.T) {
+			t.Parallel()
+
+			const providerID = "saved-user-id"
+			provider := &mockEntraAuthProvider{
+				MockProvider:        &testutils.MockProvider{},
+				refreshResult:       &oauth2.Token{AccessToken: "new-access-token", RefreshToken: "new-refresh-token"},
+				accessTokenUserInfo: &info.User{Name: "renamed-user@email.com", ProviderID: providerID},
+			}
+			configFile := filepath.Join(t.TempDir(), "authd.conf")
+			allowedUsers := "OWNER"
+			if allUsersAllowed {
+				allowedUsers = "ALL"
+			}
+			require.NoError(t, os.WriteFile(configFile, []byte(fmt.Sprintf(
+				"[oidc]\nissuer = %s\nclient_id = test-client-id\n[users]\nallowed_users = %s\nowner = test-user@email.com\nowner_extra_groups = sudo\n",
+				defaultIssuerURL, allowedUsers)), 0600))
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config:           broker.Config{ConfigFile: configFile, DataDir: t.TempDir()},
+				owner:            "test-user@email.com",
+				ownerAllowed:     true,
+				allUsersAllowed:  allUsersAllowed,
+				ownerExtraGroups: []string{"sudo"},
+				provider:         provider,
+				issuerURL:        defaultIssuerURL,
+			})
+
+			for _, username := range []string{"test-user@email.com", "renamed-user@email.com"} {
+				provider.accessTokenUserInfo.Name = username
+				sessionID, key, err := b.NewSessionForUser(username, "some lang", sessionmode.Login, providerID, "test-user@email.com")
+				require.NoError(t, err)
+				generateAndStoreCachedInfo(t, tokenOptions{
+					username:             username,
+					obtainedViaEntraAuth: true,
+					providerID:           providerID,
+					issuer:               defaultIssuerURL,
+				}, b.TokenPathForSession(sessionID))
+				require.NoError(t, password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID)))
+				updateAuthModes(t, b, sessionID, authmodes.Password)
+				access, data, err := b.IsAuthenticated(sessionID, fmt.Sprintf(`{"%s":"%s"}`,
+					broker.AuthDataSecret, encryptSecret(t, "password", key)))
+				require.NoError(t, err)
+				require.Equal(t, broker.AuthGranted, access)
+				require.Contains(t, data, `"sudo"`)
+				require.NoError(t, b.EndSession(sessionID))
+			}
+			ownerConfig, err := os.ReadFile(configFile)
+			require.NoError(t, err)
+			require.Contains(t, string(ownerConfig), "provider-id:"+providerID)
+			require.Contains(t, string(ownerConfig), "# Owner name when bound: test-user@email.com")
+			require.NoDirExists(t, broker.GetDropInDir(configFile), "binding an existing owner must update its declaration")
+		})
+	}
+}
+
+func TestAdoptingOwnerProviderNameDoesNotGrantOwnerRights(t *testing.T) {
+	t.Parallel()
+
+	for _, allUsersAllowed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("AllUsersAllowed=%t", allUsersAllowed), func(t *testing.T) {
+			t.Parallel()
+
+			const ownerName = "owner@email.com"
+			const unixName = "other-user@email.com"
+			const providerID = "other-user-id"
+			provider := &mockEntraAuthProvider{
+				MockProvider:        &testutils.MockProvider{},
+				refreshResult:       &oauth2.Token{AccessToken: "new-access-token", RefreshToken: "new-refresh-token"},
+				accessTokenUserInfo: &info.User{Name: ownerName, ProviderID: providerID},
+			}
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config: broker.Config{DataDir: t.TempDir()},
+				owner:  "provider-id:owner-id", ownerAllowed: true, allUsersAllowed: allUsersAllowed,
+				ownerExtraGroups: []string{"sudo"}, provider: provider, issuerURL: defaultIssuerURL,
+			})
+			for _, loginName := range []string{unixName, ownerName} {
+				sessionID, key, err := b.NewSessionForUser(loginName, "en", sessionmode.Login, providerID, unixName)
+				require.NoError(t, err)
+				generateAndStoreCachedInfo(t, tokenOptions{
+					username: loginName, obtainedViaEntraAuth: true, providerID: providerID, issuer: defaultIssuerURL,
+				}, b.TokenPathForSession(sessionID))
+				require.NoError(t, password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID)))
+				updateAuthModes(t, b, sessionID, authmodes.Password)
+				access, data, err := b.IsAuthenticated(sessionID, fmt.Sprintf(`{"%s":"%s"}`,
+					broker.AuthDataSecret, encryptSecret(t, "password", key)))
+				require.NoError(t, err)
+				if allUsersAllowed {
+					require.Equal(t, broker.AuthGranted, access)
+					var response struct {
+						UserInfo info.User `json:"userinfo"`
+					}
+					require.NoError(t, json.Unmarshal([]byte(data), &response))
+					require.Equal(t, ownerName, response.UserInfo.Name)
+					for _, group := range response.UserInfo.Groups {
+						require.NotEqual(t, "sudo", group.Name)
+					}
+				} else {
+					require.Equal(t, broker.AuthDenied, access)
+				}
+				require.NoError(t, b.EndSession(sessionID))
+			}
+		})
+	}
 }
 
 func TestEndSessionDoesNotBlockOnInFlightMFA(t *testing.T) {
@@ -4727,12 +4854,10 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshPreservesRotationOnUserInfoErro
 		"a local user-info failure must not discard an already-rotated refresh token")
 }
 
-// TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnUsernameMismatch verifies
-// that if the refreshed Entra password token's identity no longer matches the
-// session's username, the returning login is denied — mirroring the username
-// cross-check that the device-auth refresh path (getUserInfo) performs on every
-// refresh, and that the Entra password flow itself performs on first login.
-func TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnUsernameMismatch(t *testing.T) {
+// TestIsAuthenticatedPasswordEntraTokenRefreshAllowsUsernameChange verifies
+// that a refreshed Entra token can return the same provider identity under a
+// new username.
+func TestIsAuthenticatedPasswordEntraTokenRefreshAllowsUsernameChange(t *testing.T) {
 	t.Parallel()
 
 	const correctPassword = "password"
@@ -4741,7 +4866,7 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnUsernameMismatch(t *tes
 			return []info.Group{{Name: "remote-group"}}, nil
 		}},
 		refreshResult:       &oauth2.Token{AccessToken: "new-access-token", RefreshToken: "new-refresh-token"},
-		accessTokenUserInfo: &info.User{Name: "someone-else@email.com", ProviderID: "saved-user-id"},
+		accessTokenUserInfo: &info.User{Name: "renamed-user@email.com", ProviderID: "saved-user-id"},
 	}
 
 	b := newBrokerForTests(t, &brokerForTestConfig{
@@ -4752,7 +4877,8 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnUsernameMismatch(t *tes
 		issuerURL:             defaultIssuerURL,
 	})
 
-	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	sessionID, key, err := b.NewSession("test-user@email.com", "some lang", sessionmode.Login, "saved-user-id")
+	require.NoError(t, err)
 	generateAndStoreCachedInfo(t, tokenOptions{
 		obtainedViaEntraAuth: true,
 		providerID:           "saved-user-id",
@@ -4763,13 +4889,15 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnUsernameMismatch(t *tes
 	authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
 	access, _, err := b.IsAuthenticated(sessionID, authData)
 	require.NoError(t, err)
-	require.Equal(t, broker.AuthDenied, access,
-		"a refreshed token whose identity no longer matches the session's username must deny the returning login")
+	require.Equal(t, broker.AuthGranted, access,
+		"a refreshed token with the same provider ID should allow a changed username")
 
 	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
 	require.NoError(t, err)
 	require.Equal(t, "new-refresh-token", cached.Token.RefreshToken,
-		"a local username verification failure must not discard an already-rotated refresh token")
+		"the refreshed token should be cached")
+	require.Equal(t, "renamed-user@email.com", cached.UserInfo.Name)
+	require.Equal(t, "saved-user-id", cached.UserInfo.ProviderID)
 }
 
 // TestDeviceAuthClearsDeviceRegistrationDataWhenRegistrationDisabled verifies that
@@ -5790,6 +5918,43 @@ func TestIsAuthenticatedEntraAuthFallsBackToEmailClaim(t *testing.T) {
 	require.Equal(t, broker.AuthGranted, access, "email claim should satisfy the user identity when preferred_username is absent")
 }
 
+func TestFirstSSHLoginRejectsUsernameMismatchWithoutBoundProviderID(t *testing.T) {
+	t.Parallel()
+
+	const (
+		requestedUsername       = "alice@allowed.example"
+		authenticatedUsername   = "alice@blocked.example"
+		authenticatedProviderID = "new-provider-id"
+	)
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		allowedSSHSuffixes: []string{"@allowed.example"},
+		allUsersAllowed:    true,
+		tokenHandlerOptions: &testutils.TokenHandlerOptions{
+			IDTokenClaims: []map[string]interface{}{
+				{
+					"sub":                authenticatedProviderID,
+					"email":              authenticatedUsername,
+					"preferred_username": authenticatedUsername,
+				},
+			},
+		},
+	})
+
+	precheckedUser, err := b.UserPreCheck(requestedUsername)
+	require.NoError(t, err)
+	require.NotEmpty(t, precheckedUser, "the requested username should pass the first-auth SSH suffix check")
+
+	sessionID, _ := newSessionForTests(t, b, requestedUsername, sessionmode.Login)
+	t.Cleanup(func() { require.NoError(t, b.EndSession(sessionID)) })
+	updateAuthModes(t, b, sessionID, authmodes.Device)
+
+	access, data, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthDenied, access)
+	require.Contains(t, data, requestedUsername)
+	require.Contains(t, data, authenticatedUsername)
+}
+
 func TestUserPreCheck(t *testing.T) {
 	t.Parallel()
 
@@ -6135,9 +6300,8 @@ func runDeviceAuthAndNewPassword(t *testing.T, b *broker.Broker, sessionID, key,
 // a compatibility symlink left at the username path.
 //
 // The mock provider's live ID token is fixed to email "test-user@email.com" and sub
-// "test-user-id", and VerifyUsername requires the session username to match that email,
-// so the session uses that username; the pre-existing provider ID directory standing in
-// for the prior login is what exercises the redirect.
+// "test-user-id"; the pre-existing provider ID directory standing in for the prior
+// login is what exercises the redirect.
 func TestDeviceAuthRedirectsToExistingProviderIDDir(t *testing.T) {
 	t.Parallel()
 
@@ -6365,15 +6529,6 @@ func TestEnsureProviderIDCacheDir(t *testing.T) {
 	}{
 		"No_op_when_provider_ID_is_empty": {
 			providerIDOverride:    "-",
-			createUsernameDir:     true,
-			wantUsernameDirExists: true,
-			wantIssuerTree: map[string]string{
-				"user@example.com":            "dir",
-				"user@example.com/token.json": "file",
-			},
-		},
-		"No_op_when_provider_ID_contains_path_traversal": {
-			providerIDOverride:    "../escape",
 			createUsernameDir:     true,
 			wantUsernameDirExists: true,
 			wantIssuerTree: map[string]string{
@@ -7217,12 +7372,9 @@ func TestIsAuthenticatedEntraAuthUsesAccessTokenIdentity(t *testing.T) {
 	require.Equal(t, "access-token-user-id", cached.UserInfo.ProviderID)
 }
 
-// TestIsAuthenticatedEntraAuthDeniesOnUsernameMismatch verifies the first-login
-// identity cross-check: when the access-token identity does not match the
-// username the user authenticated as, VerifyUsername fails and the login is
-// denied. This is the first-login counterpart to the refresh-path mismatch test
-// (TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnUsernameMismatch).
-func TestIsAuthenticatedEntraAuthDeniesOnUsernameMismatch(t *testing.T) {
+// TestIsAuthenticatedEntraAuthAllowsUsernameChange verifies that an Entra access
+// token can return the same provider identity under a new username.
+func TestIsAuthenticatedEntraAuthAllowsUsernameChange(t *testing.T) {
 	t.Parallel()
 
 	username := "test-user@email.com"
@@ -7235,7 +7387,7 @@ func TestIsAuthenticatedEntraAuthDeniesOnUsernameMismatch(t *testing.T) {
 			PollingIntervalMs: 1,
 			MaxPollAttempts:   1,
 		},
-		accessTokenUserInfo: &info.User{Name: "someone-else@email.com", ProviderID: "different-user-id"},
+		accessTokenUserInfo: &info.User{Name: "renamed-user@email.com", ProviderID: "saved-user-id"},
 		mfaTokenResult:      newMFATokenResult(mfaAuthInfo.Token),
 	}
 
@@ -7247,13 +7399,156 @@ func TestIsAuthenticatedEntraAuthDeniesOnUsernameMismatch(t *testing.T) {
 		issuerURL:             defaultIssuerURL,
 	})
 
-	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	sessionID, key, err := b.NewSession(username, "some lang", sessionmode.Login, "saved-user-id")
+	require.NoError(t, err)
 	advanceToEntraMFAWait(t, b, sessionID, key)
 
 	access, _, err := b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
-	require.Equal(t, broker.AuthDenied, access,
-		"a first-login MFA access token whose identity does not match the session username must be denied")
+	require.Equal(t, broker.AuthGranted, access,
+		"a changed username should be accepted when the session is bound to the same provider ID")
+
+	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	require.Equal(t, "renamed-user@email.com", cached.UserInfo.Name)
+	require.Equal(t, "saved-user-id", cached.UserInfo.ProviderID)
+}
+
+func TestEntraAuthRecoversProviderRenameBack(t *testing.T) {
+	t.Parallel()
+
+	const unixName = "test-user@email.com"
+	const staleAlias = "renamed-user@email.com"
+	for _, providerID := range []string{"saved-user-id", "different-user-id", ""} {
+		t.Run("ReturnedProviderID="+providerID, func(t *testing.T) {
+			t.Parallel()
+
+			authInfo := generateCachedInfo(t, tokenOptions{username: unixName, issuer: defaultIssuerURL})
+			provider := &mockEntraAuthProvider{
+				MockProvider: &testutils.MockProvider{},
+				initUsernameErrors: map[string]error{
+					staleAlias: &himmelblau.MFAError{AADSTS: 50034},
+				},
+				flowState: &himmelblau.MFAFlowState{},
+				challengeInfo: &himmelblau.MFAChallengeInfo{
+					Message: "Approve the sign-in request", PollingIntervalMs: 1, MaxPollAttempts: 1,
+				},
+				accessTokenUserInfo: &info.User{Name: unixName, ProviderID: providerID},
+				mfaTokenResult:      newMFATokenResult(authInfo.Token),
+			}
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config: broker.Config{DataDir: t.TempDir()}, allUsersAllowed: true,
+				provider: provider, issuerURL: defaultIssuerURL,
+			})
+			sessionID, key, err := b.NewSessionForUser(staleAlias, "en", sessionmode.Login, "saved-user-id", unixName)
+			require.NoError(t, err)
+			advanceToEntraMFAWait(t, b, sessionID, key)
+			require.Equal(t, []string{staleAlias, unixName}, provider.recordedInitUsernames)
+
+			access, _, err := b.IsAuthenticated(sessionID, "{}")
+			require.NoError(t, err)
+			require.Equal(t, []string{unixName}, provider.recordedMFAUsernames,
+				"MFA must continue with the name that started the fallback flow")
+			if providerID != "saved-user-id" {
+				require.Equal(t, broker.AuthDenied, access)
+				require.NoFileExists(t, b.TokenPathForSession(sessionID))
+				require.NoFileExists(t, b.PasswordFilepathForSession(sessionID))
+				return
+			}
+			require.Equal(t, broker.AuthGranted, access)
+			cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+			require.NoError(t, err)
+			require.Equal(t, unixName, cached.UserInfo.Name)
+			require.Equal(t, providerID, cached.UserInfo.ProviderID)
+		})
+	}
+}
+
+func TestEntraAuthLimitsUnixNameFallback(t *testing.T) {
+	t.Parallel()
+
+	const staleAlias = "renamed-user@email.com"
+	const unixName = "test-user@email.com"
+	notFound := &himmelblau.MFAError{AADSTS: 50034}
+	for name, tc := range map[string]struct {
+		providerID string
+		unixName   string
+		initErr    error
+		wantNames  []string
+	}{
+		"No_provider_ID": {unixName: unixName, initErr: notFound, wantNames: []string{staleAlias}},
+		"No_Unix_name":   {providerID: "saved-user-id", initErr: notFound, wantNames: []string{staleAlias}},
+		"Same_name": {
+			providerID: "saved-user-id", unixName: strings.ToUpper(staleAlias),
+			initErr: notFound, wantNames: []string{staleAlias},
+		},
+		"Incorrect_password": {
+			providerID: "saved-user-id", unixName: unixName,
+			initErr: &himmelblau.MFAError{AADSTS: 50126}, wantNames: []string{staleAlias},
+		},
+		"Network_failure": {
+			providerID: "saved-user-id", unixName: unixName,
+			initErr: errors.New("network failure"), wantNames: []string{staleAlias},
+		},
+		"Fallback_also_not_found": {
+			providerID: "saved-user-id", unixName: unixName,
+			initErr: notFound, wantNames: []string{staleAlias, unixName},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			provider := &mockEntraAuthProvider{MockProvider: &testutils.MockProvider{}, initErr: tc.initErr}
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config: broker.Config{DataDir: t.TempDir()}, allUsersAllowed: true,
+				provider: provider, issuerURL: defaultIssuerURL,
+			})
+			sessionID, key, err := b.NewSessionForUser(staleAlias, "en", sessionmode.Login, tc.providerID, tc.unixName)
+			require.NoError(t, err)
+			updateAuthModes(t, b, sessionID, authmodes.EntraAuth)
+			access, _, err := b.IsAuthenticated(sessionID, fmt.Sprintf(`{"%s":"%s"}`,
+				broker.AuthDataSecret, encryptSecret(t, "password", key)))
+			require.NoError(t, err)
+			require.NotEqual(t, broker.AuthGranted, access)
+			require.Equal(t, tc.wantNames, provider.recordedInitUsernames)
+		})
+	}
+}
+
+func TestIsAuthenticatedEntraAuthRejectsUsernameChangeWithoutBoundProviderID(t *testing.T) {
+	t.Parallel()
+
+	username := "test-user@email.com"
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	provider := &mockEntraAuthProvider{
+		MockProvider: &testutils.MockProvider{},
+		flowState:    &himmelblau.MFAFlowState{},
+		challengeInfo: &himmelblau.MFAChallengeInfo{
+			Message:           "Approve the sign-in request",
+			PollingIntervalMs: 1,
+			MaxPollAttempts:   1,
+		},
+		accessTokenUserInfo: &info.User{Name: "renamed-user@email.com", ProviderID: "new-provider-id"},
+		mfaTokenResult:      newMFATokenResult(mfaAuthInfo.Token),
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:          broker.Config{DataDir: t.TempDir()},
+		allUsersAllowed: true,
+		provider:        provider,
+		issuerURL:       defaultIssuerURL,
+	})
+
+	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	advanceToEntraMFAWait(t, b, sessionID, key)
+
+	access, data, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthDenied, access)
+	require.Contains(t, data, username)
+	require.Contains(t, data, "renamed-user@email.com")
+	require.NoFileExists(t, b.TokenPathForSession(sessionID),
+		"a username mismatch must be rejected before caching a first-login token")
 }
 
 // TestIsAuthenticatedEntraAuthDenialsDoNotCachePassword verifies that an Entra MFA
