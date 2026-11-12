@@ -1056,12 +1056,17 @@ func (p *Provider) ClassifyRefreshTokenError(err *oauth2.RetrieveError) provider
 	switch {
 	case strings.HasPrefix(err.ErrorDescription, "AADSTS50173:"):
 		return providerErrors.RefreshTokenErrorRevoked
-	case strings.HasPrefix(err.ErrorDescription, "AADSTS50089:"):
-		return providerErrors.RefreshTokenErrorExpiredOrRevoked
 	case slices.ContainsFunc([]string{
 		"AADSTS50078:",  // MFA session expired due to sign-in frequency (Conditional Access)
-		"AADSTS70008:",  // refresh token expired due to inactivity (legacy code for AADSTS700082)
+		"AADSTS50089:",  // refresh token expired or revoked by user or admin
+		"AADSTS135011:", // device used for the original authentication is disabled
 		"AADSTS70043:",  // refresh token expired due to sign-in frequency (Conditional Access)
+	}, func(prefix string) bool {
+		return strings.HasPrefix(err.ErrorDescription, prefix)
+	}):
+		return providerErrors.RefreshTokenErrorExpiredOrRevoked
+	case slices.ContainsFunc([]string{
+		"AADSTS70008:",  // refresh token expired due to inactivity (legacy code for AADSTS700082)
 		"AADSTS700082:", // refresh token expired due to inactivity
 	}, func(prefix string) bool {
 		return strings.HasPrefix(err.ErrorDescription, prefix)
@@ -1074,5 +1079,5 @@ func (p *Provider) ClassifyRefreshTokenError(err *oauth2.RetrieveError) provider
 
 // IsUserDisabledError returns true if the reason for the error is that the user is disabled.
 func (p *Provider) IsUserDisabledError(err *oauth2.RetrieveError) bool {
-	return err.ErrorCode == "invalid_grant" && strings.HasPrefix(err.ErrorDescription, "AADSTS50057:")
+	return err != nil && err.ErrorCode == "invalid_grant" && strings.HasPrefix(err.ErrorDescription, "AADSTS50057:")
 }

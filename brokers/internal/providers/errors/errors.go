@@ -17,7 +17,8 @@ const (
 	RefreshTokenErrorExpired
 	// RefreshTokenErrorRevoked means the refresh token is known to be revoked.
 	RefreshTokenErrorRevoked
-	// RefreshTokenErrorExpiredOrRevoked means the provider cannot distinguish expiration from revocation.
+	// RefreshTokenErrorExpiredOrRevoked means the refresh result requires re-authentication
+	// instead of offline fallback, whether due to expiration, revocation, or provider policy.
 	RefreshTokenErrorExpiredOrRevoked
 )
 

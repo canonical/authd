@@ -941,11 +941,16 @@ func TestClassifyRefreshTokenError(t *testing.T) {
 		"AADSTS50078_mfa_session_expired": {
 			errorCode:        "invalid_grant",
 			errorDescription: "AADSTS50078: Presented multi-factor authentication has expired due to policies configured by your administrator.",
-			wantKind:         providerErrors.RefreshTokenErrorExpired,
+			wantKind:         providerErrors.RefreshTokenErrorExpiredOrRevoked,
 		},
 		"AADSTS50089_token_expired_or_revoked": {
 			errorCode:        "invalid_grant",
 			errorDescription: "AADSTS50089: The refresh token has expired or been revoked by the user or an administrator.",
+			wantKind:         providerErrors.RefreshTokenErrorExpiredOrRevoked,
+		},
+		"AADSTS135011_original_device_disabled": {
+			errorCode:        "invalid_grant",
+			errorDescription: "AADSTS135011: The device used during the authentication is disabled.",
 			wantKind:         providerErrors.RefreshTokenErrorExpiredOrRevoked,
 		},
 		"AADSTS50173_grant_revoked": {
@@ -961,7 +966,7 @@ func TestClassifyRefreshTokenError(t *testing.T) {
 		"AADSTS70043_token_expired": {
 			errorCode:        "invalid_grant",
 			errorDescription: "AADSTS70043: The refresh token has expired or is invalid",
-			wantKind:         providerErrors.RefreshTokenErrorExpired,
+			wantKind:         providerErrors.RefreshTokenErrorExpiredOrRevoked,
 		},
 		"AADSTS700082_token_expired_due_to_inactivity": {
 			errorCode:        "invalid_grant",
@@ -998,6 +1003,17 @@ func TestClassifyRefreshTokenError(t *testing.T) {
 			require.Equal(t, tc.wantKind, got, "ClassifyRefreshTokenError returned unexpected result")
 		})
 	}
+}
+
+func TestIsUserDisabledError(t *testing.T) {
+	t.Parallel()
+
+	p := msentraid.New()
+	require.False(t, p.IsUserDisabledError(nil))
+	require.True(t, p.IsUserDisabledError(&oauth2.RetrieveError{
+		ErrorCode:        "invalid_grant",
+		ErrorDescription: "AADSTS50057: The user account is disabled.",
+	}))
 }
 
 func TestMain(m *testing.M) {
