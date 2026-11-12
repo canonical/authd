@@ -17,6 +17,9 @@ type Provider interface {
 	AdditionalScopes() []string
 	AuthOptions() []oauth2.AuthCodeOption
 	DisplayName() string
+	// GetProviderID extracts the stable provider ID without requiring other
+	// claims that GetUserInfo may need.
+	GetProviderID(claimer info.Claimer) (string, error)
 	GetUserInfo(claimer info.Claimer, isRefresh bool) (info.User, error)
 	ClassifyRefreshTokenError(err *oauth2.RetrieveError) providerErrors.RefreshTokenErrorKind
 	NormalizeUsername(username string) string

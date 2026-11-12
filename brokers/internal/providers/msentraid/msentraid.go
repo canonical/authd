@@ -179,19 +179,24 @@ func (p *Provider) GetUserInfo(claimer info.Claimer, _ bool) (info.User, error) 
 	), nil
 }
 
+// GetProviderID returns the stable object ID from the claims.
+func (p *Provider) GetProviderID(claimer info.Claimer) (string, error) {
+	userClaims, err := p.userClaims(claimer)
+	if err != nil {
+		return "", err
+	}
+
+	return userClaims.Oid, nil
+}
+
 // UserInfoFromAccessToken extracts user info from an Entra access token's
 // claims without verifying the signature. Access tokens use oid/upn-style claims
 // rather than the OIDC preferred_username/sub pair that GetUserInfo expects, so
 // remap them first and then reuse the standard GetUserInfo path.
 func (p *Provider) UserInfoFromAccessToken(accessToken string) (info.User, error) {
-	parsed, _, err := new(jwt.Parser).ParseUnverified(accessToken, jwt.MapClaims{})
+	rawClaims, err := accessTokenClaims(accessToken)
 	if err != nil {
-		return info.User{}, fmt.Errorf("failed to parse access token claims: %w", err)
-	}
-
-	rawClaims, ok := parsed.Claims.(jwt.MapClaims)
-	if !ok {
-		return info.User{}, errors.New("failed to cast access token claims to MapClaims")
+		return info.User{}, err
 	}
 	if oid, _ := rawClaims["oid"].(string); oid != "" {
 		rawClaims["sub"] = oid
@@ -203,6 +208,32 @@ func (p *Provider) UserInfoFromAccessToken(accessToken string) (info.User, error
 	}
 
 	return p.GetUserInfo(tokenClaimer(rawClaims), false)
+}
+
+// ProviderIDFromAccessToken returns the stable object ID from an Entra access token.
+// It does not verify the token's signature.
+func (p *Provider) ProviderIDFromAccessToken(accessToken string) (string, error) {
+	rawClaims, err := accessTokenClaims(accessToken)
+	if err != nil {
+		return "", err
+	}
+
+	oid, _ := rawClaims["oid"].(string)
+	return oid, nil
+}
+
+func accessTokenClaims(accessToken string) (jwt.MapClaims, error) {
+	parsed, _, err := new(jwt.Parser).ParseUnverified(accessToken, jwt.MapClaims{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse access token claims: %w", err)
+	}
+
+	rawClaims, ok := parsed.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, errors.New("failed to cast access token claims to MapClaims")
+	}
+
+	return rawClaims, nil
 }
 
 // GetGroups retrieves the groups the user is a member of via the Microsoft Graph API.
