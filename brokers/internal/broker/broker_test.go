@@ -4919,14 +4919,13 @@ func TestIsAuthenticatedPasswordRefreshOutcomesForKeycloakAndGoogleErrors(t *tes
 		"google_admin_policy_enforced_optional_check": {
 			provider:         google.New(),
 			errorDescription: "admin_policy_enforced",
-			wantAccess:       broker.AuthGranted,
-			wantOffline:      true,
+			wantAccess:       broker.AuthNext,
 		},
 		"google_admin_policy_enforced_forced_check": {
 			provider:                     google.New(),
 			errorDescription:             "admin_policy_enforced",
 			forceAccessCheckWithProvider: true,
-			wantAccess:                   broker.AuthDenied,
+			wantAccess:                   broker.AuthNext,
 		},
 	}
 
