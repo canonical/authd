@@ -362,10 +362,11 @@ function install_broker() {
         local remote_snap
         remote_snap="/home/ubuntu/$(basename "${snap_file}")"
         "${SCP}" "${snap_file}" "${remote_snap}"
-        $SSH snap install --dangerous "${remote_snap}"
+        # The snap store is sometimes unavailable, so retry the installation.
+        retry --times 5 -- "$SSH" snap install --dangerous "${remote_snap}"
     else
         # Install the snap from the specified channel
-        $SSH snap install "${broker}" --channel="${channel}"
+        retry --times 5 -- "$SSH" snap install "${broker}" --channel="${channel}"
     fi
 
     # Configure broker and restart services
