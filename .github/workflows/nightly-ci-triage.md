@@ -5,6 +5,7 @@ on:
   schedule:
     - cron: "0 3 * * *"
   workflow_dispatch:
+if: github.repository == 'canonical/authd'
 permissions:
   contents: read
   actions: read
@@ -153,7 +154,7 @@ post-steps:
 jobs:
   verify_triage_writes:
     needs: [agent, safe_outputs]
-    if: always()
+    if: always() && github.repository == 'canonical/authd'
     # This job only reads safe-output results, even when detection warns.
     detection-gate: status-only
     runs-on: ubuntu-slim

@@ -174,7 +174,9 @@ class CollectTests(unittest.TestCase):
             workflow = (workflows / f"nightly-ci-triage.{suffix}").read_text()
             job = workflow.split("\n  verify_triage_writes:\n", 1)[1]
             job = job.split("\n\n", 1)[0].split("\n---", 1)[0]
-            self.assertIn("    if: always()\n", job)
+            self.assertIn(
+                "    if: always() && github.repository == 'canonical/authd'\n", job
+            )
             needs = job.split("    needs:", 1)[1].split("    if:", 1)[0]
             self.assertIn("agent", needs)
             self.assertIn("safe_outputs", needs)
