@@ -67,11 +67,18 @@ func hasNonEmptyStringClaim(claimer info.Claimer, claim string) (bool, error) {
 
 // ClassifyRefreshTokenError classifies known errors from the token endpoint.
 func (Provider) ClassifyRefreshTokenError(err *oauth2.RetrieveError) providerErrors.RefreshTokenErrorKind {
-	if err == nil || err.ErrorCode != "invalid_grant" {
+	if err == nil {
+		return providerErrors.RefreshTokenErrorUnknown
+	}
+	if err.ErrorCode == "admin_policy_enforced" {
+		return providerErrors.RefreshTokenErrorExpiredOrRevoked
+	}
+	if err.ErrorCode != "invalid_grant" {
 		return providerErrors.RefreshTokenErrorUnknown
 	}
 
-	if strings.Contains(err.ErrorDescription, "Token has been expired or revoked") {
+	if strings.Contains(err.ErrorDescription, "Token has been expired or revoked") ||
+		strings.Contains(err.ErrorDescription, "admin_policy_enforced") {
 		return providerErrors.RefreshTokenErrorExpiredOrRevoked
 	}
 

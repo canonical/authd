@@ -118,7 +118,8 @@ func TestClassifyRefreshTokenError(t *testing.T) {
 		"Non_invalid_grant_error":           {errorCode: "access_denied", errorDescription: "Token has been expired or revoked.", wantKind: providerErrors.RefreshTokenErrorUnknown},
 		"Unknown_invalid_grant_description": {errorCode: "invalid_grant", errorDescription: "The user has not consented to the application.", wantKind: providerErrors.RefreshTokenErrorUnknown},
 		"Empty_description":                 {errorCode: "invalid_grant", errorDescription: "", wantKind: providerErrors.RefreshTokenErrorUnknown},
-		"Admin_policy_enforced":             {errorCode: "invalid_grant", errorDescription: "admin_policy_enforced", wantKind: providerErrors.RefreshTokenErrorUnknown},
+		"Admin_policy_enforced_description": {errorCode: "invalid_grant", errorDescription: "admin_policy_enforced", wantKind: providerErrors.RefreshTokenErrorExpiredOrRevoked},
+		"Admin_policy_enforced_code":        {errorCode: "admin_policy_enforced", wantKind: providerErrors.RefreshTokenErrorExpiredOrRevoked},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
