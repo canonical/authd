@@ -74,9 +74,9 @@ mcp-scripts:
 safe-outputs:
   report-failure-as-issue: false
   report-failed-jobs: false
-  missing-tool:
+  report-missing-tool:
     create-issue: false
-  missing-data:
+  report-missing-data:
     create-issue: false
   report-incomplete:
     create-issue: false
@@ -95,7 +95,7 @@ jobs:
     steps:
       - name: Find the last successful scan
         id: window
-        uses: actions/github-script@v9
+        uses: actions/github-script@v9.0.0
         with:
           script: |
             const {owner, repo} = context.repo;
