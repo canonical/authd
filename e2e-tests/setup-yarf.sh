@@ -13,7 +13,12 @@ git -C "${SCRIPT_DIR}/.." submodule update --init --depth=1 e2e-tests/.yarf
 # Install uv snap if not already installed
 if ! command -v uv &> /dev/null; then
     echo "Installing uv snap..."
-    sudo snap install --classic astral-uv
+    # The snap store is sometimes unavailable, so retry the installation.
+    if command -v retry &> /dev/null; then
+        retry --times 5 -- sudo snap install --classic astral-uv
+    else
+        sudo snap install --classic astral-uv
+    fi
 else
     echo "uv snap already installed"
 fi
