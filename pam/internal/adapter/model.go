@@ -71,6 +71,8 @@ type uiModel struct {
 	sessionStartingForBroker string
 	userIsBoundToBroker      bool
 	currentSession           *sessionInfo
+	// pendingAuthModes holds the response until GDM acknowledges authModeSelection.
+	pendingAuthModes *authModesReceived
 
 	healthCheckCancel      func()
 	userSelectionModel     userSelectionModel
@@ -125,6 +127,10 @@ type SessionEnded struct{}
 // ChangeStage signals that the model requires a stage change.
 type ChangeStage struct {
 	Stage proto.Stage
+
+	// authModesSessionID requests a completion signal so local mode selection
+	// can wait until GDM acknowledges this stage change.
+	authModesSessionID string
 }
 
 // StageChanged signals that the model just finished a stage change.
@@ -261,7 +267,7 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.canGoBack() {
 				return m, nil
 			}
-			return m, sendEvent(ChangeStage{m.previousStage()})
+			return m, sendEvent(ChangeStage{Stage: m.previousStage()})
 		}
 
 	case initHealthCheck:
@@ -322,6 +328,8 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SessionStarted:
 		safeMessageDebug(msg)
 		m.sessionStartingForBroker = ""
+		m.pendingAuthModes = nil
+		m.authModeSelectionModel.Reset()
 		if m.clientType == Gdm {
 			m.gdmModel.pendingEchoAuthModeID = ""
 		}
@@ -357,12 +365,18 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ChangeStage:
 		safeMessageDebug(msg)
+		if msg.authModesSessionID != "" &&
+			(m.currentSession == nil || m.currentSession.sessionID != msg.authModesSessionID) {
+			log.Debugf(context.TODO(), "Ignoring stale GDM stage change for session %q",
+				msg.authModesSessionID)
+			return m, nil
+		}
 		// If the user is bound to a broker, skip broker selection when navigating
 		// back (e.g. GDM sends StageChanged{brokerSelection} on back-navigation).
 		if msg.Stage == proto.Stage_brokerSelection && m.userIsBoundToBroker {
 			msg.Stage = proto.Stage_userSelection
 		}
-		return m, m.changeStage(msg.Stage)
+		return m, m.changeStage(msg)
 
 	case StageChanged:
 		safeMessageDebug(msg)
@@ -393,7 +407,12 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, getModesCmd
 		}
 
-		changeStageCmd := sendEvent(ChangeStage{proto.Stage_authModeSelection})
+		changeStage := ChangeStage{Stage: proto.Stage_authModeSelection}
+		if m.clientType == Gdm {
+			// Hold local selection until GDM acknowledges this stage change.
+			changeStage.authModesSessionID = m.currentSession.sessionID
+		}
+		changeStageCmd := sendEvent(changeStage)
 
 		// For native/SSH mode during MFA (auth.Next), the stage is still
 		// "challenge". We need to transition through authModeSelection so
@@ -410,6 +429,50 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m, tea.Sequence(getModesCmd, changeStageCmd)
 
+	case gdmAuthModesStageReady:
+		pending := m.pendingAuthModes
+		if pending == nil || pending.sessionID != msg.sessionID {
+			return m, nil
+		}
+		m.pendingAuthModes = nil
+		if m.currentSession == nil || m.currentSession.sessionID != msg.sessionID {
+			log.Debugf(context.TODO(), "Ignoring authentication modes for ended session %q", msg.sessionID)
+			return m, nil
+		}
+		authModes := *pending
+		authModes.stageReady = true
+		return m, sendEvent(authModes)
+
+	case authModesReceived:
+		if m.clientType != Gdm {
+			break
+		}
+		if msg.stageReady {
+			if m.currentSession == nil || m.currentSession.sessionID != msg.sessionID {
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.authModeSelectionModel, cmd = m.authModeSelectionModel.Update(msg)
+			return m, cmd
+		}
+		if msg.sessionID == "" {
+			return m, sendEvent(pamError{
+				status: pam.ErrSystem,
+				msg:    "missing session ID for GDM authentication modes",
+			})
+		}
+		if m.currentSession == nil || m.currentSession.sessionID != msg.sessionID {
+			log.Debugf(context.TODO(), "Ignoring authentication modes for superseded session %q", msg.sessionID)
+			return m, nil
+		}
+		// GDM receives the mode list now. Hold the local selection until its
+		// stage-change acknowledgement arrives.
+		pending := msg
+		m.pendingAuthModes = &pending
+		var cmd tea.Cmd
+		m.gdmModel, cmd = m.gdmModel.Update(msg)
+		return m, cmd
+
 	case AuthModeSelected:
 		safeMessageDebug(msg)
 		if m.currentSession == nil {
@@ -425,6 +488,7 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				msg:    "reselection of current auth mode without current ID",
 			})
 		}
+		m.authModeSelectionModel.pendingAutoSelectedAuthModeID = ""
 		return m, tea.Sequence(
 			m.updateClientModel(msg),
 			getLayout(m.client, m.currentSession.sessionID, msg.ID),
@@ -451,6 +515,8 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		safeMessageDebug(msg)
 		m.sessionStartingForBroker = ""
 		m.currentSession = nil
+		m.pendingAuthModes = nil
+		m.authModeSelectionModel.Reset()
 		if m.clientType == Gdm {
 			m.gdmModel.pendingEchoAuthModeID = ""
 		}
@@ -552,9 +618,17 @@ func (m uiModel) currentStage() proto.Stage {
 }
 
 // changeStage returns a command acting to change the current stage and reset any previous views.
-func (m *uiModel) changeStage(s proto.Stage) tea.Cmd {
+func (m *uiModel) changeStage(change ChangeStage) tea.Cmd {
+	s := change.Stage
 	var commands []tea.Cmd
 	currentStage := m.currentStage()
+
+	if currentStage == s && change.authModesSessionID != "" {
+		return sendEvent(StageChanged{
+			Stage:              s,
+			authModesSessionID: change.authModesSessionID,
+		})
+	}
 
 	if currentStage != s {
 		switch currentStage {
@@ -594,7 +668,10 @@ func (m *uiModel) changeStage(s proto.Stage) tea.Cmd {
 	}
 
 	if currentStage != s {
-		commands = append(commands, sendEvent(StageChanged{s}))
+		commands = append(commands, sendEvent(StageChanged{
+			Stage:              s,
+			authModesSessionID: change.authModesSessionID,
+		}))
 	}
 
 	return tea.Sequence(commands...)
