@@ -22,11 +22,15 @@ launchpad_sources() {
     local series="$1"
     local pocket="$2"
     local encoded_series
+    local response
 
     encoded_series="$(jq -rn \
         --arg series "https://api.launchpad.net/1.0/ubuntu/${series}" \
         '$series | @uri')"
 
+    # Write to a file so curl can truncate a partial body before a retry.
+    response="$(mktemp)"
+    trap 'rm -f "${response}"' RETURN
     curl \
         --fail \
         --location \
@@ -35,7 +39,9 @@ launchpad_sources() {
         --retry-delay 10 \
         --silent \
         --show-error \
-        "${UBUNTU_ARCHIVE}?ws.op=getPublishedSources&source_name=gnome-shell&distro_series=${encoded_series}&pocket=${pocket}&status=Published&ws.size=100"
+        --output "${response}" \
+        "${UBUNTU_ARCHIVE}?ws.op=getPublishedSources&source_name=gnome-shell&distro_series=${encoded_series}&pocket=${pocket}&status=Published&ws.size=100" || return $?
+    cat "${response}"
 }
 
 source_versions() {
