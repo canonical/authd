@@ -1,4 +1,8 @@
 ---
+# Keep gh-aw compiler output unchanged.
+exclude:
+  - '.github/workflows/issue-backlog-cleanup.lock.yml'
+  - '.github/workflows/nightly-ci-triage.lock.yml'
 formatter:
   trim_trailing_whitespace: true
   retain_line_breaks: true
