@@ -145,7 +145,7 @@ post-steps:
       PY
   - name: Upload CI triage manifests
     if: always()
-    uses: actions/upload-artifact@v7
+    uses: actions/upload-artifact@v7.0.2
     with:
       name: ci-triage-manifests
       path: /tmp/gh-aw/ci-triage/*.json
