@@ -30,8 +30,9 @@ launchpad_sources() {
     curl \
         --fail \
         --location \
-        --retry 3 \
-        --retry-delay 5 \
+        --retry 5 \
+        --retry-all-errors \
+        --retry-delay 10 \
         --silent \
         --show-error \
         "${UBUNTU_ARCHIVE}?ws.op=getPublishedSources&source_name=gnome-shell&distro_series=${encoded_series}&pocket=${pocket}&status=Published&ws.size=100"
