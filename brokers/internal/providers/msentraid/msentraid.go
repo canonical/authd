@@ -165,6 +165,9 @@ func (p *Provider) GetUserInfo(claimer info.Claimer, _ bool) (info.User, error) 
 	if stableID == "" {
 		return info.User{}, fmt.Errorf("oid claim is missing from the ID token")
 	}
+	if userClaims.PreferredUserName == "" {
+		return info.User{}, providerErrors.NewMissingClaimError("preferred_username")
+	}
 
 	return info.NewUser(
 		userClaims.PreferredUserName,
