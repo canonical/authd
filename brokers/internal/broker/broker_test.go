@@ -110,6 +110,13 @@ func (p *mockEntraAuthProvider) UserInfoFromAccessToken(_ string) (info.User, er
 	return info.NewUser("test-user@email.com", "", "test-user-id", "", "test-user", nil), nil
 }
 
+func (p *mockEntraAuthProvider) ProviderIDFromAccessToken(_ string) (string, error) {
+	if p.accessTokenUserInfo != nil {
+		return p.accessTokenUserInfo.ProviderID, nil
+	}
+	return "test-user-id", nil
+}
+
 type mockProviderWithEntraModes struct {
 	*testutils.MockProvider
 }
@@ -5350,6 +5357,47 @@ func runReturningEntraAuthLogin(t *testing.T, provider *mockEntraAuthProvider, f
 	return b, sessionID, access
 }
 
+func TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnProviderIDMismatchBeforeUserInfoError(t *testing.T) {
+	t.Parallel()
+
+	const correctPassword = "password"
+	provider := &mockEntraAuthProvider{
+		MockProvider: &testutils.MockProvider{},
+		refreshResult: &oauth2.Token{
+			AccessToken:  "new-access-token",
+			RefreshToken: "new-refresh-token",
+		},
+		accessTokenUserInfo:  &info.User{ProviderID: "attacker-user-id"},
+		userInfoFromTokenErr: errors.New("missing preferred_username claim"),
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+	})
+	sessionID, key, err := b.NewSession("test-user@email.com", "lang", sessionmode.Login, "test-user-id")
+	require.NoError(t, err)
+	seeded := generateCachedInfo(t, tokenOptions{obtainedViaEntraAuth: true})
+	require.NoError(t, token.CacheAuthInfo(b.TokenPathForSession(sessionID), seeded))
+	before, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+	updateAuthModes(t, b, sessionID, authmodes.Password)
+	authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+	access, _, err := b.IsAuthenticated(sessionID, authData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthDenied, access,
+		"a refreshed Entra token with a different provider ID must be denied before user-info extraction")
+
+	after, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	require.Equal(t, before, after, "a provider ID mismatch must leave the cached token unchanged")
+}
+
 // TestIsAuthenticatedPasswordEntraTokenRefreshPreservesRotationOnUserInfoError
 // verifies that a local failure after a successful Entra refresh still persists
 // the rotated refresh token. Otherwise the cache can be stranded with a refresh
@@ -5446,6 +5494,45 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnUsernameMismatch(t *tes
 		"a local username verification failure must not discard an already-rotated refresh token")
 }
 
+func TestIsAuthenticatedPasswordRefreshDeniesOnIDTokenProviderIDMismatchBeforeUserInfoRecovery(t *testing.T) {
+	t.Parallel()
+
+	const correctPassword = "password"
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		customHandlers: map[string]testutils.EndpointHandler{
+			"/userinfo": testutils.ErrorResponseHandler(http.StatusServiceUnavailable, `{"error":"unavailable"}`),
+		},
+		tokenHandlerOptions: &testutils.TokenHandlerOptions{
+			DeleteClaims: []string{"must-have-claim"},
+			IDTokenClaims: []map[string]interface{}{
+				{"sub": "attacker-provider-id"},
+			},
+		},
+	})
+
+	sessionID, key, err := b.NewSession("test-user@email.com", "lang", sessionmode.Login, "test-user-id")
+	require.NoError(t, err)
+	seeded := generateCachedInfo(t, tokenOptions{})
+	require.NoError(t, token.CacheAuthInfo(b.TokenPathForSession(sessionID), seeded))
+	before, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+	updateAuthModes(t, b, sessionID, authmodes.Password)
+	authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+	access, _, err := b.IsAuthenticated(sessionID, authData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthDenied, access,
+		"a verified ID token with a different provider ID must be denied before UserInfo recovery")
+
+	after, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	require.Equal(t, before, after, "a provider ID mismatch must leave the cached token unchanged")
+}
+
 // TestIsAuthenticatedPasswordRefreshFallsBackOnUserInfoSubMismatch verifies
 // that a UserInfo subject mismatch during a returning login (a sign that the
 // /userinfo response cannot be trusted, not that the user's access was
@@ -5481,12 +5568,13 @@ func TestIsAuthenticatedPasswordRefreshFallsBackOnUserInfoSubMismatch(t *testing
 				tokenHandlerOptions: &testutils.TokenHandlerOptions{
 					DeleteClaims: []string{"must-have-claim"},
 					IDTokenClaims: []map[string]interface{}{
-						{"sub": "attacker-provider-id"},
+						{"sub": "test-user-id"},
 					},
 				},
 			})
 
-			sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+			sessionID, key, err := b.NewSession("test-user@email.com", "lang", sessionmode.Login, "test-user-id")
+			require.NoError(t, err)
 			seeded := generateCachedInfo(t, tokenOptions{})
 			require.NoError(t, token.CacheAuthInfo(b.TokenPathForSession(sessionID), seeded))
 			require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))

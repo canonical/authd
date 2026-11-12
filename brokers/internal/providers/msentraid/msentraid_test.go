@@ -138,6 +138,14 @@ func TestGetUserInfo(t *testing.T) {
 	}
 }
 
+func TestGetProviderID(t *testing.T) {
+	t.Parallel()
+
+	providerID, err := msentraid.New().GetProviderID(validIDToken)
+	require.NoError(t, err)
+	require.Equal(t, "valid-oid", providerID)
+}
+
 func TestUserInfoFromAccessToken(t *testing.T) {
 	t.Parallel()
 
@@ -163,7 +171,12 @@ func TestUserInfoFromAccessToken_MissingPreferredUsername(t *testing.T) {
 	accessTokenStr, err := accessToken.SignedString(testutils.MockKey)
 	require.NoError(t, err, "Failed to sign access token")
 
-	_, err = msentraid.New().UserInfoFromAccessToken(accessTokenStr)
+	provider := msentraid.New()
+	providerID, err := provider.ProviderIDFromAccessToken(accessTokenStr)
+	require.NoError(t, err)
+	require.Equal(t, "saved-user-id", providerID)
+
+	_, err = provider.UserInfoFromAccessToken(accessTokenStr)
 	var missingClaimErr *providerErrors.MissingClaimError
 	require.ErrorAs(t, err, &missingClaimErr)
 	require.Equal(t, "preferred_username", missingClaimErr.Claim)

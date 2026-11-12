@@ -3086,6 +3086,15 @@ func (b *Broker) refreshEntraToken(ctx context.Context, session *session, oldTok
 		}
 	}
 
+	providerID, err := ep.ProviderIDFromAccessToken(newTok.AccessToken)
+	if err != nil {
+		cacheRotatedToken("provider ID extraction failure")
+		return oldToken, fmt.Errorf("could not extract provider ID from refreshed Entra token: %w", err)
+	}
+	if err := session.verifyProviderID(providerID); err != nil {
+		return oldToken, err
+	}
+
 	// Refresh user info from the refreshed access token's claims. Keep cached
 	// gecos if the token omits one, and keep groups (those are refreshed separately
 	// by getGroups).
@@ -3201,6 +3210,13 @@ func (b *Broker) getUserInfo(ctx context.Context, session *session, token *oauth
 			return info.User{}, fmt.Errorf("could not verify token: %w", verifyErr)
 		}
 		claims = idToken
+		providerID, providerIDErr := b.provider.GetProviderID(claims)
+		if providerIDErr != nil {
+			return info.User{}, fmt.Errorf("could not get provider ID from ID token: %w", providerIDErr)
+		}
+		if err = session.verifyProviderID(providerID); err != nil {
+			return info.User{}, err
+		}
 	}
 
 	userInfo, err = b.provider.GetUserInfo(claims, isRefresh)

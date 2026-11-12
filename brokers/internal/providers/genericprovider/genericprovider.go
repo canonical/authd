@@ -86,6 +86,17 @@ func (p GenericProvider) GetUserInfo(claimer info.Claimer, _ bool) (info.User, e
 	), nil
 }
 
+// GetProviderID returns the stable subject identifier from the claims.
+func (p GenericProvider) GetProviderID(claimer info.Claimer) (string, error) {
+	var claimsMap map[string]interface{}
+	if err := claimer.Claims(&claimsMap); err != nil {
+		return "", fmt.Errorf("failed to get ID token claims: %v", err)
+	}
+
+	providerID, _ := claimsMap["sub"].(string)
+	return providerID, nil
+}
+
 // NormalizeUsername parses a username into a normalized version.
 func (p GenericProvider) NormalizeUsername(username string) string {
 	return username
