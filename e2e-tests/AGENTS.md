@@ -72,6 +72,26 @@ timeout), so it needs no extra wrapping; reserve `Wait Until Keyword Succeeds`
 for the non-OCR checks that don't retry on their own. Only fall back to a fixed
 sleep when there is genuinely no observable signal to poll on.
 
+## Keep test bodies high-level
+
+Write test cases as readable sequences of named, high-level keywords. Extract
+shell commands, output parsing, and repeated checks into keywords that describe
+their intent. See these existing examples:
+
+- [ssh_login.robot](tests/ssh_login.robot) expresses login and account checks
+  through shared keywords, with broker configuration in a suite-specific setup.
+- [regenerate_qrcode.robot](tests/regenerate_qrcode.robot) uses the suite-specific
+  `Get New Device Code` keyword to keep code extraction and comparison out of
+  the test body.
+- [login_entra_passwordless.robot](tests/login_entra_passwordless.robot) keeps
+  each login attempt and its TAP cleanup in `Run Passwordless Login Attempt`,
+  leaving the retry loop and account checks in the test body.
+
+Keep suite-specific keywords in the test file's `*** Keywords ***` section.
+Put reusable helpers in the matching shared resource, such as
+`resources/authd.resource` for authd service checks. Build these helpers from
+existing keywords where possible.
+
 ## The authoring loop
 
 1. **Model on the closest existing test.** Find the `.robot` file under `tests/`
