@@ -1666,6 +1666,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 			case errors.As(err, &authoritativeErr):
 				// Preserve a displayable authoritative error and deny instead of
 				// falling back to cached credentials.
+				log.Errorf(context.Background(), "Token refresh denied for user %q: %s", session.username, err)
 				return AuthDenied, errorMessageForDisplay(err, "Failed to refresh token")
 			case isConfigurationRetrieveError(retrieveErr):
 				// The broker's own client registration is rejected by the token
@@ -1692,6 +1693,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 				authInfo = oldAuthInfo
 				session.isOffline = true
 			} else {
+				log.Errorf(context.Background(), "Failed to refresh token for user %q: %s", session.username, err)
 				return AuthDenied, errorMessageForDisplay(err, "Failed to refresh token")
 			}
 		}
