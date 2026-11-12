@@ -3,10 +3,15 @@ package brokers
 import (
 	"context"
 	"encoding/xml"
+	"errors"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/canonical/authd/internal/services/errmessages"
+	"github.com/canonical/authd/internal/testutils"
 	"github.com/canonical/authd/log"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
@@ -61,6 +66,222 @@ func introspectionXML(interfaces ...string) string {
 	}
 	data, _ := xml.Marshal(node)
 	return string(data)
+}
+
+type ownerChangeBrokerMock struct{}
+
+func (ownerChangeBrokerMock) NewSession(username, lang, mode, providerID string) (string, string, *dbus.Error) {
+	return providerID, username, nil
+}
+
+func (ownerChangeBrokerMock) DeleteUser(username, providerID string) *dbus.Error {
+	if username != "renamed-user" || providerID != "provider-id" {
+		return dbus.MakeFailedError(fmt.Errorf("unexpected deletion identity: %q, %q", username, providerID))
+	}
+	return nil
+}
+
+func TestInterfaceRefreshesWhenBrokerOwnerChanges(t *testing.T) {
+	t.Parallel()
+
+	const busName = "com.ubuntu.authd.OwnerChangeTest"
+	const objectPath = dbus.ObjectPath("/com/ubuntu/authd/OwnerChangeTest")
+	connect := func() *dbus.Conn {
+		t.Helper()
+		conn, err := testutils.GetSystemBusConnection(t)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = conn.Close() })
+		return conn
+	}
+	exportInterface := func(conn *dbus.Conn, version string) {
+		t.Helper()
+		require.NoError(t, conn.Export(introspect.NewIntrospectable(&introspect.Node{
+			Name: string(objectPath),
+			Interfaces: []introspect.Interface{
+				introspect.IntrospectData,
+				{Name: DbusBaseInterface + version},
+			},
+		}), objectPath, introspect.IntrospectData.Name))
+	}
+	claimName := func(conn *dbus.Conn) {
+		t.Helper()
+		reply, err := conn.RequestName(busName, dbus.NameFlagDoNotQueue)
+		require.NoError(t, err)
+		require.Equal(t, dbus.RequestNameReplyPrimaryOwner, reply)
+	}
+
+	original, upgraded, client := connect(), connect(), connect()
+	exportInterface(original, "2")
+	claimName(original)
+	b := dbusBroker{bus: client, dbusObject: client.Object(busName, objectPath)}
+	first, err := b.resolveInterface(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, uint(2), first.version)
+
+	exportInterface(original, "3")
+	cached, err := b.resolveInterface(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, first, cached, "the interface should stay cached while the owner is unchanged")
+
+	exportInterface(upgraded, "3")
+	require.NoError(t, upgraded.Export(ownerChangeBrokerMock{}, objectPath, DbusBaseInterface+"3"))
+	_, err = original.ReleaseName(busName)
+	require.NoError(t, err)
+	claimName(upgraded)
+
+	var originalCalls, upgradedCalls atomic.Uint32
+	for conn, calls := range map[*dbus.Conn]*atomic.Uint32{original: &originalCalls, upgraded: &upgradedCalls} {
+		require.NoError(t, conn.ExportMethodTable(map[string]interface{}{
+			"NewSession": func(username, lang, mode string) (string, string, *dbus.Error) {
+				calls.Add(1)
+				return "session-id", "encryption-key", nil
+			},
+		}, objectPath, first.name))
+	}
+
+	_, err = b.callOnInterface(context.Background(), first, "NewSession", "renamed-user", "en", "login")
+	require.NoError(t, err)
+	require.Equal(t, uint32(1), originalCalls.Load(), "dispatch must use the owner resolved before the name transfer")
+	require.Zero(t, upgradedCalls.Load(), "the replacement owner must not receive arguments selected for the old owner")
+
+	sessionID, _, err := b.NewSession(context.Background(), "renamed-user", "en", "login", "provider-id")
+	require.NoError(t, err, "login should use the upgraded API without restarting authd")
+	require.Equal(t, "provider-id", sessionID, "the upgraded broker must receive the stable provider ID")
+	require.Equal(t, uint(3), b.iface.version)
+	require.NotEqual(t, first.owner, b.iface.owner)
+	require.NoError(t, b.DeleteUser(context.Background(), "renamed-user", "provider-id"))
+
+	_, err = upgraded.ReleaseName(busName)
+	require.NoError(t, err)
+	_, err = b.resolveInterface(context.Background())
+	require.Error(t, err, "an unavailable broker must not reuse a cached interface")
+	require.Empty(t, b.iface)
+
+	exportInterface(original, "2")
+	claimName(original)
+	downgraded, err := b.resolveInterface(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, uint(2), downgraded.version, "a broker rollback should also refresh the API")
+}
+
+func TestResolveInterfaceHonorsCancellation(t *testing.T) {
+	t.Parallel()
+
+	for _, method := range []string{"GetNameOwner", "StartServiceByName", "Introspect"} {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+
+			var serial atomic.Uint32
+			blocked := make(chan struct{})
+			release := make(chan struct{})
+			unblock := sync.OnceFunc(func() { close(release) })
+			t.Cleanup(unblock)
+			blockReply := sync.OnceFunc(func() {
+				close(blocked)
+				<-release
+			})
+
+			client, err := dbus.ConnectSystemBus(
+				dbus.WithOutgoingInterceptor(func(msg *dbus.Message) {
+					if msg.Type == dbus.TypeMethodCall && msg.Headers[dbus.FieldMember].Value() == method {
+						serial.Store(msg.Serial())
+					}
+				}),
+				dbus.WithIncomingInterceptor(func(msg *dbus.Message) {
+					if serial.Load() != 0 && msg.Headers[dbus.FieldReplySerial].Value() == serial.Load() {
+						blockReply()
+					}
+				}),
+			)
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				unblock()
+				_ = client.Close()
+			})
+
+			name := "com.ubuntu.authd.CancellationTest"
+			path := dbus.ObjectPath("/com/ubuntu/authd/CancellationTest")
+			if method == "Introspect" {
+				name = "org.freedesktop.DBus"
+				path = "/org/freedesktop/DBus"
+			}
+			b := dbusBroker{
+				name:       "mybroker",
+				bus:        client,
+				dbusObject: client.Object(name, path),
+				iface:      dbusInterface{name: DbusBaseInterface + "2", version: 2, owner: ":stopped"},
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			done := make(chan error, 1)
+			go func() {
+				_, err := b.UserPreCheck(ctx, "user@example.com")
+				done <- err
+			}()
+
+			// Real D-Bus I/O cannot use synctest; bound failures without delaying successful tests.
+			watchdog, stop := context.WithTimeout(t.Context(), 5*time.Second)
+			defer stop()
+			select {
+			case <-blocked:
+			case <-watchdog.Done():
+				t.Fatal("D-Bus call did not reach the blocked reply")
+			}
+			cancel()
+			select {
+			case err := <-done:
+				require.ErrorIs(t, err, context.Canceled)
+				require.NotContains(t, err.Error(), "Couldn't connect to broker")
+			case <-watchdog.Done():
+				t.Fatal("interface resolution ignored request cancellation")
+			}
+			require.Empty(t, b.iface, "cancellation must not retain an old interface")
+			unblock()
+
+			_, err = b.resolveInterface(watchdog)
+			require.Error(t, err)
+			require.NotErrorIs(t, err, context.DeadlineExceeded, "cancellation must release the interface lock")
+		})
+	}
+}
+
+func TestDbusBrokerInterfaceResolutionErrors(t *testing.T) {
+	t.Parallel()
+
+	for _, method := range []string{"NewSession", "DeleteUser", "UserPreCheck"} {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+
+			for _, cause := range []error{context.Canceled, context.DeadlineExceeded, fmt.Errorf("connection refused")} {
+				t.Run(cause.Error(), func(t *testing.T) {
+					t.Parallel()
+
+					b := dbusBroker{
+						name:       "mybroker",
+						dbusObject: &mockBusObject{callErr: fmt.Errorf("introspection failed: %w", cause)},
+					}
+					var err error
+					switch method {
+					case "NewSession":
+						_, _, err = b.NewSession(t.Context(), "user@example.com", "en", "login", "provider-id")
+					case "DeleteUser":
+						err = b.DeleteUser(t.Context(), "user@example.com", "provider-id")
+					case "UserPreCheck":
+						_, err = b.UserPreCheck(t.Context(), "user@example.com")
+					}
+					require.Error(t, err)
+					if errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
+						require.ErrorIs(t, err, cause)
+						require.NotContains(t, err.Error(), "Couldn't connect to broker")
+						return
+					}
+					require.Contains(t, err.Error(), "Couldn't connect to broker \"mybroker\"")
+					require.Contains(t, err.Error(), cause.Error())
+					require.ErrorAs(t, err, &brokerUnavailableMessageError{})
+				})
+			}
+		})
+	}
 }
 
 func TestGetInterface(t *testing.T) {
@@ -118,7 +339,7 @@ func TestGetInterface(t *testing.T) {
 				mock.introspectXML = introspectionXML(tc.interfaces...)
 			}
 
-			got, err := getInterface(mock)
+			got, err := getInterface(context.Background(), mock)
 			if tc.wantErr {
 				require.Error(t, err, "getInterface should return an error, but did not")
 				return
@@ -143,7 +364,7 @@ func TestGetInterfaceIgnoresUnrelatedInterfacesWithoutWarning(t *testing.T) {
 		),
 	}
 
-	got, err := getInterface(mock)
+	got, err := getInterface(context.Background(), mock)
 	require.NoError(t, err)
 	require.Equal(t, dbusInterface{name: "com.ubuntu.authd.Broker2", version: 2}, got)
 	require.Empty(t, warnings, "unrelated interfaces should not produce warnings")
