@@ -10,6 +10,7 @@ on:
       - ".ruff-requirements.txt"
       - ".github/uv-requirements.txt"
       - "**/*.py"
+      - "brokers/conf/variants/**"
       - "e2e-tests/vm/**"
   pull_request:
     paths: *paths
@@ -44,3 +45,4 @@ jobs:
           python3 -m unittest discover -s e2e-tests -p 'test_*.py'
           python3 -m unittest discover -s e2e-tests/resources -p 'test_*.py'
           python3 -m unittest discover -s e2e-tests/vm -p 'test_*.py'
+          python3 -m unittest discover -s .workshop/authd/tests -p 'test_*.py'
