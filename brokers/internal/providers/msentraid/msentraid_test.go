@@ -154,6 +154,21 @@ func TestUserInfoFromAccessToken(t *testing.T) {
 	require.Equal(t, info.NewUser("test-user@email.com", "", "saved-user-id", "", "test-user", nil), got)
 }
 
+func TestUserInfoFromAccessToken_MissingPreferredUsername(t *testing.T) {
+	t.Parallel()
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"oid": "saved-user-id",
+	})
+	accessTokenStr, err := accessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err, "Failed to sign access token")
+
+	_, err = msentraid.New().UserInfoFromAccessToken(accessTokenStr)
+	var missingClaimErr *providerErrors.MissingClaimError
+	require.ErrorAs(t, err, &missingClaimErr)
+	require.Equal(t, "preferred_username", missingClaimErr.Claim)
+}
+
 func TestUserInfoFromAccessToken_MissingOID(t *testing.T) {
 	t.Parallel()
 
