@@ -77,9 +77,10 @@ type mockEntraAuthProvider struct {
 	registerDeviceCalls           int
 	refreshResult                 *oauth2.Token // returned by RefreshEntraToken (defaults to a rotated token)
 	refreshErr                    error         // when set, RefreshEntraToken returns it (e.g. AADSTS50057)
-	userDisabledErrorCode         string        // when set, IsUserDisabledError matches an *oauth2.RetrieveError with this code
-	accessTokenUserInfo           *info.User    // when set, UserInfoFromAccessToken returns this user info
-	userInfoFromTokenErr          error         // when set, UserInfoFromAccessToken returns this error
+	refreshTokenErrorKind         providerErrors.RefreshTokenErrorKind
+	userDisabledErrorCode         string     // when set, IsUserDisabledError matches an *oauth2.RetrieveError with this code
+	accessTokenUserInfo           *info.User // when set, UserInfoFromAccessToken returns this user info
+	userInfoFromTokenErr          error      // when set, UserInfoFromAccessToken returns this error
 	registrationEnrollments       int
 	registrationExistingData      []byte
 	registrationExistingDataCalls [][]byte
@@ -159,6 +160,13 @@ func (p *mockEntraAuthProvider) RefreshEntraToken(_ context.Context, _, _ string
 		tok = &oauth2.Token{AccessToken: "mock-access-token", RefreshToken: "mock-rotated-refresh-token"}
 	}
 	return tok, nil
+}
+
+func (p *mockEntraAuthProvider) ClassifyRefreshTokenError(err *oauth2.RetrieveError) providerErrors.RefreshTokenErrorKind {
+	if err != nil && p.refreshTokenErrorKind != providerErrors.RefreshTokenErrorUnknown {
+		return p.refreshTokenErrorKind
+	}
+	return p.MockProvider.ClassifyRefreshTokenError(err)
 }
 
 // IsUserDisabledError lets the mock stand in as a providers.UserDisabledChecker so
@@ -4674,6 +4682,39 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshDetectsDisabledUser(t *testing.
 	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
 	require.NoError(t, err)
 	require.True(t, cached.UserIsDisabled, "UserIsDisabled must be cached after an AADSTS50057 refresh rejection")
+}
+
+func TestIsAuthenticatedPasswordEntraTokenRefreshRequiresReauthForDisabledOriginDevice(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]bool{
+		"optional_provider_check": false,
+		"forced_provider_check":   true,
+	}
+
+	for name, forceAccessCheckWithProvider := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			provider := &mockEntraAuthProvider{
+				MockProvider:          &testutils.MockProvider{},
+				refreshTokenErrorKind: providerErrors.RefreshTokenErrorExpiredOrRevoked,
+				refreshErr: &oauth2.RetrieveError{
+					ErrorCode:        "invalid_grant",
+					ErrorDescription: "AADSTS135011: The device used during the authentication is disabled.",
+				},
+			}
+
+			b, sessionID, access := runReturningEntraAuthLogin(t, provider, forceAccessCheckWithProvider)
+			require.Equal(t, broker.AuthNext, access,
+				"AADSTS135011 must require re-authentication for optional and forced provider checks")
+
+			cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+			require.NoError(t, err)
+			require.False(t, cached.DeviceIsDisabled,
+				"A token refresh rejection for the original authorization device must not disable this device")
+		})
+	}
 }
 
 func TestIsAuthenticatedPasswordGenericProviderRefreshDetectsDisabledUser(t *testing.T) {

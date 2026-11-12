@@ -112,7 +112,7 @@ The refresh result determines the authentication response as follows:
 | User or device is disabled | Deny login and save the disabled state | Deny login and save the disabled state |
 | Refresh grant is confirmed revoked or the remote password changed | Invalidate cached credentials and require re-authentication | Invalidate cached credentials and require re-authentication |
 | Refresh token is known to be expired | Use the cached password and mark the session offline | Require re-authentication |
-| Refresh token may be expired or revoked, but the provider cannot distinguish the two | Keep cached credentials and require re-authentication | Keep cached credentials and require re-authentication |
+| Refresh token may be expired or revoked, an MFA/sign-in-frequency policy requires re-authentication, or the device used during the original authentication is disabled | Keep cached credentials and require re-authentication | Keep cached credentials and require re-authentication |
 | Network or temporary provider error | Use the cached password and mark the session offline | Deny login |
 | Broker client configuration error (e.g. a rejected or rotated client secret) | Use the cached password and mark the session offline | Deny login |
 | Unreadable token or user-info response | Use the cached password and mark the session offline | Deny login |

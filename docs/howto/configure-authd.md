@@ -251,8 +251,9 @@ By default, the provider access check during remote login is best effort. A
 valid local password is sufficient when the check cannot be completed for a
 reason that does not indicate revoked access, such as a network or token
 verification error. If the provider reports that a refresh token may be expired
-or revoked without distinguishing the two, authd requires re-authentication even
-when the check is optional.
+or revoked without distinguishing the two, or that the device used during the
+original authentication is disabled, authd requires re-authentication even when
+the check is optional.
 
 To require a successful access check with the identity provider for each login,
 enable the check as follows. If the provider is unreachable when a session
