@@ -309,12 +309,28 @@ class BrowserWindow(Gtk.Window):
         cancellable.disconnect(connect_id)
 
         if not found:
+            self._log_page_state_on_timeout(pattern)
             raise TimeoutError(
                 f"Timed out after {timeout_ms}ms waiting for pattern '{pattern}'"
             )
 
         logger.info(f"Found strings matching pattern: {found!r}")
         return found
+
+    def _log_page_state_on_timeout(self, pattern, max_chars=2000):
+        """Log the URI, title and visible text of the page. Never raises."""
+        try:
+            text = self.run_javascript_sync(
+                "(document.body && document.body.innerText) || ''", timeout_ms=2000
+            )
+            logger.error(
+                f"Pattern '{pattern}' not found. Page URI: {self.web_view.get_uri()!r}, "
+                f"title: {self.web_view.get_title()!r}, "
+                f"load progress: {self.web_view.get_estimated_load_progress():.2f}. "
+                f"Visible text (first {max_chars} chars): {text[:max_chars]!r}"
+            )
+        except Exception as e:
+            logger.error(f"Could not log page state for pattern '{pattern}': {e!r}")
 
     def run_javascript_sync(self, javascript: str, timeout_ms: int = 5000) -> str:
         """Run JavaScript in the page and return its result as a string."""
