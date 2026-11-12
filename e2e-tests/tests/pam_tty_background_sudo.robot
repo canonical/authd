@@ -34,13 +34,21 @@ Test sudo authentication when run in the background
     Check If User Was Added Properly    ${username}
 
     # Add the authd user to the sudo group
-    SSH.Execute    sudo usermod -aG sudo '${username}'
+    Add User To Sudo Group    ${username}
 
     # Start a fresh su session so sudo runs as the remote user on a TTY.
     Log Out From Terminal Session
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
 
-    # Remove any result from an earlier run before starting sudo in the background.
+    Run Background Sudo Command
+    Wait Until Keyword Succeeds    30s    1s    Check Background Sudo Ran As Root
+
+    Log Out From su Session
+    Close Focused Window
+
+
+*** Keywords ***
+Run Background Sudo Command
     SSH.Execute    rm -f ${sudo_output_file}
     # Reproduce the failure: sudo reads its password from stdin while running in
     # the background. Save id's output so the test can verify sudo became root.
@@ -50,9 +58,5 @@ Test sudo authentication when run in the background
     # Wait for the shell to accept the command, then poll until sudo completes.
     Match Text    cmd-finished    30
 
-    # Confirm the background command ran id as root.
-    Wait Until Keyword Succeeds    30s    1s    SSH.Execute
-    ...    grep -Fq 'uid=0(root)' ${sudo_output_file}
-
-    Log Out From su Session
-    Close Focused Window
+Check Background Sudo Ran As Root
+    SSH.Execute    grep -Fq 'uid=0(root)' ${sudo_output_file}

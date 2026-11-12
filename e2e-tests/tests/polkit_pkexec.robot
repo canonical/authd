@@ -33,21 +33,13 @@ Test polkit authentication as authd user via pkexec after initial GDM login
 
     # Add the authd user to the sudo group so that polkit authenticates them as
     # themselves rather than falling back to the local admin (ubuntu) user.
-    SSH.Execute    sudo usermod -aG sudo ${username}
-
-    SSH.Execute    rm -f /tmp/polkit-authd-test
-    Open Terminal
-
-    # Run pkexec to create the marker file as root; this triggers the polkit agent.
-    Hid.Type String    pkexec touch /tmp/polkit-authd-test
-    Hid.Keys Combo    Return
+    Add User To Sudo Group    ${username}
+    Start Privileged Marker Creation    /tmp/polkit-authd-test
 
     # The GNOME polkit agent pops up a dialog; since the authd user is in the sudo
     # group, polkit authenticates them as themselves through PAM/authd, which shows
     # the authd local-password prompt inside the polkit dialog.
-    Match Text    Enter your password    60
-    Hid.Type String    ${local_password}
-    Hid.Keys Combo    Return
+    Log In With Remote User Through Polkit: Local Password    ${local_password}
 
     # Verify polkit granted access: the marker file must exist and be root-owned.
     Wait Until Keyword Succeeds    20s    1s
@@ -72,13 +64,7 @@ Test polkit authentication as authd user via pkexec using Entra ID password and 
     Log In With Remote User Through GDM: Entra Password    ${username}
     Check If User Was Added Properly    ${username}    %{E2E_PASSWORD}
 
-    SSH.Execute    rm -f /tmp/polkit-authd-test-entra
-
-    Open Terminal
-
-    # Run pkexec to create the marker file as root; this triggers the polkit agent.
-    Hid.Type String    pkexec touch /tmp/polkit-authd-test-entra
-    Hid.Keys Combo    Return
+    Start Privileged Marker Creation    /tmp/polkit-authd-test-entra
 
     Log In With Remote User Through Polkit: Entra Password    ${username}    /tmp/polkit-authd-test-entra
 
@@ -89,6 +75,13 @@ Test polkit authentication as authd user via pkexec using Entra ID password and 
 
 
 *** Keywords ***
+Start Privileged Marker Creation
+    [Arguments]    ${marker_file}
+    SSH.Execute    rm -f ${marker_file}
+    Open Terminal
+    Hid.Type String    pkexec touch ${marker_file}
+    Hid.Keys Combo    Return
+
 Entra Polkit Test Setup
     utils.Test Setup    snapshot=%{BROKER}-installed
     Change Broker Configuration    register_device    true
