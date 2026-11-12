@@ -2,7 +2,7 @@
 # Single source of truth for supported OIDC broker variants, shared by
 # build-component, broker, save-state and restore-state so adding or
 # renaming a variant only requires editing this file. Keep in sync with
-# authd-oidc-brokers/conf/variants/.
+# brokers/conf/variants/.
 
 # shellcheck disable=SC2034  # consumed by scripts that source this file
 AUTHD_BROKER_VARIANTS=(google msentraid oidc)

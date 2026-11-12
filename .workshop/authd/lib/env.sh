@@ -37,6 +37,6 @@ export GOMODCACHE="${GOMODCACHE:-${AUTHD_PROJECT_DIR}/target/.authd-go-mod-cache
 # switching branches), which makes any plain `go build`/`test`/`generate` in
 # the module fail with "inconsistent vendoring" instead of just building.
 # Fall back to the module cache instead of requiring vendor/ to be exact, the
-# same workaround already used for the authd-oidc-brokers build.
+# same workaround already used for the brokers build.
 # Append rather than overwrite so caller- or SDK-provided flags survive.
 export GOFLAGS="${GOFLAGS:+"${GOFLAGS} "}-mod=mod"

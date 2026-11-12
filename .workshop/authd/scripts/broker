@@ -317,7 +317,7 @@ broker_configure() {
         was_active=yes
     fi
 
-    local src="authd-oidc-brokers/conf/variants/${variant}"
+    local src="brokers/conf/variants/${variant}"
     [ -d "$src" ] || { echo "Missing upstream config templates: ${src}" >&2; return 1; }
     local dbus_name
     if sudo test -f "/etc/authd/brokers.d/${variant}.conf"; then

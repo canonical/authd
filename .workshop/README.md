@@ -163,7 +163,7 @@ Bare `workshop run -- build` builds the default set
 not rerun on refresh; back up guest state before recreating the workshop.
 
 `test` covers only the root Go module. Broker tests live in the
-`authd-oidc-brokers` module. Rust/NSS tests use `cargo test`.
+`brokers` module. Rust/NSS tests use `cargo test`.
 
 ## Configure a broker and log in
 

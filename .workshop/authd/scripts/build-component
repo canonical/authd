@@ -97,7 +97,7 @@ authd_generate_broker_native_deps() {
     local variant="$1"
 
     [ "$variant" = msentraid ] || return 0
-    (cd "${AUTHD_PROJECT_DIR}/authd-oidc-brokers" && bash ./internal/providers/msentraid/himmelblau/generate.sh)
+    (cd "${AUTHD_PROJECT_DIR}/brokers" && bash ./internal/providers/msentraid/himmelblau/generate.sh)
 }
 
 # Build (but do not install) a single broker binary into build_dir/authd-<name>.
@@ -107,7 +107,7 @@ authd_build_broker_binary() {
     local name="$1" tag="$2" build_dir="$3"
     # vendor/ is ignored and can be stale after switching branches.
     # shellcheck disable=SC2086
-    go build -C "${AUTHD_PROJECT_DIR}/authd-oidc-brokers" -mod=mod $tag -o "${build_dir}/authd-${name}" ./cmd/authd-oidc
+    go build -C "${AUTHD_PROJECT_DIR}/brokers" -mod=mod $tag -o "${build_dir}/authd-${name}" ./cmd/authd-oidc
 }
 
 # Build and install a single broker binary. Not called directly; use

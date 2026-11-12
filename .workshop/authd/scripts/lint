@@ -7,7 +7,7 @@ Usage: workshop run -- lint [-- LINT_ARGS...]
   Run the pinned golangci-lint wrapper. The first run compiles it (slow).
 Examples:
   workshop run -- lint
-  workshop run -- lint -- -C authd-oidc-brokers run
+  workshop run -- lint -- -C brokers run
 EOF
 }
 

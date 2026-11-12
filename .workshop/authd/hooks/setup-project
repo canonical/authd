@@ -21,7 +21,7 @@ log() { printf '\033[0;34m[setup-project]\033[0m %s\n' "$*"; }
 # Mark the project and nested broker submodule as Git-safe for the workshop
 # user. The host-owned mount needs a separate entry for each repository; an
 # exact /project entry does not trust nested worktrees.
-for safe_dir in /project /project/authd-oidc-brokers/third_party/libhimmelblau; do
+for safe_dir in /project /project/brokers/third_party/libhimmelblau; do
     if ! git config --global --get-all safe.directory 2>/dev/null | grep -Fx "$safe_dir" >/dev/null; then
         git config --global --add safe.directory "$safe_dir"
     fi
@@ -31,7 +31,7 @@ done
 # A fresh clone without `--recurse-submodules` will have an empty directory
 # here; this is a no-op when the submodule is already present.
 log "Initialising git submodules"
-git submodule update --init -- authd-oidc-brokers/third_party/libhimmelblau
+git submodule update --init -- brokers/third_party/libhimmelblau
 
 # shellcheck disable=SC1091
 source /project/.workshop/authd/scripts/build-component
