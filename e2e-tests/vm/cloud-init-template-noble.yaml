@@ -109,6 +109,12 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
+  # needrestart restarts every service whose libraries changed. Restarting the
+  # vsock proxy closes the SSH session that drives provisioning.
+  - path: /etc/needrestart/conf.d/e2e-tests.conf
+    content: |
+      $nrconf{override_rc}{qr(^sshd-vsock)} = 0;
+
   # Export the journal to the host
   - path: /etc/systemd/system/journal-export.service
     content: |
