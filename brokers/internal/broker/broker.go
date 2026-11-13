@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -44,6 +45,8 @@ const (
 	maxAuthAttempts               = 3
 	maxRequestDuration            = 5 * time.Second
 	accountIdentityChangedMessage = "Authentication failure: account identity changed. Contact your administrator."
+	providerIDCachePrefix         = ".authd-provider-id-"
+	providerIDOwnerFile           = "provider-id"
 
 	// deviceRegistrationReplicationWindow is how long fresh registration data
 	// survives an AADSTS50155 failure: a new device can need time to replicate,
@@ -102,6 +105,8 @@ type Broker struct {
 
 	currentSessions   map[string]session
 	currentSessionsMu sync.RWMutex
+
+	cacheMu *sync.Mutex
 
 	privateKey *rsa.PrivateKey
 }
@@ -167,10 +172,74 @@ func (s *session) loadAuthInfo(path string) (*token.AuthCachedInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	owner, err := cachedProviderIDOwner(filepath.Dir(path))
+	if err != nil {
+		return nil, err
+	}
+	if owner != "" {
+		if authInfo.UserInfo.ProviderID != "" && authInfo.UserInfo.ProviderID != owner {
+			return nil, fmt.Errorf("%w: cache ownership conflicts with token", errProviderIDMismatch)
+		}
+		authInfo.UserInfo.ProviderID = owner
+	}
+	// A legacy literal ID may occupy an encoded key. Without a stored ID,
+	// its cache cannot be distinguished from the encoded key's intended owner.
+	if authInfo.UserInfo.ProviderID == "" && strings.HasPrefix(filepath.Base(filepath.Dir(path)), providerIDCachePrefix) {
+		return nil, fmt.Errorf("%w: encoded cache %q has no provider ID", errProviderIDMismatch, filepath.Dir(path))
+	}
 	if err := s.verifyProviderID(authInfo.UserInfo.ProviderID); err != nil {
 		return nil, err
 	}
 	return authInfo, nil
+}
+
+func cachedProviderIDOwner(dir string) (string, error) {
+	data, err := os.ReadFile(filepath.Join(dir, providerIDOwnerFile))
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if len(data) == 0 {
+		return "", fmt.Errorf("%w: empty cache owner", errProviderIDMismatch)
+	}
+	return string(data), nil
+}
+
+func recordCacheOwner(dir, providerID, targetDir string) error {
+	if !strings.HasPrefix(filepath.Base(targetDir), providerIDCachePrefix) {
+		return nil
+	}
+	if _, err := os.Stat(dir); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	owner, err := cachedProviderIDOwner(dir)
+	if err != nil {
+		return err
+	}
+	if owner != "" {
+		if owner != providerID {
+			return fmt.Errorf("%w: cache already has another owner", errProviderIDMismatch)
+		}
+		return nil
+	}
+	f, err := os.CreateTemp(dir, ".provider-id-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if _, err := f.WriteString(providerID); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), filepath.Join(dir, providerIDOwnerFile))
 }
 
 // extractEntraUserInfo decodes identity claims from an Entra access token.
@@ -287,6 +356,7 @@ func NewBrokers(cfg Config, apiInterfaces []string) ([]*Broker, error) {
 	}
 
 	brokers := make([]*Broker, 0, len(apiInterfaces))
+	cacheMu := &sync.Mutex{}
 	for i, apiInterface := range apiInterfaces {
 		apiVersion := uint(i) + 1
 		log.Debugf(context.Background(), "Initializing broker for interface %s", apiInterface)
@@ -306,6 +376,7 @@ func NewBrokers(cfg Config, apiInterfaces []string) ([]*Broker, error) {
 		if err != nil {
 			return nil, err
 		}
+		b.cacheMu = cacheMu
 		brokers = append(brokers, b)
 	}
 
@@ -390,6 +461,7 @@ func newBroker(cfg Config, apiVersion uint, p providers.Provider, args ...Option
 		oidcClientSecret: oidcClientSecret,
 		fido:             opts.fido,
 		privateKey:       privateKey,
+		cacheMu:          &sync.Mutex{},
 
 		currentSessions:   make(map[string]session),
 		currentSessionsMu: sync.RWMutex{},
@@ -536,6 +608,18 @@ func (b *Broker) ensureCompatibilitySymlink(linkPath, target string) error {
 func (b *Broker) verifyCachedProviderID(s *session, dataDir string) error {
 	_, err := s.loadAuthInfo(filepath.Join(dataDir, "token.json"))
 	if errors.Is(err, os.ErrNotExist) {
+		owner, ownerErr := cachedProviderIDOwner(dataDir)
+		if ownerErr != nil {
+			return ownerErr
+		}
+		if owner != "" {
+			return s.verifyProviderID(owner)
+		}
+		if strings.HasPrefix(filepath.Base(dataDir), providerIDCachePrefix) {
+			if _, statErr := os.Stat(dataDir); !errors.Is(statErr, os.ErrNotExist) {
+				return fmt.Errorf("%w: encoded cache %q has no verifiable owner", errProviderIDMismatch, dataDir)
+			}
+		}
 		return nil
 	}
 	return err
@@ -626,6 +710,10 @@ func newestCacheEntryModTime(entries []os.DirEntry) (time.Time, error) {
 		if !info.Mode().IsRegular() {
 			return time.Time{}, fmt.Errorf("unexpected non-regular cache entry %q", entry.Name())
 		}
+		// Ownership updates must not change which credentials win consolidation.
+		if entry.Name() == providerIDOwnerFile || strings.HasPrefix(entry.Name(), ".provider-id-") {
+			continue
+		}
 		if info.ModTime().After(newest) {
 			newest = info.ModTime()
 		}
@@ -662,6 +750,9 @@ func (b *Broker) ensureUsernameCompatibilityPath(session *session, providerIDDir
 	if err := b.verifyCachedProviderID(session, providerIDDir); err != nil {
 		return err
 	}
+	if err := recordCacheOwner(usernameDir, session.providerID, providerIDDir); err != nil {
+		return err
+	}
 	if err := consolidateCacheDirs(usernameDir, providerIDDir); err != nil {
 		return err
 	}
@@ -693,6 +784,15 @@ func adoptProviderIDDir(s *session, providerID, providerIDDir string) {
 // Other migration errors are logged and leave the session on its existing paths for a later
 // attempt. s.providerID is set only after the cache has been switched to the provider ID directory.
 func (b *Broker) ensureProviderIDCacheDir(s *session, providerID string) error {
+	b.cacheMu.Lock()
+	defer b.cacheMu.Unlock()
+
+	return b.ensureProviderIDCacheDirLocked(s, providerID)
+}
+
+// ensureProviderIDCacheDirLocked requires cacheMu to be held, including during
+// recursive relocation of a legacy literal owner.
+func (b *Broker) ensureProviderIDCacheDirLocked(s *session, providerID string) error {
 	if providerID == "" {
 		return nil
 	}
@@ -704,10 +804,13 @@ func (b *Broker) ensureProviderIDCacheDir(s *session, providerID string) error {
 		s.expectedProviderID = providerID
 	}
 
-	providerIDDir, err := b.userDataDir(providerID)
+	providerIDDir, err := b.providerIDDataDir(providerID)
 	if err != nil {
 		log.Warningf(context.Background(), "Could not determine cache directory for provider ID %q: %v", providerID, err)
 		return nil
+	}
+	if err := b.disambiguateProviderIDCacheDir(providerID, providerIDDir); err != nil {
+		return err
 	}
 	if providerIDDir == s.userDataDir {
 		// The session is already using the provider ID-keyed directory.
@@ -726,6 +829,15 @@ func (b *Broker) ensureProviderIDCacheDir(s *session, providerID string) error {
 	if err := b.verifyCachedProviderID(s, s.userDataDir); err != nil {
 		return err
 	}
+	// Record ownership before moving legacy credentials. A cancelled login
+	// must not leave an encoded cache with an empty provider ID in its token.
+	if err := recordCacheOwner(s.userDataDir, providerID, providerIDDir); err != nil {
+		if errors.Is(err, errProviderIDMismatch) {
+			return err
+		}
+		log.Warningf(context.Background(), "Could not record cache ownership for %q: %v", s.userDataDir, err)
+		return nil
+	}
 	b.migrateUsernameDirToProviderIDDir(s, providerID, providerIDDir)
 	return nil
 }
@@ -743,6 +855,13 @@ func (b *Broker) redirectToExistingProviderIDDir(s *session, providerID, provide
 	if info, lstatErr := os.Lstat(s.userDataDir); lstatErr == nil && info.IsDir() {
 		if err := b.verifyCachedProviderID(s, s.userDataDir); err != nil {
 			return err
+		}
+		if err := recordCacheOwner(s.userDataDir, providerID, providerIDDir); err != nil {
+			if errors.Is(err, errProviderIDMismatch) {
+				return err
+			}
+			log.Warningf(context.Background(), "Could not record cache ownership for %q: %v", s.userDataDir, err)
+			return nil
 		}
 		if moveErr := consolidateCacheDirs(s.userDataDir, providerIDDir); moveErr != nil {
 			log.Warningf(context.Background(), "Could not consolidate cache directory %q into %q: %v", s.userDataDir, providerIDDir, moveErr)
@@ -800,8 +919,12 @@ func (b *Broker) createProviderIDDirWithSymlink(s *session, providerID, provider
 		log.Warningf(context.Background(), "Could not create provider ID cache directory %q: %v", providerIDDir, mkdirErr)
 		return
 	}
-	if linkErr := b.ensureCompatibilitySymlink(s.userDataDir, providerIDDir); linkErr != nil {
-		log.Warningf(context.Background(), "Could not create cache compatibility symlink %q: %v", s.userDataDir, linkErr)
+	initErr := recordCacheOwner(providerIDDir, providerID, providerIDDir)
+	if initErr == nil {
+		initErr = b.ensureCompatibilitySymlink(s.userDataDir, providerIDDir)
+	}
+	if initErr != nil {
+		log.Warningf(context.Background(), "Could not initialize provider ID cache directory %q: %v", providerIDDir, initErr)
 		if rmErr := os.RemoveAll(providerIDDir); rmErr != nil {
 			log.Warningf(context.Background(), "Could not remove unused provider ID cache directory %q: %v", providerIDDir, rmErr)
 		}
@@ -830,6 +953,189 @@ func (b *Broker) userDataDir(basePath string) (string, error) {
 	return dir, nil
 }
 
+// Keep existing path-safe keys, but reserve the encoded-key prefix to avoid
+// collisions between raw provider IDs and encoded ones.
+func (b *Broker) providerIDDataDir(providerID string) (string, error) {
+	if providerID == "." || providerID == ".." || strings.Contains(providerID, "/") || strings.HasPrefix(providerID, providerIDCachePrefix) {
+		providerID = fmt.Sprintf("%s%x", providerIDCachePrefix, sha256.Sum256([]byte(providerID)))
+	}
+	return b.userDataDir(providerID)
+}
+
+// An encoded key may already be a legacy literal ID. Move its verified owner
+// and repair all aliases before reusing that path for another account.
+func (b *Broker) disambiguateProviderIDCacheDir(providerID, dir string) error {
+	if filepath.Base(dir) == providerID {
+		return nil
+	}
+	var owner session
+	cached, err := owner.loadAuthInfo(filepath.Join(dir, "token.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		// Credential invalidation removes the token but leaves ownership intact.
+		owner.expectedProviderID, err = cachedProviderIDOwner(dir)
+		if err != nil {
+			return err
+		}
+		if owner.expectedProviderID == "" {
+			owner.expectedProviderID = providerID
+			return b.verifyCachedProviderID(&owner, dir)
+		}
+	} else if errors.Is(err, errProviderIDMismatch) {
+		return err
+	} else if err != nil {
+		return nil
+	} else {
+		owner.username = cached.UserInfo.Name
+		owner.expectedProviderID = cached.UserInfo.ProviderID
+	}
+	if owner.expectedProviderID == providerID || owner.expectedProviderID != filepath.Base(dir) {
+		return nil
+	}
+	target, err := b.cacheSymlinkTarget(dir)
+	if err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(filepath.Dir(dir))
+	if err != nil {
+		return err
+	}
+	var aliases []string
+	for _, entry := range entries {
+		if entry.Type()&os.ModeSymlink == 0 || entry.Name() == filepath.Base(dir) {
+			continue
+		}
+		alias := filepath.Join(filepath.Dir(dir), entry.Name())
+		if resolved, err := b.cacheSymlinkTarget(alias); err == nil && resolved == target {
+			aliases = append(aliases, alias)
+		}
+	}
+
+	setCachePaths(&owner, dir)
+	if err := b.ensureProviderIDCacheDirLocked(&owner, owner.expectedProviderID); err != nil {
+		return err
+	}
+	if owner.providerID == "" || owner.userDataDir == dir {
+		return fmt.Errorf("could not relocate legacy provider ID cache %q", dir)
+	}
+	for _, alias := range aliases {
+		if err := b.ensureCompatibilitySymlink(alias, owner.userDataDir); err != nil {
+			return err
+		}
+	}
+	return os.Remove(dir)
+}
+
+func (b *Broker) initSessionCache(s *session) error {
+	b.cacheMu.Lock()
+	defer b.cacheMu.Unlock()
+
+	username, providerID := s.username, s.expectedProviderID
+	var err error
+
+	// When authd passes the provider ID (v3 API), try the provider ID-keyed cache directory
+	// first. This is the authoritative location after migration and handles
+	// the case where the username changed at the IdP (no symlink exists for
+	// the new email).
+	if providerID != "" {
+		if providerIDDir, providerIDErr := b.providerIDDataDir(providerID); providerIDErr == nil {
+			if err := b.disambiguateProviderIDCacheDir(providerID, providerIDDir); err != nil {
+				return err
+			}
+			// A path-safe ID using the reserved prefix may have an old raw key.
+			if legacyDir, legacyErr := b.userDataDir(providerID); legacyErr == nil && legacyDir != providerIDDir {
+				if _, err := os.Stat(providerIDDir); errors.Is(err, os.ErrNotExist) {
+					if fi, err := os.Stat(legacyDir); err == nil && fi.IsDir() {
+						cached, err := token.LoadAuthInfo(filepath.Join(legacyDir, "token.json"))
+						if err == nil && cached.UserInfo.ProviderID == providerID {
+							setCachePaths(s, legacyDir)
+							if err := b.ensureProviderIDCacheDirLocked(s, providerID); err != nil {
+								return err
+							}
+						}
+					}
+				}
+			}
+			if fi, statErr := os.Stat(providerIDDir); statErr == nil && fi.IsDir() {
+				s.providerID = providerID
+				setCachePaths(s, providerIDDir)
+				if err := b.verifyCachedProviderID(s, s.userDataDir); err != nil {
+					return err
+				}
+				if linkErr := b.ensureUsernameCompatibilityPath(s, providerIDDir); linkErr != nil {
+					if errors.Is(linkErr, errProviderIDMismatch) {
+						return linkErr
+					}
+					log.Warningf(context.Background(), "Could not repair cache compatibility path for user %q: %v", username, linkErr)
+				}
+			}
+		}
+	}
+
+	// Fall back to the username-based path when provider ID lookup didn't resolve.
+	if s.userDataDir == "" {
+		s.userDataDir, err = b.userDataDir(username)
+		if err != nil {
+			return err
+		}
+		setCachePaths(s, s.userDataDir)
+
+		// Attempt to migrate a legacy username-based cache directory to the provider ID-based layout.
+		// If the entry at the username path is already a compatibility symlink from a prior
+		// migration, resolve it and update paths.  If it is a real directory whose cached
+		// token contains a provider ID, rename the directory and leave the symlink behind.
+		if linkInfo, lstatErr := os.Lstat(s.userDataDir); lstatErr == nil {
+			switch {
+			case linkInfo.Mode()&os.ModeSymlink != 0:
+				if providerIDDir, evalErr := b.cacheSymlinkTarget(s.userDataDir); evalErr == nil {
+					setCachePaths(s, providerIDDir)
+					cachedInfo, loadErr := s.loadAuthInfo(s.tokenPath)
+					if loadErr == nil {
+						s.providerID = cachedInfo.UserInfo.ProviderID
+					} else {
+						if err := b.verifyCachedProviderID(s, providerIDDir); err != nil {
+							return err
+						}
+						s.providerID, err = cachedProviderIDOwner(providerIDDir)
+						if err != nil {
+							return err
+						}
+					}
+				} else {
+					// The compatibility symlink is dangling or unsafe. Leaving it in place would make
+					// subsequent cache writes fail or follow an untrusted target. Remove it so the
+					// username path can be recreated as a fresh cache dir.
+					log.Warningf(context.Background(), "Removing dangling cache symlink %q: %v", s.userDataDir, evalErr)
+					if rmErr := os.Remove(s.userDataDir); rmErr != nil {
+						log.Warningf(context.Background(), "Could not remove dangling cache symlink %q: %v", s.userDataDir, rmErr)
+					}
+				}
+				if s.providerID != "" {
+					if err := b.ensureProviderIDCacheDirLocked(s, s.providerID); err != nil {
+						return err
+					}
+				}
+			case linkInfo.IsDir():
+				cachedInfo, loadErr := s.loadAuthInfo(s.tokenPath)
+				if loadErr != nil && !errors.Is(loadErr, os.ErrNotExist) {
+					return loadErr
+				}
+				if errors.Is(loadErr, os.ErrNotExist) {
+					if err := b.verifyCachedProviderID(s, s.userDataDir); err != nil {
+						return err
+					}
+				}
+				if loadErr == nil && cachedInfo.UserInfo.ProviderID != "" {
+					if err := b.ensureProviderIDCacheDirLocked(s, cachedInfo.UserInfo.ProviderID); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // NewSession creates a new session for the user. providerID is the stable provider
 // identifier from authd's database. It binds the session to that identity and is
 // used to locate the provider ID-keyed cache directory.
@@ -852,73 +1158,8 @@ func (b *Broker) NewSession(username, lang, mode, providerID string) (sessionID,
 	if err != nil {
 		return "", "", fmt.Errorf("failed to marshal broker public key: %v", err)
 	}
-
-	// When authd passes the provider ID (v3 API), try the provider ID-keyed cache directory
-	// first. This is the authoritative location after migration and handles
-	// the case where the username changed at the IdP (no symlink exists for
-	// the new email).
-	if providerID != "" {
-		if providerIDDir, providerIDErr := b.userDataDir(providerID); providerIDErr == nil {
-			if fi, statErr := os.Stat(providerIDDir); statErr == nil && fi.IsDir() {
-				s.providerID = providerID
-				setCachePaths(&s, providerIDDir)
-				if err := b.verifyCachedProviderID(&s, s.userDataDir); err != nil {
-					return "", "", err
-				}
-				if linkErr := b.ensureUsernameCompatibilityPath(&s, providerIDDir); linkErr != nil {
-					if errors.Is(linkErr, errProviderIDMismatch) {
-						return "", "", linkErr
-					}
-					log.Warningf(context.Background(), "Could not repair cache compatibility path for user %q: %v", username, linkErr)
-				}
-			}
-		}
-	}
-
-	// Fall back to the username-based path when provider ID lookup didn't resolve.
-	if s.userDataDir == "" {
-		s.userDataDir, err = b.userDataDir(username)
-		if err != nil {
-			return "", "", err
-		}
-		setCachePaths(&s, s.userDataDir)
-
-		// Attempt to migrate a legacy username-based cache directory to the provider ID-based layout.
-		// If the entry at the username path is already a compatibility symlink from a prior
-		// migration, resolve it and update paths.  If it is a real directory whose cached
-		// token contains a provider ID, rename the directory and leave the symlink behind.
-		if linkInfo, lstatErr := os.Lstat(s.userDataDir); lstatErr == nil {
-			switch {
-			case linkInfo.Mode()&os.ModeSymlink != 0:
-				if providerIDDir, evalErr := b.cacheSymlinkTarget(s.userDataDir); evalErr == nil {
-					setCachePaths(&s, providerIDDir)
-					cachedInfo, loadErr := s.loadAuthInfo(s.tokenPath)
-					if loadErr == nil {
-						s.providerID = cachedInfo.UserInfo.ProviderID
-					} else if !errors.Is(loadErr, os.ErrNotExist) {
-						return "", "", loadErr
-					}
-				} else {
-					// The compatibility symlink is dangling or unsafe. Leaving it in place would make
-					// subsequent cache writes fail or follow an untrusted target. Remove it so the
-					// username path can be recreated as a fresh cache dir.
-					log.Warningf(context.Background(), "Removing dangling cache symlink %q: %v", s.userDataDir, evalErr)
-					if rmErr := os.Remove(s.userDataDir); rmErr != nil {
-						log.Warningf(context.Background(), "Could not remove dangling cache symlink %q: %v", s.userDataDir, rmErr)
-					}
-				}
-			case linkInfo.IsDir():
-				cachedInfo, loadErr := s.loadAuthInfo(s.tokenPath)
-				if loadErr != nil && !errors.Is(loadErr, os.ErrNotExist) {
-					return "", "", loadErr
-				}
-				if loadErr == nil && cachedInfo.UserInfo.ProviderID != "" {
-					if err := b.ensureProviderIDCacheDir(&s, cachedInfo.UserInfo.ProviderID); err != nil {
-						return "", "", err
-					}
-				}
-			}
-		}
+	if err := b.initSessionCache(&s); err != nil {
+		return "", "", err
 	}
 
 	// Construct an OIDC provider via OIDC discovery.
@@ -1642,7 +1883,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 
 				// Store the information that the user is disabled, so that we can deny login on subsequent offline attempts.
 				oldAuthInfo.UserIsDisabled = true
-				if err = token.CacheAuthInfo(session.tokenPath, oldAuthInfo); err != nil {
+				if err = b.cacheAuthInfo(session.tokenPath, oldAuthInfo); err != nil {
 					log.Errorf(context.Background(), "Failed to store token: %s", err)
 					return AuthDenied, unexpectedErrMsg("failed to store token")
 				}
@@ -2754,7 +2995,7 @@ func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (s
 		}
 	}
 
-	err := token.CacheAuthInfo(session.tokenPath, authInfo)
+	err := b.cacheAuthInfo(session.tokenPath, authInfo)
 	if err != nil && b.cfg.forceAccessCheckWithProvider {
 		log.Errorf(context.Background(), "Failed to store token: %s", err)
 		return AuthDenied, unexpectedErrMsg("failed to store token")
@@ -2764,6 +3005,13 @@ func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (s
 	}
 
 	return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
+}
+
+func (b *Broker) cacheAuthInfo(path string, authInfo *token.AuthCachedInfo) error {
+	b.cacheMu.Lock()
+	defer b.cacheMu.Unlock()
+
+	return token.CacheAuthInfo(path, authInfo)
 }
 
 func (b *Broker) newPassword(session *session, secret string) (string, isAuthenticatedDataResponse) {
@@ -2899,24 +3147,57 @@ func (b *Broker) CancelIsAuthenticated(sessionID string) {
 // when non-empty it is used to also remove any provider ID-keyed cache directory
 // created after the broker cache migration. username is always tried as a
 // fallback to support pre-migration caches.
-func (b *Broker) DeleteUser(username, providerID string) error {
+func (b *Broker) DeleteUser(username, providerID string) (retErr error) {
+	b.cacheMu.Lock()
+	defer b.cacheMu.Unlock()
+
+	var verificationErr error
+	defer func() { retErr = errors.Join(retErr, verificationErr) }()
+
 	var providerIDDir string
+	var preserveProviderIDDir bool
+	var preservedLegacyDir string
 	if providerID != "" {
 		var err error
-		providerIDDir, err = b.userDataDir(providerID)
+		providerIDDir, err = b.providerIDDataDir(providerID)
 		if err != nil {
 			return err
 		}
-		if err := os.RemoveAll(providerIDDir); err != nil {
-			return fmt.Errorf("could not remove provider ID-keyed user data directory %q: %w", providerIDDir, err)
+		if legacyDir, legacyErr := b.userDataDir(providerID); legacyErr == nil && legacyDir != providerIDDir {
+			owned, err := providerIDCacheOwnedBy(legacyDir, providerID)
+			if err != nil {
+				verificationErr = fmt.Errorf("could not verify legacy provider ID cache: %w", err)
+			}
+			if owned {
+				if err := os.RemoveAll(legacyDir); err != nil {
+					return err
+				}
+			} else {
+				preservedLegacyDir = legacyDir
+			}
 		}
-		log.Debugf(context.Background(), "Deleted broker data for provider ID %q at %q", providerID, providerIDDir)
+		if filepath.Base(providerIDDir) != providerID {
+			owned, err := providerIDCacheOwnedBy(providerIDDir, providerID)
+			preserveProviderIDDir = !owned
+			if err != nil {
+				verificationErr = errors.Join(verificationErr, fmt.Errorf("could not verify encoded provider ID cache: %w", err))
+			}
+		}
+		if !preserveProviderIDDir {
+			if err := os.RemoveAll(providerIDDir); err != nil {
+				return fmt.Errorf("could not remove provider ID-keyed user data directory %q: %w", providerIDDir, err)
+			}
+			log.Debugf(context.Background(), "Deleted broker data for provider ID %q at %q", providerID, providerIDDir)
+		}
 	}
 
 	if username != "" {
 		userDataDir, err := b.userDataDir(username)
 		if err != nil {
 			return err
+		}
+		if (preserveProviderIDDir && userDataDir == providerIDDir) || userDataDir == preservedLegacyDir {
+			return nil
 		}
 
 		// If the username path is a compatibility symlink created by the provider ID cache
@@ -2930,7 +3211,7 @@ func (b *Broker) DeleteUser(username, providerID string) error {
 			if evalErr != nil && !errors.Is(evalErr, os.ErrNotExist) {
 				return fmt.Errorf("refusing to follow cache compatibility symlink %q: %w", userDataDir, evalErr)
 			}
-			if providerIDDir != "" && target != "" && filepath.Clean(target) != filepath.Clean(providerIDDir) {
+			if providerIDDir != "" && target != "" && (preserveProviderIDDir || filepath.Clean(target) != filepath.Clean(providerIDDir)) {
 				log.Warningf(context.Background(), "Not removing cache compatibility symlink target %q for user %q because it does not match provider ID %q", target, username, providerID)
 				target = ""
 			}
@@ -2950,6 +3231,34 @@ func (b *Broker) DeleteUser(username, providerID string) error {
 	}
 
 	return nil
+}
+
+// providerIDCacheOwnedBy distinguishes an absent path from an existing cache
+// whose ownership cannot be checked.
+func providerIDCacheOwnedBy(dir, providerID string) (bool, error) {
+	if _, err := os.Lstat(dir); errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	var s session
+	cached, err := s.loadAuthInfo(filepath.Join(dir, "token.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		owner, ownerErr := cachedProviderIDOwner(dir)
+		if ownerErr != nil {
+			return false, ownerErr
+		}
+		if owner != "" {
+			return owner == providerID, nil
+		}
+	}
+	if err != nil {
+		return false, err
+	}
+	if cached.UserInfo.ProviderID == "" {
+		return false, errors.New("cached provider ID is empty")
+	}
+	return cached.UserInfo.ProviderID == providerID, nil
 }
 
 // UserPreCheck checks if the user is valid and can be allowed to authenticate.
@@ -3034,7 +3343,7 @@ func (b *Broker) refreshEntraToken(ctx context.Context, session *session, oldTok
 	refreshed.Token.RefreshToken = newTok.RefreshToken
 	oldToken = &refreshed
 	cacheRotatedToken := func(reason string) {
-		if cacheErr := token.CacheAuthInfo(session.tokenPath, oldToken); cacheErr != nil {
+		if cacheErr := b.cacheAuthInfo(session.tokenPath, oldToken); cacheErr != nil {
 			log.Errorf(context.Background(), "Failed to store rotated refresh token after %s: %s", reason, cacheErr)
 		}
 	}
@@ -3087,7 +3396,7 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 	}
 	oldToken = &refreshed
 	cacheRotatedToken := func(reason string) {
-		if cacheErr := token.CacheAuthInfo(session.tokenPath, oldToken); cacheErr != nil {
+		if cacheErr := b.cacheAuthInfo(session.tokenPath, oldToken); cacheErr != nil {
 			log.Errorf(context.Background(), "Failed to store rotated refresh token after %s: %s", reason, cacheErr)
 		}
 	}
@@ -3265,7 +3574,7 @@ func (b *Broker) maybeRegisterDevice(ctx context.Context, session *session, auth
 
 	// Store the auth info before group lookup, so fresh registration data is not
 	// lost if the login fails after this point.
-	if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
+	if err := b.cacheAuthInfo(session.tokenPath, authInfo); err != nil {
 		log.Errorf(context.Background(), "Failed to store token: %s", err)
 		return cleanup, AuthDenied, unexpectedErrMsg("failed to store token")
 	}
@@ -3330,7 +3639,7 @@ func (b *Broker) handleGroupFetch(ctx context.Context, session *session, authInf
 		authInfo.UserInfo.Groups = groups
 		authInfo.DeviceRegistrationDataObtainedAt = 0
 		if freshRegistration {
-			if cacheErr := token.CacheAuthInfo(session.tokenPath, authInfo); cacheErr != nil {
+			if cacheErr := b.cacheAuthInfo(session.tokenPath, authInfo); cacheErr != nil {
 				log.Errorf(context.Background(), "Failed to store token: %s", cacheErr)
 			}
 		}
@@ -3343,7 +3652,7 @@ func (b *Broker) handleGroupFetch(ctx context.Context, session *session, authInf
 		// Cache the disabled device state so that later offline logins are
 		// denied too.
 		authInfo.DeviceIsDisabled = true
-		if cacheErr := token.CacheAuthInfo(session.tokenPath, authInfo); cacheErr != nil {
+		if cacheErr := b.cacheAuthInfo(session.tokenPath, authInfo); cacheErr != nil {
 			log.Errorf(context.Background(), "Failed to store token: %s", cacheErr)
 			return AuthDenied, unexpectedErrMsg("failed to store token")
 		}
@@ -3363,7 +3672,7 @@ func (b *Broker) handleGroupFetch(ctx context.Context, session *session, authInf
 		log.Errorf(context.Background(), "Token acquisition failed: %s. Clearing stale device registration data and retrying authentication.", err)
 		authInfo.DeviceRegistrationData = nil
 		authInfo.DeviceRegistrationDataObtainedAt = 0
-		if cacheErr := token.CacheAuthInfo(session.tokenPath, authInfo); cacheErr != nil {
+		if cacheErr := b.cacheAuthInfo(session.tokenPath, authInfo); cacheErr != nil {
 			log.Errorf(context.Background(), "Failed to store token: %s", cacheErr)
 			return AuthDenied, unexpectedErrMsg("failed to store token")
 		}
