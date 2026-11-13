@@ -601,6 +601,40 @@ func (c *Console) SendLine(t *testing.T, s string) {
 	require.NoError(t, err, "ptytest: SendLine failed")
 }
 
+// WaitForEchoOff waits until terminal echo is disabled before sending a secret.
+// A password label may be printed before the reader changes the terminal mode.
+func (c *Console) WaitForEchoOff(t *testing.T) {
+	t.Helper()
+
+	deadline := time.Now().Add(c.opts.timeout)
+	for {
+		select {
+		case exitErr := <-c.done:
+			// Preserve the result for WaitForExit and Close. Do not wait for
+			// copyDone: a descendant may still have the PTY open.
+			c.done <- exitErr
+			content, rawSinceLastMatch := c.diagnosticContent()
+			require.FailNow(t,
+				fmt.Sprintf("ptytest: command exited while waiting for terminal echo to be disabled: %v", exitErr),
+				c.formatDiagnostics(content, rawSinceLastMatch))
+		default:
+		}
+
+		if tio, err := unix.IoctlGetTermios(int(c.ptmx.Fd()), unix.TCGETS); err == nil && tio.Lflag&unix.ECHO == 0 {
+			return
+		}
+
+		if time.Now().After(deadline) {
+			content, rawSinceLastMatch := c.diagnosticContent()
+			require.FailNow(t,
+				fmt.Sprintf("ptytest: terminal echo is still enabled after %s", c.opts.timeout),
+				c.formatDiagnostics(content, rawSinceLastMatch))
+		}
+
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 // SendKey sends a single control byte to the PTY.
 func (c *Console) SendKey(t *testing.T, key byte) {
 	t.Helper()

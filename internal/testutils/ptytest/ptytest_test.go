@@ -2,6 +2,7 @@ package ptytest_test
 
 import (
 	"errors"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -48,6 +49,76 @@ func TestWaitForRegex(t *testing.T) {
 	out := c.Output()
 	require.Contains(t, out, "line 1: foo")
 	require.Contains(t, out, "line 2: bar")
+}
+
+func TestWaitForEchoOff(t *testing.T) {
+	t.Parallel()
+
+	c := ptytest.Start(t, "bash", []string{"-c", `
+		printf 'Password: '
+		sleep 0.2
+		stty -echo
+		read -r password
+		stty echo
+		[ "$password" = "test-secret" ] || exit 1
+		echo received
+	`})
+
+	c.WaitFor(t, "Password: ")
+	c.WaitForEchoOff(t)
+	c.SendLine(t, "test-secret")
+	c.RequireSuccessfulExit(t)
+	require.Contains(t, c.Output(), "received")
+	require.NotContains(t, c.Output(), "test-secret")
+}
+
+func TestWaitForEchoOffFailure(t *testing.T) {
+	t.Parallel()
+
+	const helperEnv = "AUTHD_PTYTEST_ECHO_FAILURE"
+	if scenario := os.Getenv(helperEnv); scenario != "" {
+		switch scenario {
+		case "timeout":
+			c := ptytest.Start(t, "bash", []string{"-c", `echo ready; read -r`},
+				ptytest.WithTimeout(100*time.Millisecond))
+			c.WaitFor(t, "ready")
+			c.WaitForEchoOff(t)
+		case "exit_echo_on", "exit_echo_off":
+			script := `echo ready; exit 42`
+			if scenario == "exit_echo_off" {
+				script = `stty -echo; ` + script
+			}
+			c := ptytest.Start(t, "bash", []string{"-c", script},
+				ptytest.WithTimeout(time.Minute))
+			c.RequireExitCode(t, 42)
+			c.WaitForEchoOff(t)
+		}
+		t.Fatal("WaitForEchoOff returned without failing")
+	}
+
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	for _, scenario := range []string{"timeout", "exit_echo_on", "exit_echo_off"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+
+			// A subprocess lets us check FailNow and the cleanup it triggers.
+			cmd := exec.Command(executable, "-test.run=^TestWaitForEchoOffFailure$", "-test.timeout=15s")
+			cmd.Env = append(os.Environ(), helperEnv+"="+scenario)
+			output, err := cmd.CombinedOutput()
+			require.Error(t, err, "WaitForEchoOff should fail")
+			out := string(output)
+			require.NotContains(t, out, "WaitForEchoOff returned without failing")
+			require.Contains(t, out, "current terminal screen")
+			require.Contains(t, out, "ready")
+			if scenario == "timeout" {
+				require.Contains(t, out, "terminal echo is still enabled after")
+			} else {
+				require.Contains(t, out, "command exited while waiting for terminal echo to be disabled: exit status 42")
+				require.Contains(t, out, "exited (code=42)")
+			}
+		})
+	}
 }
 
 func TestWaitForSequential(t *testing.T) {
