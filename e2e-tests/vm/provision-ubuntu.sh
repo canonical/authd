@@ -229,11 +229,15 @@ if [ ! -f "${CLOUD_INIT_ISO}" ]; then
         SSH_PUBLIC_KEY=$(cat "${SSH_PUBLIC_KEY_FILE}")
     fi
 
+    # Limit substitutions to the template placeholders. Unrestricted envsubst
+    # would also replace literal $ sequences such as the needrestart $nrconf.
+    # shellcheck disable=SC2016 # envsubst needs literal placeholders.
+    cloud_init_vars='${SSH_PUBLIC_KEY} ${SOCAT_ADDRESS} ${CI_ROOT_SSHD_CONFIG} ${CI_ROOT_PASSWD_CMD}'
     SSH_PUBLIC_KEY="${SSH_PUBLIC_KEY}" \
       SOCAT_ADDRESS="${SOCAT_ADDRESS}" \
       CI_ROOT_SSHD_CONFIG="${CI_ROOT_SSHD_CONFIG}" \
       CI_ROOT_PASSWD_CMD="${CI_ROOT_PASSWD_CMD}" \
-      envsubst < "${CLOUD_INIT_TEMPLATE}" > "${CLOUD_INIT_DIR}/cloud-config.yaml"
+      envsubst "${cloud_init_vars}" < "${CLOUD_INIT_TEMPLATE}" > "${CLOUD_INIT_DIR}/cloud-config.yaml"
 
     # MIME script parts run in filename order after cloud-init installs packages.
     cloud_init_scripts_dir="${SCRIPT_DIR}/cloud-init-scripts"
