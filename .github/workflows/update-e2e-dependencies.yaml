@@ -72,6 +72,6 @@ jobs:
           sign-commits: true
           add-paths: e2e-tests/uv.lock
           labels: dependencies,e2e-tests
-          commit-message: "deps(e2e): refresh dependencies under YARF runtime pins"
-          title: "deps(e2e): refresh dependencies under YARF runtime pins"
+          commit-message: "deps(e2e): update test and lint dependencies"
+          title: "deps(e2e): update test and lint dependencies"
           body-path: ${{ runner.temp }}/e2e-dependencies-pr-body.md
