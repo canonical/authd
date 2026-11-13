@@ -47,20 +47,11 @@ jobs:
       - name: Prepare pull request body
         run: |
           {
-            cat <<'EOF'
-          Updates E2E Python dependencies within their manifest requirements,
-          keeping YARF's locked runtime versions unchanged. YARF runtime fixes
-          must arrive through an upstream update and a submodule bump.
-
-          Validation in the updater workflow:
-          - `python -m unittest discover -s e2e-tests -p test_update_dependencies.py` (passed).
-          - `python e2e-tests/update_dependencies.py --upgrade` (passed).
-
-          PRs created with GITHUB_TOKEN do not trigger normal PR CI.
-          Close and reopen the PR to run those checks and the E2E workflow.
-          EOF
-            printf '\n%s\n\n' 'Dependency changes:'
+            printf '%s\n\n' 'Updates the E2E test and lint dependencies within their manifest requirements. YARF runtime versions stay locked, so YARF runtime fixes must arrive through an upstream update and a submodule bump.'
+            printf '%s\n\n' 'Dependency changes:'
             python e2e-tests/update_dependencies.py --summary "${RUNNER_TEMP}/uv.lock.before"
+            printf '\n%s\n\n' 'Validated in this workflow with `python -m unittest discover -s e2e-tests -p test_update_dependencies.py` and `python e2e-tests/update_dependencies.py --upgrade`.'
+            printf '%s\n\n' 'This PR was created with `GITHUB_TOKEN`, so its workflow runs wait for approval. Select **Approve workflows to run** in the merge box to run the CI checks and the E2E workflow.'
             cat .github/pull_request_template.md
           } > "${RUNNER_TEMP}/e2e-dependencies-pr-body.md"
 

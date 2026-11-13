@@ -97,8 +97,7 @@ jobs:
           - `python e2e-tests/update_dependencies.py` (passed).
           - `python e2e-tests/update_dependencies.py --check` (passed).
 
-          These checks ran in the updater workflow. PRs created with GITHUB_TOKEN
-          do not trigger normal PR CI. Close and reopen the PR to run those checks.
+          These checks ran in the updater workflow. This PR was created with `GITHUB_TOKEN`, so its workflow runs wait for approval. Select **Approve workflows to run** in the merge box to run those checks.
           EOF
             cat .github/pull_request_template.md
           } > "${RUNNER_TEMP}/uv-update-pr-body.md"
