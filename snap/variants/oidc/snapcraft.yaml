@@ -22,7 +22,7 @@ issues: https://github.com/canonical/authd/issues
 source-code: https://github.com/canonical/authd/tree/main/brokers
 adopt-info: version
 grade: stable
-base: core24
+base: core26
 confinement: strict
 license: GPL-3.0
 
