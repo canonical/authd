@@ -1,0 +1,25 @@
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+    cat >&2 <<EOF
+Usage: workshop run -- login user@domain
+  Open a login shell through sshd and PAM as the cloud user.
+Example:
+  workshop run -- login user@example.com
+EOF
+}
+
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help) usage; exit 0 ;;
+    esac
+done
+
+[ "$#" -eq 1 ] || { usage; exit 2; }
+user="$1"
+
+exec ssh \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    "${user}@localhost"
