@@ -338,6 +338,13 @@ results. State which checks could not run and why. Fix PRs may say `Fixes
 <issue reference>`; diagnostics PRs must say `Related to <issue reference>` and
 must not close the issue.
 
+Title the PR as a commit subject that follows the commit message rules in
+`AGENTS.md`: the matching `ci:`, `e2e:`, `deps(<scope>):`, or component
+prefix, at most 72 characters. This repository merges with merge commits, so
+the PR title becomes the merge commit subject. The branch commit message is
+produced by the workflow runtime from the filtered patch and cannot be set by
+the agent, so do not spend effort on it.
+
 ## Finish without losing work
 
 Only after every failure and independent job error has an actionable
