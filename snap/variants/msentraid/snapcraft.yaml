@@ -93,10 +93,6 @@ parts:
       - retry
       # Headers for the cgo bindings to libfido2 (internal/fido).
       - libfido2-dev
-    stage-packages:
-      # Runtime library for the FIDO2 WebAuthn assertions; core24 does not
-      # provide it.
-      - libfido2-1
     after:
       - libhimmelblau
       - version
