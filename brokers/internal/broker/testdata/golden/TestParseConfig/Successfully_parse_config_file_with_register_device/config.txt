@@ -13,4 +13,6 @@ allowedSSHSuffixes=[]
 extraGroups=[]
 ownerExtraGroups=[]
 extraScopes=[]
+groupsClaim=
+allowedProviderGroups=[]
 flows={true true}

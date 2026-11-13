@@ -393,6 +393,10 @@ func ExpiryDeviceAuthHandler() EndpointHandler {
 }
 
 // MockProvider is a mock that implements the Provider interface.
+//
+// It gets SetGroupsClaimConfig from the embedded GenericProvider, but its own
+// GetGroups ignores that configuration. To test the groups claim, use a
+// *genericprovider.GenericProvider instead.
 type MockProvider struct {
 	genericprovider.GenericProvider
 	Scopes                        []string

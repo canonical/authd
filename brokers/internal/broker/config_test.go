@@ -40,10 +40,12 @@ issuer = https://issuer.url.com
 client_id = client_id
 force_access_check_with_provider = true
 extra_scopes = groups,offline_access, some_other_scope
+groups_claim = roles
 
 [users]
 home_base_dir = /home
 ssh_allowed_suffixes_first_auth = @issuer.url.com
+allowed_provider_groups = devops, docker
 `,
 
 	"invalid_boolean_value": `
@@ -138,6 +140,10 @@ client_id = lower_precedence_client_id
 	"overwrite_higher_precedence": `
 [oidc]
 issuer = https://higher-precedence-issuer.url.com
+groups_claim = higher_precedence_claim
+
+[users]
+allowed_provider_groups = higher_precedence_group
 `,
 
 	"overwrite_enable_entra_auth": `
