@@ -41,29 +41,12 @@ Test authctl group set-gid
     # No session termination needed here: unlike set-uid (which calls
     # proc.CheckUserBusy), set-gid does not check for running processes.
 
-    ${group_name} =    SSH.Execute    id -gn ${username}
-    Should Not Be Empty    ${group_name}
-
-    ${home_dir} =    SSH.Execute    getent passwd ${username} | cut -d: -f6
-    Should Not Be Empty    ${home_dir}
-    SSH.Execute As User    ${username}    touch ${home_dir}/test-file
-
-    ${output} =    SSH.Execute    authctl group set-gid ${group_name} ${new_gid} 2>&1
-    Should Contain    ${output}    GID of group '${group_name}' set to ${new_gid}.
-
-    ${actual_gid} =    SSH.Execute    getent group ${group_name} | cut -d: -f3
-    Should Be Equal As Strings    ${actual_gid}    ${new_gid}
-
-    ${reverse_lookup} =    SSH.Execute    getent group ${new_gid} | cut -d: -f1
-    Should Be Equal As Strings    ${reverse_lookup}    ${group_name}
-
-    ${passwd_gid} =    SSH.Execute    getent passwd ${username} | cut -d: -f4
-    Should Be Equal As Strings    ${passwd_gid}    ${new_gid}
-
-    ${home_gid} =    SSH.Execute    stat -c %g ${home_dir}
-    Should Be Equal As Strings    ${home_gid}    ${new_gid}
-    ${file_gid} =    SSH.Execute    stat -c %g ${home_dir}/test-file
-    Should Be Equal As Strings    ${file_gid}    ${new_gid}
+    ${group_name} =    Get User Primary Group    ${username}
+    ${home_dir} =    Create File In User Home    ${username}    test-file
+    Set Group GID    ${group_name}    ${new_gid}
+    Check Group GID    ${group_name}    ${new_gid}
+    Check User Primary GID    ${username}    ${new_gid}
+    Check Home And Test File GID    ${home_dir}    ${new_gid}
 
     # This test case tests a bug that was fixed in https://github.com/canonical/authd/pull/1422/
     # The bug caused the user record's primary GID to revert
@@ -71,5 +54,37 @@ Test authctl group set-gid
     # causing `getent passwd` and `getent group` to diverge.
     Open Terminal
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
-    ${post_login_gid} =    SSH.Execute    getent passwd ${username} | cut -d: -f4
-    Should Be Equal As Strings    ${post_login_gid}    ${new_gid}
+    Check User Primary GID    ${username}    ${new_gid}
+
+
+*** Keywords ***
+Get User Primary Group
+    [Arguments]    ${username}
+    ${group_name} =    SSH.Execute    id -gn ${username}
+    Should Not Be Empty    ${group_name}
+    RETURN    ${group_name}
+
+Set Group GID
+    [Arguments]    ${group_name}    ${gid}
+    ${output} =    SSH.Execute    authctl group set-gid ${group_name} ${gid} 2>&1
+    Should Contain    ${output}    GID of group '${group_name}' set to ${gid}.
+
+Check Group GID
+    [Arguments]    ${group_name}    ${gid}
+    ${actual_gid} =    SSH.Execute    getent group ${group_name} | cut -d: -f3
+    Should Be Equal As Strings    ${actual_gid}    ${gid}
+
+    ${reverse_lookup} =    SSH.Execute    getent group ${gid} | cut -d: -f1
+    Should Be Equal As Strings    ${reverse_lookup}    ${group_name}
+
+Check User Primary GID
+    [Arguments]    ${username}    ${gid}
+    ${passwd_gid} =    SSH.Execute    getent passwd ${username} | cut -d: -f4
+    Should Be Equal As Strings    ${passwd_gid}    ${gid}
+
+Check Home And Test File GID
+    [Arguments]    ${home_dir}    ${gid}
+    ${home_gid} =    SSH.Execute    stat -c %g ${home_dir}
+    Should Be Equal As Strings    ${home_gid}    ${gid}
+    ${file_gid} =    SSH.Execute    stat -c %g ${home_dir}/test-file
+    Should Be Equal As Strings    ${file_gid}    ${gid}

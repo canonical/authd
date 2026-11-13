@@ -21,9 +21,7 @@ Test login with mixed-case username
     ...    authd stores usernames in lowercase. The test title-cases
     ...    ``E2E_USER`` before both login flows and checks that NSS returns
     ...    the lowercase record.
-    # Convert To Title Case skips words that are not all lower case.
-    ${username} =    String.Convert To Lower Case    ${username}
-    ${username} =    String.Convert To Title Case    ${username}
+    ${username} =    Get Mixed Case Username    ${username}
 
     # Log in with local user
     Log In
@@ -39,3 +37,12 @@ Test login with mixed-case username
     # Log in with remote user using mixed case username with local password
     Open Terminal
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
+
+
+*** Keywords ***
+Get Mixed Case Username
+    [Arguments]    ${username}
+    # Convert To Title Case skips words that are not all lower case.
+    ${username} =    String.Convert To Lower Case    ${username}
+    ${username} =    String.Convert To Title Case    ${username}
+    RETURN    ${username}

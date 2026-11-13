@@ -441,6 +441,17 @@ Check Home Directory
     ${ownership} =    SSH.Execute    stat -c %U:%G ${home_dir}
     Should Be Equal    ${ownership}    ${username}:${username}
 
+Create File In User Home
+    [Arguments]    ${username}    ${filename}
+    ${home_dir} =    SSH.Execute    getent passwd ${username} | cut -d: -f6
+    Should Not Be Empty    ${home_dir}
+    SSH.Execute As User    ${username}    touch ${home_dir}/${filename}
+    RETURN    ${home_dir}
+
+Add User To Sudo Group
+    [Arguments]    ${username}
+    SSH.Execute    sudo usermod -aG sudo '${username}'
+
 Check User Shell
     [Arguments]    ${username}
     ${shell} =    SSH.Execute    getent passwd ${username} | cut -d: -f7
@@ -532,6 +543,12 @@ Log In With Remote User Through CLI: Entra Passwordless TAP
 
     # No cached Entra password: chain into newpassword to set a local one.
     Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}
+
+Log In With Remote User Through Polkit: Local Password
+    [Arguments]    ${local_password}
+    Match Text    Enter your password    60
+    Hid.Type String    ${local_password}
+    Hid.Keys Combo    Return
 
 Log In With Remote User Through Polkit: Entra Password
     [Arguments]    ${username}    ${marker_file}

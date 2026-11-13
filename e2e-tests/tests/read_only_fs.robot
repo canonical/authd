@@ -36,11 +36,17 @@ Test login with local password on read-only filesystem
     Log Out From Terminal Session
     Close Focused Window
 
-    # Re-mount the filesystem read-only
-    SSH.Execute    echo u > /proc/sysrq-trigger
-    # Wait for the SysRq remount to take effect
-    Wait Until Keyword Succeeds    30s    1s    SSH.Execute    findmnt -n -o OPTIONS / | grep -qw ro
+    Remount Root Filesystem Read Only
 
     # Log in with remote user with local password
     Open Terminal
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
+
+
+*** Keywords ***
+Remount Root Filesystem Read Only
+    SSH.Execute    echo u > /proc/sysrq-trigger
+    Wait Until Keyword Succeeds    30s    1s    Check Root Filesystem Is Read Only
+
+Check Root Filesystem Is Read Only
+    SSH.Execute    findmnt -n -o OPTIONS / | grep -qw ro

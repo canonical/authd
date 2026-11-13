@@ -31,8 +31,7 @@ Test SSH does not offer the broker for an unmatched username
     Log In
 
     # Try SSH login with a username outside the configured suffix.
-    ${domain} =    Fetch From Right    %{E2E_USER}    @
-    ${username} =    Set Variable    other-user@${domain}
+    ${username} =    Get Unmatched Username
     Open Terminal
     Start Log In With Remote User Through SSH: QR Code    ${username}
     Check That Login Is Handled By PAM Unix
@@ -42,3 +41,7 @@ Test SSH does not offer the broker for an unmatched username
 Test Setup
     utils.Test Setup    snapshot=%{BROKER}-installed
     Change Broker Configuration    ssh_allowed_suffixes_first_auth    %{E2E_USER}
+
+Get Unmatched Username
+    ${domain} =    Fetch From Right    %{E2E_USER}    @
+    RETURN    other-user@${domain}

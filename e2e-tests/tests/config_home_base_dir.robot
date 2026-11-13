@@ -27,7 +27,7 @@ Test login keeps existing home directory after changing home base dir
     ...    the path, owner and shell. It then points the setting at a second
     ...    directory and confirms that a later login still uses the first one.
 
-    SSH.Execute    mkdir -p ${first_home_base_dir} ${second_home_base_dir}
+    Create Home Base Directories
     Change Broker Configuration    home_base_dir    ${first_home_base_dir}
 
     # Log in with local user.
@@ -37,10 +37,7 @@ Test login keeps existing home directory after changing home base dir
     Open Terminal
     Log In With Remote User Through CLI: QR Code    ${username}    ${local_password}
     Check If User Was Added Properly    ${username}
-    ${passwd_entry} =    SSH.Execute    getent passwd ${username}
-    Should Contain    ${passwd_entry}    ${first_home_base_dir}/
-    Should Contain    ${passwd_entry}    /bin/bash
-    Check Home Directory    ${username}    ${first_home_base_dir}
+    Check User Keeps Original Home Directory
     Log Out From Terminal Session
     Close Focused Window
 
@@ -50,6 +47,14 @@ Test login keeps existing home directory after changing home base dir
     # Second login should still use the original home directory from the database.
     Open Terminal
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
+    Check User Keeps Original Home Directory
+
+
+*** Keywords ***
+Create Home Base Directories
+    SSH.Execute    mkdir -p ${first_home_base_dir} ${second_home_base_dir}
+
+Check User Keeps Original Home Directory
     ${passwd_entry} =    SSH.Execute    getent passwd ${username}
     Should Contain    ${passwd_entry}    ${first_home_base_dir}/
     Should Contain    ${passwd_entry}    /bin/bash

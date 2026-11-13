@@ -28,8 +28,22 @@ Managed user is listed by GDM after reboot
     ...    the startup-ordering failure, so the test reads the name before rebooting.
     Log In With Remote User Through GDM: QR Code    ${username}    ${local_password}
     Log Out
+    ${display_name} =    Get User Display Name    ${username}
+    Reboot To GDM Login Screen
+    Check User Is Listed In GDM    ${display_name}
+
+
+*** Keywords ***
+Get User Display Name
+    [Arguments]    ${username}
     ${display_name} =    SSH.Execute    getent passwd ${username} | cut -d: -f5 | cut -d, -f1
     Should Not Be Empty    ${display_name}
+    RETURN    ${display_name}
+
+Reboot To GDM Login Screen
     Run Keyword And Ignore Error    SSH.Execute    systemctl reboot
     Wait Until GDM Login Screen Ready
+
+Check User Is Listed In GDM
+    [Arguments]    ${display_name}
     Match Text    ${display_name}    30
