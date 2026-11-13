@@ -246,7 +246,7 @@ func (b *Broker) populateAuthInfo(ctx context.Context, session *session, t *oaut
 
 	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
 		log.Warning(context.Background(), b.userNotAllowedLogMsg(authInfo.UserInfo.Name))
-		return nil, AuthDenied, errorMessage{Message: "Authentication failure: user not allowed in broker configuration"}
+		return nil, AuthDenied, displayErrorMessage("Authentication failure: user not allowed in broker configuration")
 	}
 
 	return authInfo, "", nil
@@ -1534,7 +1534,7 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 		authInfo.DeviceRegistrationDataObtainedAt = oldAuthInfo.DeviceRegistrationDataObtainedAt
 	} else if errors.Is(err, errProviderIDMismatch) {
 		log.Error(context.Background(), err.Error())
-		return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+		return AuthDenied, displayErrorMessage(accountIdentityChangedMessage)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		log.Errorf(context.Background(), "Could not load cached auth info: %v", err)
 		return AuthDenied, unexpectedErrMsg("could not load stored token")
@@ -1542,7 +1542,7 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 	if authInfo.UserInfo.ProviderID != "" && session.providerID == "" {
 		if err := b.ensureProviderIDCacheDir(session, authInfo.UserInfo.ProviderID); err != nil {
 			log.Error(context.Background(), err.Error())
-			return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+			return AuthDenied, displayErrorMessage(accountIdentityChangedMessage)
 		}
 	}
 
@@ -1584,7 +1584,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 	if err != nil {
 		log.Error(context.Background(), err.Error())
 		if errors.Is(err, errProviderIDMismatch) {
-			return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+			return AuthDenied, displayErrorMessage(accountIdentityChangedMessage)
 		}
 		return AuthDenied, unexpectedErrMsg("could not load stored token")
 	}
@@ -1647,7 +1647,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 					return AuthDenied, unexpectedErrMsg("failed to store token")
 				}
 
-				return AuthDenied, errorMessage{Message: fmt.Sprintf("Your user account is disabled in %s, please contact your administrator.", b.provider.DisplayName())}
+				return AuthDenied, displayErrorMessagef("Your user account is disabled in %s, please contact your administrator.", b.provider.DisplayName())
 			}
 		}
 		if err != nil {
@@ -1671,12 +1671,12 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 	// to offline mode.
 	if authInfo.UserIsDisabled && session.isOffline {
 		log.Errorf(context.Background(), "Login denied: user %q is disabled in %s and session is offline", session.username, b.provider.DisplayName())
-		return AuthDenied, errorMessage{Message: fmt.Sprintf("Your user account is disabled in %s. Please contact your administrator or try again with a working network connection.", b.provider.DisplayName())}
+		return AuthDenied, displayErrorMessagef("Your user account is disabled in %s. Please contact your administrator or try again with a working network connection.", b.provider.DisplayName())
 	}
 
 	if authInfo.DeviceIsDisabled && session.isOffline {
 		log.Errorf(context.Background(), "Login denied: device %q is disabled in %s and session is offline", session.username, b.provider.DisplayName())
-		return AuthDenied, errorMessage{Message: fmt.Sprintf("This device is disabled in %s. Please contact your administrator or try again with a working network connection.", b.provider.DisplayName())}
+		return AuthDenied, displayErrorMessagef("This device is disabled in %s. Please contact your administrator or try again with a working network connection.", b.provider.DisplayName())
 	}
 
 	// If device registration is enabled, ensure that the device is registered.
@@ -1685,7 +1685,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		if authInfo.UserInfo.ProviderID != "" && session.providerID == "" {
 			if err := b.ensureProviderIDCacheDir(session, authInfo.UserInfo.ProviderID); err != nil {
 				log.Error(context.Background(), err.Error())
-				return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+				return AuthDenied, displayErrorMessage(accountIdentityChangedMessage)
 			}
 		}
 		cleanup, access, data := b.maybeRegisterDevice(ctx, session, authInfo, authInfo.Token, authInfo.DeviceRegistrationData)
@@ -1732,7 +1732,7 @@ func (b *Broker) entraAuth(ctx context.Context, session *session, userPassword s
 	} else if err != nil {
 		log.Errorf(context.Background(), "Could not load cached auth info for user %q: %v", session.username, err)
 		if errors.Is(err, errProviderIDMismatch) {
-			return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+			return AuthDenied, displayErrorMessage(accountIdentityChangedMessage)
 		}
 		return AuthDenied, unexpectedErrMsg("could not load cached token")
 	}
@@ -2003,7 +2003,7 @@ func (b *Broker) entraMFAWaitAuth(ctx context.Context, session *session) (string
 			// deadline happened to elapse during this (non-preemptible) call.
 			if errors.As(err, &mfaErr) && mfaErr.IsMFADenied() {
 				log.Noticef(context.Background(), "MFA authentication denied for user %q", session.username)
-				return denyAndClearMFA(session, errorMessage{Message: "MFA authentication was denied."})
+				return denyAndClearMFA(session, displayErrorMessage("MFA authentication was denied."))
 			}
 			// AcquireTokenByMFAFlow is a non-preemptible CGo call: our poll
 			// deadline (or the caller's cancellation) can elapse while it is in
@@ -2074,7 +2074,7 @@ func (b *Broker) entraMFACodeAuth(ctx context.Context, session *session, code st
 		var mfaErr *himmelblau.MFAError
 		if errors.As(err, &mfaErr) && mfaErr.IsMFADenied() {
 			log.Noticef(context.Background(), "MFA code verification denied for user %q", session.username)
-			return denyAndClearMFA(session, errorMessage{Message: "MFA authentication was denied."})
+			return denyAndClearMFA(session, displayErrorMessage("MFA authentication was denied."))
 		}
 		if errors.As(err, &mfaErr) && mfaErr.IsMFARetryableCode() {
 			// An incorrect or expired one-time code: re-prompt for the code
@@ -2215,7 +2215,10 @@ func (b *Broker) fallbackFromFIDO2(session *session, reason string) (string, isA
 			session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
 			return AuthNext, errorMessage{Message: reason + " Please complete authentication using the device code flow."}
 		}
-		return AuthDenied, errorMessage{Message: reason + " The device code flow is disabled. Please contact your administrator."}
+		// gnome-shell's userVerifier.js shows queued messages at 48 ms per
+		// character and authServices.js gives up after 10 s, so terminal
+		// denials must stay short or the greeter never resets.
+		return AuthDenied, displayErrorMessage(reason + " Contact your administrator.")
 	}
 	session.entraAuthFidoPasswordFallbackAttempted = true
 	return b.requestEntraPassword(session, reason)
@@ -2237,7 +2240,7 @@ func (b *Broker) failFIDOPIN(session *session, reason string) (string, isAuthent
 	if session.entraAuthPasswordHash == "" {
 		return b.fallbackFromFIDO2(session, reason)
 	}
-	return denyAndClearMFA(session, errorMessage{Message: reason})
+	return denyAndClearMFA(session, displayErrorMessage(reason))
 }
 
 // entraAuthFidoPinAuth stores the security key PIN on the session and advances
@@ -2337,7 +2340,7 @@ func (b *Broker) entraAuthFidoAuth(ctx context.Context, session *session) (strin
 		var mfaErr *himmelblau.MFAError
 		if errors.As(err, &mfaErr) && mfaErr.IsMFADenied() {
 			log.Noticef(context.Background(), "FIDO MFA denied for user %q", session.username)
-			return denyAndClearMFA(session, errorMessage{Message: "MFA authentication was denied."})
+			return denyAndClearMFA(session, displayErrorMessage("MFA authentication was denied."))
 		}
 		log.Noticef(context.Background(), "FIDO assertion was rejected for user %q: %v", session.username, err)
 		return b.failFIDOAssertion(session)
@@ -2369,10 +2372,10 @@ func (b *Broker) routeFIDOAssertionError(ctx context.Context, session *session, 
 		return b.failFIDOPIN(session, "The security key PIN is blocked. Remove and reinsert the key, then try again.")
 	case errors.Is(err, fido.ErrPINResetRequired):
 		log.Noticef(context.Background(), "Security key PIN hard-blocked for user %q; reset required", session.username)
-		return b.failFIDOPIN(session, "The security key PIN is hard-blocked and the key must be reset before it can be used. Resetting it erases its credentials; register it again, then try again.")
+		return b.failFIDOPIN(session, "The security key PIN is hard-blocked; resetting it erases its credentials. Register the key again.")
 	case errors.Is(err, fido.ErrPINChangeRequired):
 		log.Noticef(context.Background(), "Security key requires a PIN change for user %q", session.username)
-		return b.failFIDOPIN(session, "The security key requires its PIN to be changed before it can be used. Change it, then try again.")
+		return b.failFIDOPIN(session, "The security key requires a PIN change. Change it, then try again.")
 	case errors.Is(err, fido.ErrTimeout):
 		// The MFA flow is still valid (nothing was sent to Entra ID), so the
 		// user can retry the touch on the same mode. AuthRetry is capped by
@@ -2484,7 +2487,7 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	if authInfo.UserInfo.ProviderID != "" && session.providerID == "" {
 		if err := b.ensureProviderIDCacheDir(session, authInfo.UserInfo.ProviderID); err != nil {
 			log.Error(context.Background(), err.Error())
-			return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+			return AuthDenied, displayErrorMessage(accountIdentityChangedMessage)
 		}
 	}
 	// A successful passwordless MFA flow can still yield a token that is valid
@@ -2574,27 +2577,27 @@ func (b *Broker) routeMFAInitError(mfaErr *himmelblau.MFAError, session *session
 	switch mfaErr.AADSTS {
 	case 50053:
 		log.Noticef(context.Background(), "Account locked for user %q (AADSTS50053)", session.username)
-		return AuthDenied, errorMessage{Message: "Your account is locked. Please try again later or contact your administrator."}
+		return AuthDenied, displayErrorMessage("Your account is locked. Please try again later or contact your administrator.")
 	case 50055:
 		log.Noticef(context.Background(), "Entra password expired for user %q", session.username)
-		return AuthDenied, errorMessage{Message: "Your password has expired. Please change it via the Entra portal."}
+		return AuthDenied, displayErrorMessage("Your password has expired. Please change it via the Entra portal.")
 	case 50057:
 		log.Noticef(context.Background(), "Login denied: user %q is disabled in %s (AADSTS50057)", session.username, b.provider.DisplayName())
-		return AuthDenied, errorMessage{Message: fmt.Sprintf("Your user account is disabled in %s, please contact your administrator.", b.provider.DisplayName())}
+		return AuthDenied, displayErrorMessagef("Your user account is disabled in %s, please contact your administrator.", b.provider.DisplayName())
 	case 50072, 50079, 50203:
 		log.Noticef(context.Background(), "MFA enrollment required for user %q (AADSTS%d)", session.username, mfaErr.AADSTS)
 		if b.cfg.flows.DeviceAuth {
 			session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
 			return AuthNext, errorMessage{Message: "MFA registration required. Please complete setup using the device code flow."}
 		}
-		return AuthDenied, errorMessage{Message: "MFA registration required, but the device code flow is disabled. Please contact your administrator."}
+		return AuthDenied, displayErrorMessage("MFA registration required, but the device code flow is disabled. Please contact your administrator.")
 	case 16000:
 		log.Noticef(context.Background(), "Interactive authentication required for user %q (AADSTS16000)", session.username)
 		if b.cfg.flows.DeviceAuth {
 			session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
 			return AuthNext, errorMessage{Message: "MFA registration required. Please complete setup using the device code flow."}
 		}
-		return AuthDenied, errorMessage{Message: "MFA registration required, but the device code flow is disabled. Please contact your administrator."}
+		return AuthDenied, displayErrorMessage("MFA registration required, but the device code flow is disabled. Please contact your administrator.")
 	case 50126:
 		log.Noticef(context.Background(), "Invalid credentials for user %q", session.username)
 		return AuthRetry, errorMessage{Message: "Incorrect password, please try again."}
@@ -2612,7 +2615,7 @@ func (b *Broker) routeMFAInitError(mfaErr *himmelblau.MFAError, session *session
 			session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
 			return AuthNext, errorMessage{Message: "Access was blocked by your organization's Conditional Access policies. Please complete authentication using the device code flow."}
 		}
-		return AuthDenied, errorMessage{Message: "Access was blocked by your organization's Conditional Access policies and the device code flow is disabled. Please contact your administrator."}
+		return AuthDenied, displayErrorMessage("Access was blocked by your organization's Conditional Access policies and the device code flow is disabled. Please contact your administrator.")
 	default:
 		if mfaErr.IsMFARequired() {
 			// The native password MFA flow could not be set up; redirect to Device
@@ -2622,7 +2625,7 @@ func (b *Broker) routeMFAInitError(mfaErr *himmelblau.MFAError, session *session
 				session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
 				return AuthNext, errorMessage{Message: "MFA is required. Please complete authentication using the device code flow."}
 			}
-			return AuthDenied, errorMessage{Message: "MFA is required but the device code flow is disabled. Please contact your administrator."}
+			return AuthDenied, displayErrorMessage("MFA is required but the device code flow is disabled. Please contact your administrator.")
 		}
 		log.Errorf(context.Background(), "Unhandled AADSTS error %d: %s", mfaErr.AADSTS, mfaErr.Message)
 		return AuthDenied, unexpectedErrMsg(mfaErr.Error())
@@ -2697,7 +2700,7 @@ func bypassesPasswordMethod(method string) bool {
 func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (string, isAuthenticatedDataResponse) {
 	if err := session.verifyProviderID(authInfo.UserInfo.ProviderID); err != nil {
 		log.Error(context.Background(), err.Error())
-		return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+		return AuthDenied, displayErrorMessage(accountIdentityChangedMessage)
 	}
 	if b.cfg.shouldRegisterOwner() {
 		if err := b.cfg.registerOwner(b.cfg.ConfigFile, authInfo.UserInfo.Name); err != nil {
@@ -2710,7 +2713,7 @@ func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (s
 
 	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
 		log.Warning(context.Background(), b.userNotAllowedLogMsg(authInfo.UserInfo.Name))
-		return AuthDenied, errorMessage{Message: "Authentication failure: user not allowed in broker configuration"}
+		return AuthDenied, displayErrorMessage("Authentication failure: user not allowed in broker configuration")
 	}
 
 	// Append extra groups from config, avoiding duplicates.
@@ -2750,7 +2753,7 @@ func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (s
 	if authInfo.UserInfo.ProviderID != "" && session.providerID == "" {
 		if err := b.ensureProviderIDCacheDir(session, authInfo.UserInfo.ProviderID); err != nil {
 			log.Error(context.Background(), err.Error())
-			return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+			return AuthDenied, displayErrorMessage(accountIdentityChangedMessage)
 		}
 	}
 
@@ -2780,12 +2783,12 @@ func (b *Broker) newPassword(session *session, secret string) (string, isAuthent
 	}
 	if err := session.verifyProviderID(authInfo.UserInfo.ProviderID); err != nil {
 		log.Error(context.Background(), err.Error())
-		return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+		return AuthDenied, displayErrorMessage(accountIdentityChangedMessage)
 	}
 	if authInfo.UserInfo.ProviderID != "" && session.providerID == "" {
 		if err := b.ensureProviderIDCacheDir(session, authInfo.UserInfo.ProviderID); err != nil {
 			log.Error(context.Background(), err.Error())
-			return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+			return AuthDenied, displayErrorMessage(accountIdentityChangedMessage)
 		}
 	}
 
@@ -3347,7 +3350,7 @@ func (b *Broker) handleGroupFetch(ctx context.Context, session *session, authInf
 			log.Errorf(context.Background(), "Failed to store token: %s", cacheErr)
 			return AuthDenied, unexpectedErrMsg("failed to store token")
 		}
-		return AuthDenied, errorMessage{Message: fmt.Sprintf("This device is disabled in %s, please contact your administrator.", b.provider.DisplayName())}
+		return AuthDenied, displayErrorMessagef("This device is disabled in %s, please contact your administrator.", b.provider.DisplayName())
 	}
 	if errors.Is(err, providerErrors.ErrInvalidRedirectURI) {
 		// Deny login if the redirect URI is invalid, so that users and administrators are aware of the issue.
@@ -3394,10 +3397,10 @@ func (b *Broker) handleGroupFetch(ctx context.Context, session *session, authInf
 func errorMessageForDisplay(err error, fallback string) errorMessage {
 	var forDisplayErr *providerErrors.ForDisplayError
 	if errors.As(err, &forDisplayErr) {
-		return errorMessage{Message: forDisplayErr.Error()}
+		return displayErrorMessage(forDisplayErr.Error())
 	}
 	if errors.Is(err, errProviderIDMismatch) {
-		return errorMessage{Message: accountIdentityChangedMessage}
+		return displayErrorMessage(accountIdentityChangedMessage)
 	}
 	return errorMessage{Message: fallback}
 }

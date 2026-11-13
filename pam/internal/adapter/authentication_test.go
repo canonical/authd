@@ -142,3 +142,41 @@ func TestFormModelLocksInputOnSubmission(t *testing.T) {
 	require.True(t, updatedForm.submitting)
 	require.Equal(t, "password", entry.Value())
 }
+
+func TestDataToMsg(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		data    string
+		want    authMessage
+		wantErr bool
+	}{
+		"Empty_string":   {data: "", want: authMessage{}},
+		"Empty_object":   {data: "{}", want: authMessage{}},
+		"Message_only":   {data: `{"message":"Access denied"}`, want: authMessage{message: "Access denied"}},
+		"Marker_true":    {data: `{"message":"Account disabled","authd_display":"true"}`, want: authMessage{message: "Account disabled", display: true}},
+		"Marker_false":   {data: `{"message":"Access denied","authd_display":"false"}`, want: authMessage{message: "Access denied"}},
+		"Marker_unknown": {data: `{"message":"Access denied","authd_display":"yes"}`, want: authMessage{message: "Access denied"}},
+		"Marker_bool":    {data: `{"message":"Access denied","authd_display":true}`, want: authMessage{message: "Access denied"}},
+		"Marker_null":    {data: `{"message":"Access denied","authd_display":null}`, want: authMessage{message: "Access denied"}},
+		"Unknown_field":  {data: `{"message":"Access denied","extra":1}`, want: authMessage{message: "Access denied"}},
+		"Missing_msg":    {data: `{"authd_display":"true"}`, wantErr: true},
+		"Non_string_msg": {data: `{"message":123}`, wantErr: true},
+		"Invalid_json":   {data: `invalid`, wantErr: true},
+		"Non_object":     {data: `[]`, wantErr: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := dataToMsg(tc.data)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}

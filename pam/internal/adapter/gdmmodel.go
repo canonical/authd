@@ -299,7 +299,7 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 
 	case isAuthenticatedResultReceived:
 		access := msg.access
-		authMsg, err := grantedTolerantMsg(access, msg.msg)
+		parsedMsg, err := parseAuthMessage(access, msg.msg)
 		if err != nil {
 			return m, sendEvent(pamError{status: pam.ErrSystem, msg: err.Error()})
 		}
@@ -307,13 +307,18 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 		event := &gdm.EventData_AuthEvent{
 			AuthEvent: &gdm.Events_AuthEvent{Response: &authd.IAResponse{
 				Access: access,
-				Msg:    authMsg,
+				Msg:    parsedMsg.message,
 			}},
 		}
 
 		switch access {
 		case auth.Granted:
 		case auth.Denied:
+			if !parsedMsg.display || parsedMsg.message == "" {
+				// Let GDM's normal PAM failure path handle generic authentication failures.
+				return m, nil
+			}
+			return m, sendEvent(m.emitEventSync(event))
 		case auth.DeniedMaxTries:
 			// GNOME Shell does not handle denied-max-tries. Send the supported
 			// denied result so it completes the authentication.
@@ -332,10 +337,6 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 			return m, sendEvent(m.emitEventSync(event))
 		}
 
-		if access == auth.Denied {
-			// Let GDM's normal PAM failure path handle authentication failures.
-			return m, nil
-		}
 		return m, m.emitEvent(event)
 
 	case gdmStopConversations:

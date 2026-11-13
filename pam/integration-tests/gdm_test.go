@@ -885,6 +885,24 @@ func TestGdmModule(t *testing.T) {
 			wantAuthModeIDs: []string{passwordAuthID},
 			wantError:       pam.ErrAuth,
 		},
+		"Error_on_authenticating_user_with_displayable_denial": {
+			pamUserPrefix: examplebroker.UserIntegrationDeniedDisplayablePrefix,
+			eventPollResponses: map[gdm.EventType][]*gdm.EventData{
+				gdm.EventType_startAuthentication: {
+					gdm_test.IsAuthenticatedEvent(&authd.IARequest_AuthenticationData_Secret{
+						Secret: "goodpass",
+					}),
+				},
+			},
+			wantAuthModeIDs: []string{passwordAuthID},
+			wantAuthResponses: []*authd.IAResponse{
+				{
+					Access: auth.Denied,
+					Msg:    "Your user account is disabled, please contact your administrator.",
+				},
+			},
+			wantError: pam.ErrAuth,
+		},
 		"Error_on_invalid_fido_ack": {
 			pamUserPrefix:   examplebroker.UserIntegrationMfaPrefix,
 			wantAuthModeIDs: []string{passwordAuthID, fido1AuthID},

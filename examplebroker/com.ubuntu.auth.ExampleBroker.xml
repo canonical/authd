@@ -25,6 +25,11 @@
         <arg type="s" direction="in" name="authenticationModeName"/>
         <arg type="a{ss}" direction="out"  name="uiLayoutInfo"/>
     </method>
+    <!-- On a denied result, data is a JSON object. Set
+         {"message": "...", "authd_display": "true"} for a terminal denial
+         whose message explains an actionable account, device, or
+         configuration problem. Leave authd_display out for internal errors
+         and retryable results. -->
     <method name="IsAuthenticated">
         <arg type="s" direction="in" name="sessionID"/>
         <arg type="s" direction="in" name="authenticationData"/>

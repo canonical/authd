@@ -54,4 +54,6 @@ const (
 	// UserIntegrationAuthModesPrefix is the prefix for a user listing for supported auth modes.
 	// The modes can be exposed as list, in the form: `user-auth-modes-id1,id2,id3-integration-whatever`.
 	UserIntegrationAuthModesPrefix = "user-auth-modes-"
+	// UserIntegrationDeniedDisplayablePrefix is the prefix for a user whose authentication is denied with a user-facing message.
+	UserIntegrationDeniedDisplayablePrefix = "user-denied-displayable-integration-"
 )

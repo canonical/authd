@@ -3992,10 +3992,13 @@ func TestIsAuthenticatedEntraAuthSurfacesForDisplayErrorOnFirstLogin(t *testing.
 
 	var payload struct {
 		Message string `json:"message"`
+		Display string `json:"authd_display"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(data), &payload))
 	require.Equal(t, graphPermMsg, payload.Message,
 		"a ForDisplayError from the group fetch must be surfaced verbatim, not replaced by the generic network message")
+	require.Equal(t, "true", payload.Display,
+		"a ForDisplayError from the group fetch must be marked displayable")
 	require.NotContains(t, payload.Message, "network connection")
 }
 
@@ -4450,14 +4453,26 @@ func TestFinishEntraAuthRejectsTerminalGroupErrors(t *testing.T) {
 		groupErr           error
 		wantDeviceDisabled bool
 		wantMessage        string
+		wantDisplay        bool
 	}{
 		"device_disabled": {
 			groupErr:           providerErrors.ErrDeviceDisabled,
 			wantDeviceDisabled: true,
+			wantDisplay:        true,
 		},
 		"invalid_redirect_uri": {
 			groupErr:    providerErrors.ErrInvalidRedirectURI,
 			wantMessage: "Invalid redirect URI",
+		},
+		// Providers wrap this sentinel in ForDisplayError with their own
+		// explanation, which must reach the user.
+		"invalid_redirect_uri_from_provider": {
+			groupErr: &providerErrors.ForDisplayError{
+				Message: "Token acquisition failed: fix the redirect URI",
+				Err:     providerErrors.ErrInvalidRedirectURI,
+			},
+			wantMessage: "Token acquisition failed: fix the redirect URI",
+			wantDisplay: true,
 		},
 	}
 	for name, tc := range tests {
@@ -4469,9 +4484,15 @@ func TestFinishEntraAuthRejectsTerminalGroupErrors(t *testing.T) {
 			advanceToEntraMFACode(t, b, sessionID, key)
 			access, data := submitEntraMFACode(t, b, sessionID, key)
 			require.Equal(t, broker.AuthDenied, access)
-			if tc.wantMessage != "" {
-				require.Contains(t, data, tc.wantMessage)
+			var payload struct {
+				Message string `json:"message"`
+				Display string `json:"authd_display"`
 			}
+			require.NoError(t, json.Unmarshal([]byte(data), &payload))
+			if tc.wantMessage != "" {
+				require.Contains(t, payload.Message, tc.wantMessage)
+			}
+			require.Equal(t, tc.wantDisplay, payload.Display == "true")
 
 			if tc.wantDeviceDisabled {
 				cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
@@ -5344,23 +5365,24 @@ func TestEntraAuthRoutesAADSTSErrors(t *testing.T) {
 		wantNextModes []string
 		wantMsg       string
 		wantReport    bool
+		wantDisplay   bool
 	}{
-		"Account_locked":                               {aadsts: 50053, wantAccess: broker.AuthDenied, wantMsg: "locked"},
-		"Password_expired":                             {aadsts: 50055, wantAccess: broker.AuthDenied, wantMsg: "expired"},
+		"Account_locked":                               {aadsts: 50053, wantAccess: broker.AuthDenied, wantMsg: "locked", wantDisplay: true},
+		"Password_expired":                             {aadsts: 50055, wantAccess: broker.AuthDenied, wantMsg: "expired", wantDisplay: true},
 		"External_server_retryable":                    {aadsts: 90006, wantAccess: broker.AuthRetry, wantMsg: "temporary error"},
 		"Tenant_throttling":                            {aadsts: 90055, wantAccess: broker.AuthRetry, wantMsg: "temporary error"},
 		"Invalid_credentials_retry":                    {aadsts: 50126, wantAccess: broker.AuthRetry, wantMsg: "Incorrect password"},
 		"Previous_MFA_request_not_completed":           {aadsts: 500121, wantAccess: broker.AuthRetry, wantMsg: "previous MFA prompt was not completed"},
 		"Conditional_access_blocked":                   {aadsts: 53003, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "Conditional Access"},
 		"Interactive_auth_to_device":                   {aadsts: 16000, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA registration required"},
-		"Interactive_auth_denied_when_device_disabled": {aadsts: 16000, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled"},
+		"Interactive_auth_denied_when_device_disabled": {aadsts: 16000, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled", wantDisplay: true},
 		"MFA_enrollment_to_device":                     {aadsts: 50072, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA registration required"},
 		"MFA_enrollment_alt_to_device":                 {aadsts: 50079, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA registration required"},
 		"Authenticator_registration_to_device":         {aadsts: 50203, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA registration required"},
-		"MFA_enrollment_denied_when_device_disabled":   {aadsts: 50072, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled"},
+		"MFA_enrollment_denied_when_device_disabled":   {aadsts: 50072, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled", wantDisplay: true},
 		"User_not_found_by_aadsts_code":                {aadsts: 50034, wantAccess: broker.AuthDenied, wantMsg: "does not exist"},
 		"MFA_required_to_device":                       {category: himmelblau.MFAErrorRequired, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA is required"},
-		"MFA_required_denied_when_device_disabled":     {category: himmelblau.MFAErrorRequired, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled"},
+		"MFA_required_denied_when_device_disabled":     {category: himmelblau.MFAErrorRequired, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled", wantDisplay: true},
 		"Unhandled_AADSTS_denied":                      {aadsts: 99999, wantAccess: broker.AuthDenied, wantMsg: "AADSTS99999: simulated error. Please report this error", wantReport: true},
 	}
 	for name, tc := range tests {
@@ -5403,9 +5425,12 @@ func TestEntraAuthRoutesAADSTSErrors(t *testing.T) {
 
 			var payload struct {
 				Message string `json:"message"`
+				Display string `json:"authd_display"`
 			}
 			require.NoError(t, json.Unmarshal([]byte(data), &payload))
 			require.Contains(t, payload.Message, tc.wantMsg)
+			require.Equal(t, tc.wantDisplay, payload.Display == "true",
+				"only actionable terminal denials must reach GDM")
 			if tc.wantReport {
 				require.Contains(t, payload.Message, "Please report this error")
 			} else {
@@ -8355,6 +8380,7 @@ func TestIsAuthenticatedEntraAuthFidoAssertionErrors(t *testing.T) {
 		wantAccess      string
 		wantNextModes   []string
 		wantMsgContains string
+		wantDisplay     bool
 	}{
 		"PIN_required_routes_to_pin_mode": {
 			assertErr:       fido.ErrPINRequired,
@@ -8372,16 +8398,19 @@ func TestIsAuthenticatedEntraAuthFidoAssertionErrors(t *testing.T) {
 			assertErr:       fido.ErrPINBlocked,
 			wantAccess:      broker.AuthDenied,
 			wantMsgContains: "blocked",
+			wantDisplay:     true,
 		},
 		"Hard_blocked_PIN_requires_reset": {
 			assertErr:       fido.ErrPINResetRequired,
 			wantAccess:      broker.AuthDenied,
 			wantMsgContains: "reset",
+			wantDisplay:     true,
 		},
 		"PIN_change_required_denies": {
 			assertErr:       fido.ErrPINChangeRequired,
 			wantAccess:      broker.AuthDenied,
-			wantMsgContains: "PIN to be changed",
+			wantMsgContains: "requires a PIN change",
+			wantDisplay:     true,
 		},
 		"Touch_timeout_retries_the_same_mode": {
 			assertErr:       fido.ErrTimeout,
@@ -8444,9 +8473,11 @@ func TestIsAuthenticatedEntraAuthFidoAssertionErrors(t *testing.T) {
 			if tc.wantMsgContains != "" {
 				var payload struct {
 					Message string `json:"message"`
+					Display string `json:"authd_display"`
 				}
 				require.NoError(t, json.Unmarshal([]byte(data), &payload))
 				require.Contains(t, payload.Message, tc.wantMsgContains)
+				require.Equal(t, tc.wantDisplay, payload.Display == "true")
 			}
 
 			require.NoFileExists(t, b.PasswordFilepathForSession(sessionID))

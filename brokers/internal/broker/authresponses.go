@@ -1,6 +1,10 @@
 package broker
 
-import "github.com/canonical/authd/brokers/internal/providers/info"
+import (
+	"fmt"
+
+	"github.com/canonical/authd/brokers/internal/providers/info"
+)
 
 // cachedPasswordMessage is the user-facing notice attached to a granted
 // response after the user's Entra password is saved as the local password
@@ -23,6 +27,21 @@ func (userInfoMessage) isAuthenticatedDataResponse() {}
 // errorMessage represents the error message that is returned to authd.
 type errorMessage struct {
 	Message string `json:"message"`
+	// Display marks terminal authentication denials whose message explains an
+	// actionable account, device, or configuration problem to the user.
+	//
+	// The value is the string "true" on purpose. Released PAM modules decode
+	// this payload into map[string]string, so a JSON boolean would turn every
+	// marked denial into a system error on older clients.
+	Display string `json:"authd_display,omitempty"`
 }
 
 func (errorMessage) isAuthenticatedDataResponse() {}
+
+func displayErrorMessage(msg string) errorMessage {
+	return errorMessage{Message: msg, Display: "true"}
+}
+
+func displayErrorMessagef(format string, args ...any) errorMessage {
+	return displayErrorMessage(fmt.Sprintf(format, args...))
+}
