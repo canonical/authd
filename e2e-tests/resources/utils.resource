@@ -312,7 +312,9 @@ Add APT Source
     ...    List Should Contain Value    ${default_archive_sources}    ${source}
     IF    $is_default_archive    RETURN
     IF    '${source}'.startswith('ppa:')
-        SSH.Execute    add-apt-repository -y -n ppa:${source[4:]}    timeout=300
+        # Launchpad is sometimes slow or unavailable, so retry.
+        Wait Until Keyword Succeeds    3x    10s
+        ...    SSH.Execute    add-apt-repository -y -n ppa:${source[4:]}    timeout=300
     ELSE
         SSH.Execute
         ...    add-apt-repository -y -n -S 'deb http://archive.ubuntu.com/ubuntu/ ${source} main restricted universe multiverse'
