@@ -211,7 +211,13 @@ For successful workflows with failed jobs, inspect the failed jobs too.
 Group occurrences by the actual error, test, component, and likely root cause.
 Do not match solely on workflow names, generic exit codes, or similar titles.
 Keep run attempt and job links so reruns remain distinguishable. Distinguish
-transient infrastructure failures from code regressions, but track both.
+transient infrastructure failures from code regressions.
+
+Base a cause on the evidence, not on the name of the failing test, step, or
+command. For e2e failures, inspect the VM journal for the failing window when
+available. Record relevant session, unit, snap, service, or systemd job state.
+If the journal is unavailable or does not cover the window, say so. Use other
+evidence when it supports a cause; otherwise leave the cause unknown.
 
 ## Match existing issues before creating anything
 
@@ -221,15 +227,24 @@ exhaustive duplicate search. Inspect matching bodies and relevant comments.
 Check whether a closed issue's fix was already present in the failing SHA.  Do
 not treat every new occurrence after a fix as proof of the same root cause.
 
-For a known issue, use `update_issue` with `operation: append` to edit its
-description, not a comment. Append a concise dated occurrence list with the
-failed attempt and job links and any new evidence. Preserve the original body,
-title, labels, and open/closed state. Read the current body before queuing the
-update and omit occurrences already recorded in it or its overflow issues
-(see below). Batch all new occurrences for the same issue into one update when
-they fit. Never replace a maintainer's description or reopen an issue. Known
-issues do not need another fix PR, except to finish missing follow-up work from
-an earlier incomplete triage run.
+For each distinct problem, identify a concrete useful action for a maintainer,
+such as a fix, targeted diagnostics, or an investigation that can make
+progress. Do not create or update an issue, including a continuation, when
+there is no such action. Record a justified no-change outcome instead, with
+the evidence and any existing issue reference. For example, an external outage
+may need no repository action when the failing step already retries. Do not
+assume an outage or the presence of retries alone rules out a useful action.
+Reassess actionability if new evidence or circumstances change.
+
+For an actionable known issue, use `update_issue` with `operation: append` to
+edit its description, not a comment. Append a concise dated occurrence list
+with the failed attempt and job links and any new evidence. Preserve the
+original body, title, labels, and open/closed state. Read the current body
+before queuing the update. Omit occurrences already recorded in it or its
+overflow issues (see below). Batch all new occurrences for the same issue into
+one update when they fit. Never replace a maintainer's description or reopen
+an issue. Known issues do not need another fix PR, except to finish missing
+follow-up work from an earlier incomplete triage run.
 
 ### Overflow for known issues
 
@@ -268,23 +283,23 @@ retry; do not mark that occurrence handled or write the completion file.
 
 ### New issues
 
-For a new issue, inspect relevant open and closed CI issues to match their
-title and body style. Prefer the existing `ci: <specific symptom>` style when
-it fits. Don't use `.github/ISSUE_TEMPLATE/bug_report.yml`. Create one issue
-per distinct problem, not per run. Give each new issue a unique `temporary_id`
-and queue `set_issue_type` with `issue_type: Bug` and that ID as `issue_number`
-after the `create_issue` call. Set types only on issues you create. Do not use
-`suggest: true`.
+For an actionable new issue, inspect relevant open and closed CI issues to
+match their title and body style. Prefer the existing `ci: <specific symptom>`
+style when it fits. Don't use `.github/ISSUE_TEMPLATE/bug_report.yml`. Create
+one issue per distinct problem, not per run. Give each new issue a unique
+`temporary_id` and queue `set_issue_type` with `issue_type: Bug` and that ID as
+`issue_number` after the `create_issue` call. Set types only on issues you
+create. Do not use `suggest: true`.
 
 Include the observable failure, affected workflow/job/test, failed attempt and
 job links, commit SHA, an error excerpt, and available reproduction details.
 Clearly separate facts, hypotheses, and missing evidence.  Include every
 occurrence in this window.  Never file a
 speculative root cause as established fact or publicly disclose a suspected
-security vulnerability.  In each new issue, state the planned follow-up: a fix
-PR, a diagnostics PR, or the specific reason no code change is useful. This
-lets later runs finish missing follow-up work if issue creation succeeds but PR
-creation fails.
+security vulnerability. In each new issue, state the concrete planned
+follow-up: a fix PR, a diagnostics PR, or a specific action for a maintainer.
+This lets later runs finish missing follow-up work if issue creation succeeds
+but PR creation fails.
 
 ## Propose a fix or diagnostics for each new issue
 
@@ -296,13 +311,13 @@ instructions and run the smallest relevant tests and linters. Preserve behavior
 for existing installations. Do not weaken checks, disable tests, hide errors,
 or retry failures blindly to make CI green.
 
-If the logs do not establish the cause, create a draft diagnostics PR instead
-of guessing a fix. Add targeted output or failure artifacts at the point where
-evidence is missing, so the next occurrence can distinguish concrete
-hypotheses.  Prefer failure-only output, bounded logs, timestamps, test seeds,
-safe version information, and relevant process state. Verify that diagnostic
-output will actually be retained when the failing command exits nonzero, and
-does not change the test's exit status or production behavior.
+If the logs do not establish the cause and useful diagnostics are feasible,
+create a draft diagnostics PR instead of guessing a fix. Add targeted output or
+failure artifacts where evidence is missing, so the next occurrence can
+distinguish concrete hypotheses. Prefer failure-only output, bounded logs,
+timestamps, test seeds, safe version information, and relevant process state.
+Verify that diagnostic output will be retained when the failing command exits
+nonzero and does not change the test's exit status or production behavior.
 
 Use only the built-in GitHub Actions token. Do not modify files under
 `.github/workflows/`. Prefer diagnostics in tests, source code, or existing
@@ -311,10 +326,10 @@ describe the exact proposed changes and their purpose in the issue for a
 maintainer to apply. Treat that documented handoff as a completed triage
 outcome, not a reason to retry the same window forever.
 
-If a fix is not feasible for a reason other than missing logs (for example an
-upstream outage requiring no useful code change), explain the blocker and next
-action in the issue. If relevant diagnostics are already present or an open PR
-already addresses this problem, link that evidence instead of duplicating work.
+If a useful fix or diagnostic needs a maintainer to act, explain the exact
+action and supporting evidence in the issue. If relevant diagnostics are
+already present or an open PR already addresses this problem, link that
+evidence instead of duplicating work.
 
 Read `.github/pull_request_template.md` and any
 `.github/PULL_REQUEST_TEMPLATE/` templates before drafting PR bodies. Explain
@@ -323,15 +338,23 @@ results. State which checks could not run and why. Fix PRs may say `Fixes
 <issue reference>`; diagnostics PRs must say `Related to <issue reference>` and
 must not close the issue.
 
+Title the PR as a commit subject that follows the commit message rules in
+`AGENTS.md`: the matching `ci:`, `e2e:`, `deps(<scope>):`, or component
+prefix, at most 72 characters. This repository merges with merge commits, so
+the PR title becomes the merge commit subject. The branch commit message is
+produced by the workflow runtime from the filtered patch and cannot be set by
+the agent, so do not spend effort on it.
+
 ## Finish without losing work
 
-Only after every failure and independent job error has a known-issue update
-(in the original body or a continuation), a new issue and the appropriate PR,
-or an explicit justified no-change outcome, write
-`/tmp/gh-aw/ci-triage/completed.json`. It must be a JSON object mapping
-every manifest failure `key` to a nonempty summary identifying its issue,
-PR/output reference, or existing evidence. Do not include keys outside the
-manifest. This file is mandatory even when the manifest is empty (`{}`).
+Only after every failure and independent job error has an actionable
+known-issue update (in the original body or a continuation), an actionable new
+issue and the appropriate PR or maintainer handoff, or an explicit justified
+no-change outcome, write `/tmp/gh-aw/ci-triage/completed.json`. It must be a
+JSON object mapping every manifest failure `key` to a nonempty summary with its
+issue, PR/output reference, or evidence and reason for no change. Do not
+include keys outside the manifest. This file is mandatory even when the manifest
+is empty (`{}`).
 
 If logs or tools are unavailable, record that uncertainty and add useful
 diagnostics where feasible. If investigation cannot be completed, an output
