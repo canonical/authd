@@ -10,6 +10,7 @@ on:
       - ".ruff-requirements.txt"
       - ".github/uv-requirements.txt"
       - "**/*.py"
+      - "e2e-tests/vm/**"
   pull_request:
     paths: *paths
   workflow_dispatch:
@@ -42,3 +43,4 @@ jobs:
           python3 -m unittest discover -s .github/scripts -p 'test_*.py'
           python3 -m unittest discover -s e2e-tests -p 'test_*.py'
           python3 -m unittest discover -s e2e-tests/resources -p 'test_*.py'
+          python3 -m unittest discover -s e2e-tests/vm -p 'test_*.py'

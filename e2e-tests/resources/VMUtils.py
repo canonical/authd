@@ -6,10 +6,11 @@ VM_NAME_BASE = "e2e-runner"
 
 
 def vm_name() -> str:
-    release = os.environ.get("RELEASE")
-    if not release:
-        raise Exception("RELEASE environment variable is not set")
-    return f"{VM_NAME_BASE}-{release}"
+    if name := os.environ.get("VM_NAME"):
+        return name
+    if release := os.environ.get("RELEASE"):
+        return f"{VM_NAME_BASE}-{release}"
+    raise Exception("RELEASE environment variable is not set")
 
 
 def vm_ip(timeout=60):

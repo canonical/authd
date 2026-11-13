@@ -212,6 +212,7 @@ if ((${#AUTHD_APT_SOURCES[@]})) && [ -n "${AUTHD_DEB:-}" ]; then
 fi
 
 VM_NAME=${VM_NAME:-"e2e-runner-${RELEASE}"}
+export VM_NAME RELEASE
 
 if [ ${#TESTS_TO_RUN[@]} -eq 0 ]; then
     echo "Running all tests in ${TESTS_DIR}"

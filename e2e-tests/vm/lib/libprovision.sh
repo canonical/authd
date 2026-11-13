@@ -3,6 +3,22 @@
 # shellcheck disable=SC2034 # Used by scripts that source this library.
 AUTHD_DEFAULT_APT_SOURCE="ppa:ubuntu-enterprise-desktop/authd-edge"
 
+if [[ -n "${AUTHD_E2E_HOOKS_DIR:-}" ]]; then
+    if [[ "${AUTHD_E2E_HOOKS_DIR}" != /* || ! -d "${AUTHD_E2E_HOOKS_DIR}" ]]; then
+        echo "AUTHD_E2E_HOOKS_DIR must be an absolute directory: ${AUTHD_E2E_HOOKS_DIR}" >&2
+        exit 1
+    fi
+    for hook in prepare-vm virsh; do
+        if [[ ! -f "${AUTHD_E2E_HOOKS_DIR}/${hook}" || ! -x "${AUTHD_E2E_HOOKS_DIR}/${hook}" ]]; then
+            echo "Missing executable E2E backend hook: ${AUTHD_E2E_HOOKS_DIR}/${hook}" >&2
+            exit 1
+        fi
+    done
+    unset hook
+    PATH="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../helpers:${PATH}"
+    export PATH
+fi
+
 function normalize_apt_source() {
     local source="$1"
 
@@ -246,7 +262,8 @@ function resolve_devel_release() {
 
 function has_snapshot() {
     local snapshot_name="$1"
-    virsh snapshot-list "${VM_NAME}" | grep -q "${snapshot_name}"
+    # Read all output so pipefail does not mistake a broken pipe for a missing snapshot.
+    virsh snapshot-list "${VM_NAME}" --name | grep -Fx -- "${snapshot_name}" >/dev/null
 }
 
 function print_vm_console_log() {

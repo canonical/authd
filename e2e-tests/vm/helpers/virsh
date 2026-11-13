@@ -1,4 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ -n "${AUTHD_E2E_VIRSH_HOOK:-}" ]]; then
+    echo >&2 "E2E backend hook 'virsh' must call /usr/bin/virsh directly, not bare 'virsh'."
+    exit 1
+fi
+
+if [[ -n "${AUTHD_E2E_HOOKS_DIR:-}" ]]; then
+    # shellcheck source=../lib/libprovision.sh
+    source "$(dirname "$(readlink -f "$0")")/../lib/libprovision.sh"
+    exec env AUTHD_E2E_VIRSH_HOOK=1 "${AUTHD_E2E_HOOKS_DIR}/virsh" "$@"
+fi
+
 exec sudo LIBVIRT_DEFAULT_URI="${LIBVIRT_DEFAULT_URI:-qemu:///system}" /usr/bin/virsh "$@"
