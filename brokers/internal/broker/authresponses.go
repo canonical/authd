@@ -26,3 +26,8 @@ type errorMessage struct {
 }
 
 func (errorMessage) isAuthenticatedDataResponse() {}
+
+// errDeviceRegistrationFailed is the response for a provider enrollment failure.
+// The password login re-enrollment path checks it to offer the interactive
+// flows instead of denying the login.
+var errDeviceRegistrationFailed = errorMessage{Message: "Error registering device"}
