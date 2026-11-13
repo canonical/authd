@@ -120,6 +120,14 @@ parts:
       "migrations": "conf/migrations"
     stage:
       - conf
+  # Host-invoked helper for applying cached Entra Unix IDs.
+  unix-ids-helper:
+    source: scripts
+    source-type: local
+    plugin: nil
+    override-build: |
+      install -D -m 0755 "$CRAFT_PART_SRC/authd-entra-unix-ids" \
+        "$CRAFT_PART_INSTALL/usr/bin/authd-entra-unix-ids"
   # SemVer comparison helper
   semver:
     source: brokers/tools

@@ -27,7 +27,8 @@ type Provider interface {
 	VerifyUsername(requestedUsername, authenticatedUsername string) error
 }
 
-// GroupFetcher is implemented by providers that can fetch group memberships from the identity provider.
+// GroupFetcher is implemented by providers that fetch group memberships and
+// any configured Unix GID data needed by enrichment.
 type GroupFetcher interface {
 	GetGroups(
 		ctx context.Context,
@@ -37,7 +38,8 @@ type GroupFetcher interface {
 		providerMetadata map[string]interface{},
 		deviceRegistrationData []byte,
 		needsAccessTokenForGraphAPI bool,
-	) ([]info.Group, error)
+		unixGIDAttribute string,
+	) (info.GroupFetchResult, error)
 }
 
 // MetadataProvider is implemented by providers that supply extra metadata or token fields.

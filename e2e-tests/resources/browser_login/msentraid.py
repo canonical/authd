@@ -83,7 +83,7 @@ def login(
     browser.wait_for_pattern("Enter password")
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-enter-password")
-    browser.send_text(password)
+    browser.send_text(password, secret=True)
     browser.send_key_taps([Gdk.KEY_Return])
 
     # Entra can show a TOTP prompt and then either the old confirmation page or
@@ -96,7 +96,7 @@ def login(
     pages = page_text(matches)
     if "Enter code" in pages:
         browser.capture_snapshot(screenshot_dir, "device-login-enter-totp-code")
-        browser.send_text(generate_totp(totp_secret))
+        browser.send_text(generate_totp(totp_secret), secret=True)
         browser.send_key_taps([Gdk.KEY_Return])
         matches = browser.wait_for_pattern(
             rf"(Are you trying to sign in|{APPROVE_PAGE_PATTERN})",

@@ -1,0 +1,18 @@
+.\" Generated from the --help text of demo-tool
+.\" Do not edit manually
+.nh
+.TH "DEMO-TOOL" "1" "" "authd"
+.SH NAME
+demo\-tool \- apply demo settings
+.SH SYNOPSIS
+\fBdemo\-tool\fP \-\-name \fINAME\fP [\-\-apply] [\-\-path \fIPATH\fP] \fITOKEN\fP
+.SH DESCRIPTION
+Read one token file. Without \-\-apply, print the plan only.
+.PP
+NAME is the value from the [demo] section. Paths like C:\etmp keep their backslash.
+.SH ENVIRONMENT
+TOOL_CMD sets the command to run. The default is tool.
+.SH "EXIT STATUS"
+0 on success. 1 on any error.
+.SH "SEE ALSO"
+\fBauthctl\fP(1)

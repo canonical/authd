@@ -1,0 +1,354 @@
+---
+myst:
+  html_meta:
+    "description lang=en":
+      "Microsoft Entra UID and GID discovery flows in authd."
+---
+
+# Microsoft Entra Unix ID flows
+
+This document explains how authd reads and caches Microsoft Entra Unix UIDs
+and GIDs, and how the values affect login. The feature gives administrators a
+way to map Entra users and remote groups to stable Unix IDs.
+
+The feature:
+
+- The broker reads Unix IDs from Entra extension attributes.
+- The broker stores them in `token.json`.
+- Administrators inspect and apply them with `authctl` or the provisioning
+  script.
+- The broker does not apply the values to the authd database automatically
+  during login.
+
+## Values and configuration
+
+The broker handles three related values:
+
+- **UID**: the numeric Unix user ID from an attribute on the Entra user object.
+- **GID**: the numeric Unix group ID from an attribute on each remote Entra
+  group.
+- **UGID**: the stable Entra Graph object ID of a group. This is not a Unix
+  GID. It identifies the group when cached values are reviewed or conflicts
+  are reported.
+
+Related settings are in the `[msentraid]` section of the broker configuration
+file:
+
+```ini
+unix_uid_attribute = uidNumber
+unix_gid_attribute = gidNumber
+unix_uid_required = false
+unix_gid_required = false
+```
+
+The UID and GID feature is disabled when both attribute names are empty. A short
+attribute name is resolved using the configured `[oidc] client_id`. For example,
+`uidNumber` becomes `extension_<client-id-without-hyphens>_uidNumber`. A full
+name such as `extension_abc123_uidNumber` is passed to Entra as written. This
+supports attributes created by Entra Connect or Cloud Sync under a different
+app registration.
+
+A required flag without its matching attribute is invalid configuration. On a
+successful refresh, a missing or invalid required value denies login regardless
+of `force_access_check_with_provider`.
+
+When a required value cannot be read or a refresh cannot complete,
+`force_access_check_with_provider = true` denies login. When it is `false`, a
+returning login keeps the cached value if reading the required value fails; if
+none is cached, it remains empty. If the entire refresh fails, the returning
+login uses the previous snapshot.
+If the provider is unreachable during login, setting
+`force_access_check_with_provider = true` denies offline login. With it set to
+`false`, offline login uses cached values, even if required IDs are missing. A
+missing or unreadable optional ID does not, by itself, deny login; unrelated
+authentication or provider failures can still do so.
+
+## Authentication and Graph access matrix
+
+The UID and GID are retrieved from Microsoft Graph. Authentication and Graph access
+are separate steps: a token that proves the user's identity is not necessarily
+usable for the Graph requests.
+
+| Authentication flow | `register_device` | `client_secret` | Graph path | UID | Group GID and UGID |
+| --- | --- | --- | --- | --- | --- |
+| Device code | false | no | Current delegated token, if it has the Graph scopes | Available when the token has `User.Read` and `GroupMember.Read.All` | Available when the token has `GroupMember.Read.All` |
+| Device code | true | no | Device-registration refresh-token exchange | Available | Available |
+| Device code | false | yes | App-only fallback if the delegated token lacks `GroupMember.Read.All` | Not available through the app-only token | Available |
+| `entra_auth` | true | no | Device-registration refresh-token exchange | Available | Available |
+| `entra_auth` | false | yes | App-only client-credentials token | Not available through the app-only token | Available |
+| `entra_auth` | false | no | Invalid configuration | Not available | Not available |
+
+Therefore, `register_device=true` is not a universal requirement for Unix ID
+enrichment. Here, enrichment means fetching the configured UID and GID
+attributes and the user's group membership from Microsoft Graph, then storing
+that data in the broker's cached user information. Device registration is one
+way to obtain a delegated Graph token. For the
+`entra_auth` flow, either device registration or a client secret is required
+because the native Entra authentication token cannot resolve group membership
+by itself.
+
+Delegated enrichment needs `User.Read` and `GroupMember.Read.All` with the
+necessary consent. The app-only fallback needs the OIDC application to have
+`GroupMember.Read.All` as an application permission with tenant admin consent.
+The implementation does not add a `User.Read.All` application-permission path,
+so an app-only token cannot be used for the user UID lookup through `/me`.
+
+## Graph token selection
+
+The Microsoft Entra provider selects a Graph access path in this order:
+
+1. **Use the current token directly.** If the access token already contains
+   `GroupMember.Read.All`, it is used for Graph requests. The token also needs
+   `User.Read` for the UID request.
+2. **Exchange registered-device data.** If the current token lacks the Graph
+   scope and valid device-registration data is available, the broker uses the
+   cached refresh token and device keys to obtain a delegated Graph token. The
+   exchange requests:
+
+   ```text
+   GroupMember.Read.All
+   User.Read
+   ```
+
+   `GroupMember.Read.All` enables group membership and group attributes.
+   `User.Read` enables the `/me` UID lookup.
+3. **Use app-only client credentials.** If there is no device-registration
+   exchange and a client secret is configured, the broker obtains an app-only
+   Graph token. This path is used for group lookup only. It uses the user's
+   object ID with `/users/<id>/transitiveMemberOf` because an app-only token
+   cannot call `/me` as the signed-in user.
+
+If the exchange in step 2 fails for `User.Read`, the broker retries it for
+`GroupMember.Read.All` only, so group requests can still succeed. Device-disabled
+and invalid-redirect-URI errors are not retried. This retry can retrieve groups
+and GIDs, but cannot refresh the UID. For how unreadable IDs or a failed group
+lookup affect login, see [Returning online login](#returning-online-login).
+
+## UID and group requests
+
+For a delegated Graph token, the broker reads the user attribute with:
+
+```text
+GET /me?$select=<unix_uid_attribute>
+```
+
+It reads the user's transitive security groups with a request under:
+
+```text
+GET /me/transitiveMemberOf/...
+```
+
+For an app-only token, it reads groups with:
+
+```text
+GET /users/<user-object-id>/transitiveMemberOf/...
+```
+
+The group query selects the normal group identity fields and the configured
+GID extension attribute. The broker filters to security groups, normalizes
+names, and stores each group's Graph `id` as `ugid`.
+
+Groups whose Entra name starts with `linux-` are local mappings. They keep an
+empty `ugid` and do not receive a remote GID. They are exempt from required
+remote-GID checks.
+
+## ID validation
+
+A directory value is accepted only when it is a positive integer in the
+signed 32-bit range. The broker rejects:
+
+- zero
+- negative values
+- fractions and non-finite values
+- `65534` and `65535`
+- `4294967295`
+- values greater than `2147483647`
+
+The Microsoft Graph client reads every JSON number as a 64-bit float before the
+broker validates it. A decimal such as `1.0000000000000000001` can round to
+`1.0` before the broker sees it, and is accepted as ID 1. A value that remains
+fractional after decoding is rejected. The Unix ID attributes are registered as
+integers, so Graph should not return fractional values.
+
+Invalid data is logged and omitted. A missing or invalid required value on a
+successful refresh denies login in both modes. An unreadable required value
+follows the force setting.
+
+If duplicate normalized group names have different GIDs, the broker does not
+choose one based on response order. It omits the ambiguous GID. With
+`unix_gid_required = true`, login fails in both modes.
+
+## Device-code flow
+
+### Device code with registration disabled
+
+1. The user completes the device-code flow using the configured OIDC
+   application.
+2. No device-registration data is created.
+3. The broker examines the returned access token.
+4. If it already has the Graph scopes, the broker uses it directly for UID and
+   groups.
+5. If it lacks `GroupMember.Read.All` and a client secret is configured, the
+   broker can use the app-only fallback for groups. An optional UID keeps its
+   cached value if available, because an app-only token cannot read it. A
+   required UID denies login with the forced check and uses its cached value, if
+   available, without it.
+6. If no usable Graph path exists, the refresh cannot complete. The forced
+   check denies login; without it, a returning login uses its previous snapshot.
+
+This flow does not require `register_device=true` when the configured OIDC app
+returns a suitable delegated Graph token.
+
+### Device code with registration enabled
+
+1. The user completes the device-code flow.
+2. The broker registers the machine when registration data is not already
+   cached.
+3. The registration data is persisted in `token.json`.
+4. The broker exchanges the refresh token and device keys for a delegated Graph
+   token requesting `GroupMember.Read.All` and `User.Read`.
+5. The broker fetches the UID and groups, including GIDs and one GUID for each
+   group.
+6. The refreshed snapshot is cached. A required value that is missing or
+   invalid denies login in both modes.
+7. The response sent to authd excludes the cache-only UID and GID fields.
+
+The registration cleanup is kept alive until Graph enrichment finishes because
+its state is needed by the token exchange.
+
+## `entra_auth` flow
+
+### `entra_auth` with registration enabled
+
+1. The user completes the native Entra passwordless or password-plus-MFA flow.
+2. The broker registers the device, or reuses valid registration data already
+   in the cache.
+3. The broker exchanges the registered-device refresh token for a Graph token.
+4. The broker fetches the UID through `/me` and groups through the delegated
+   group endpoint.
+5. The enriched snapshot is cached and projected before the response is sent
+   to authd.
+
+### `entra_auth` with registration disabled and a client secret
+
+1. The user completes the native Entra authentication flow.
+2. No device registration is performed.
+3. The broker uses client credentials to obtain an app-only Graph token when
+   the native token lacks `GroupMember.Read.All`.
+4. The broker fetches groups through the user's object ID.
+5. The broker can cache group GIDs and each group's Graph object ID (`ugid`).
+6. The UID lookup is unavailable through the app-only token, so an optional UID
+   uses its cached value if available and otherwise remains empty. With the
+   forced check, `unix_uid_required = true` denies login; without it, the cached
+   UID is used if available.
+
+The broker allows this flow only when the client secret is configured. If both
+registration and the client secret are absent while `entra_auth` is enabled,
+startup fails with an invalid configuration error.
+
+## Online login and cache behavior
+
+### Initial online login
+
+On a first online login, the broker authenticates the user, obtains a usable
+Graph path, and performs one enrichment operation. The operation creates a
+complete user snapshot containing the current UID and groups. The snapshot is
+written to `token.json`.
+
+If the initial refresh cannot complete, there is no previous snapshot to fall
+back to, so the login fails.
+
+Credentials are saved before enrichment. A failed first login can therefore
+leave `token.json` with device-registration data but no groups or UID. The
+broker does not mark this entry as incomplete. A later unforced login can use
+it as the previous snapshot when a refresh cannot complete, even if required
+IDs are missing. A successful refresh that returns a missing or invalid
+required value denies login in both modes. This is a known limitation. The next
+successful online login replaces the entry with a complete snapshot.
+
+### Returning online login
+
+On a returning login, the broker refreshes the provider token and then reads the
+UID and group data. A successful refresh replaces the cached snapshot. If it
+returns a missing or invalid required value, login is denied in both modes, and
+the snapshot with the cleared value is saved before denial.
+
+An unreadable value follows the force setting. With the forced check, a required
+unreadable UID or GID denies login. Without it, the broker keeps the cached value
+or leaves it empty if none is cached. A whole refresh failure also follows the
+force setting: forced login is denied; an unforced returning login uses the
+previous snapshot, even if it lacks a required ID. Cached IDs from old attribute
+names are dropped first, as described under Offline login.
+
+Credential freshness is separate from directory-data freshness. After token
+refresh or device registration, intermediate cache writes save the new
+credentials with the previous `UserInfo`. This preserves rotated refresh tokens
+and registration data even when enrichment denies login. A failed cache rewrite
+denies only when checks are forced and a UID or GID is required; otherwise it is
+logged and login continues without the dropped IDs.
+
+### Offline login
+
+Offline login performs no Graph requests. With checks not forced, it uses the
+values already present in `token.json` and grants login even when some required
+IDs are missing. With checks forced, login is denied because the provider must
+be reachable.
+
+Cached IDs are valid only for the attribute names they were read from. Before
+an offline login or a fallback uses a snapshot, the broker drops each cached
+UID or GID whose attribute name differs from the current configuration, and it
+rewrites `token.json`. A snapshot without recorded names counts as mismatched,
+so its IDs are dropped too. Group memberships are kept. The login then continues
+with the dropped IDs left empty if checks are not forced. With
+`force_access_check_with_provider = true`, the broker never uses a snapshot for
+an offline login. A required ID that is still missing after a successful online
+refresh denies login in both modes.
+
+## Cache and authd response
+
+The authoritative cache is the provider-ID token path under the broker data
+directory. A compatibility username path may exist during migration. The
+cache directory is expected to use mode `0700`, and `token.json` mode `0600`.
+
+The cached `UserInfo` contains:
+
+```json
+{
+  "uid": 41001,
+  "groups": [
+    {"name": "engineering", "ugid": "<entra-group-id>", "gid": 42001}
+  ]
+}
+```
+
+Before returning the successful authentication result to authd, the broker
+creates a copy of the user information and removes `uid` and every remote
+`gid` from that copy. The cached copy remains enriched. This keeps authd's
+normal local ID allocation unchanged.
+
+## Applying cached values
+
+To apply cached values manually, use `authctl`. Unlike the helper, these
+commands do not check which attribute names produced the cached values. See the
+[configuration how-to](../howto/configure-entra-unix-ids) for the commands and
+safe application procedure.
+
+See `man authd-entra-unix-ids` for the command's options, dry-run behavior, and
+attribute-name checks. When a cached UID is present, the helper sets the user's
+UID and then the GID of the user's private group to that same value before
+applying remote group GIDs. It skips local groups and groups without a cached
+GID, uses `ugid` for conflict reporting, and aborts before mutation if the input
+contains conflicting assignments. `authctl` remains the final check for local
+and authd database conflicts.
+
+## Limitations
+
+Automatic application of Entra UID/GID values during login is not part of this
+feature. In particular, it does not:
+
+- send UID/GID as authoritative IDs in the authd login payload;
+- change authd's core user model to represent an optional provider UID;
+- replace an automatically allocated UID/GID during user creation; or
+- terminate and require a second SSH login after an ID changes.
+
+These behaviors are outside the current feature.
