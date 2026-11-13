@@ -213,6 +213,12 @@ Do not match solely on workflow names, generic exit codes, or similar titles.
 Keep run attempt and job links so reruns remain distinguishable. Distinguish
 transient infrastructure failures from code regressions, but track both.
 
+Base a cause on the evidence, not on the name of the failing test, step, or
+command. For e2e failures, inspect the VM journal for the failing window when
+available. Record relevant session, unit, snap, service, or systemd job state.
+If the journal is unavailable or does not cover the window, say so. Use other
+evidence when it supports a cause; otherwise leave the cause unknown.
+
 ## Match existing issues before creating anything
 
 Search both open and closed issues and linked PRs using relevant error and
