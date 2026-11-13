@@ -40,7 +40,9 @@ jobs:
         run: python -m unittest discover -s e2e-tests -p test_update_dependencies.py
 
       - name: Upgrade E2E dependencies under YARF runtime constraints
-        run: python e2e-tests/update_dependencies.py --upgrade
+        run: |
+          cp e2e-tests/uv.lock "${RUNNER_TEMP}/uv.lock.before"
+          python e2e-tests/update_dependencies.py --upgrade
 
       - name: Prepare pull request body
         run: |
@@ -57,6 +59,8 @@ jobs:
           PRs created with GITHUB_TOKEN do not trigger normal PR CI.
           Close and reopen the PR to run those checks and the E2E workflow.
           EOF
+            printf '\n%s\n\n' 'Dependency changes:'
+            python e2e-tests/update_dependencies.py --summary "${RUNNER_TEMP}/uv.lock.before"
             cat .github/pull_request_template.md
           } > "${RUNNER_TEMP}/e2e-dependencies-pr-body.md"
 
