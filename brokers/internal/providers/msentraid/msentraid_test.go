@@ -138,6 +138,14 @@ func TestGetUserInfo(t *testing.T) {
 	}
 }
 
+func TestGetProviderID(t *testing.T) {
+	t.Parallel()
+
+	providerID, err := msentraid.New().GetProviderID(validIDToken)
+	require.NoError(t, err)
+	require.Equal(t, "valid-oid", providerID)
+}
+
 func TestUserInfoFromAccessToken(t *testing.T) {
 	t.Parallel()
 
@@ -152,6 +160,46 @@ func TestUserInfoFromAccessToken(t *testing.T) {
 	got, err := msentraid.New().UserInfoFromAccessToken(accessTokenStr)
 	require.NoError(t, err, "UserInfoFromAccessToken should not return an error")
 	require.Equal(t, info.NewUser("test-user@email.com", "", "saved-user-id", "", "test-user", nil), got)
+}
+
+func TestUserInfoFromAccessToken_MissingPreferredUsername(t *testing.T) {
+	t.Parallel()
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"oid": "saved-user-id",
+	})
+	accessTokenStr, err := accessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err, "Failed to sign access token")
+
+	provider := msentraid.New()
+	providerID, err := provider.ProviderIDFromAccessToken(accessTokenStr)
+	require.NoError(t, err)
+	require.Equal(t, "saved-user-id", providerID)
+
+	_, err = provider.UserInfoFromAccessToken(accessTokenStr)
+	var missingClaimErr *providerErrors.MissingClaimError
+	require.ErrorAs(t, err, &missingClaimErr)
+	require.Equal(t, "preferred_username", missingClaimErr.Claim)
+}
+
+func TestUserInfoFromAccessToken_MissingOID(t *testing.T) {
+	t.Parallel()
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"upn": "test-user@email.com",
+	})
+	accessTokenStr, err := accessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err, "Failed to sign access token")
+
+	_, err = msentraid.New().UserInfoFromAccessToken(accessTokenStr)
+	require.Error(t, err, "UserInfoFromAccessToken should return an error without an oid claim")
+}
+
+func TestUserInfoFromAccessToken_MalformedToken(t *testing.T) {
+	t.Parallel()
+
+	_, err := msentraid.New().UserInfoFromAccessToken("not-a-jwt")
+	require.Error(t, err, "UserInfoFromAccessToken should return an error for a malformed access token")
 }
 
 func TestRefreshEntraToken(t *testing.T) {
@@ -429,14 +477,16 @@ func TestClassifyGraphTokenAcquisitionError(t *testing.T) {
 		wantRetryWithDeviceAuth bool
 		wantForDisplay          bool
 		wantDeviceDisabled      bool
+		wantInvalidRedirectURI  bool
 	}{
 		"Device_disabled_denies_login": {
 			err:                himmelblau.ErrDeviceDisabled,
 			wantDeviceDisabled: true,
 		},
 		"Invalid_redirect_URI_is_displayed_to_the_user": {
-			err:            himmelblau.ErrInvalidRedirectURI,
-			wantForDisplay: true,
+			err:                    himmelblau.ErrInvalidRedirectURI,
+			wantForDisplay:         true,
+			wantInvalidRedirectURI: true,
 		},
 		"Device_authentication_failed_retries_with_device_auth": {
 			err:                     himmelblau.ErrDeviceAuthenticationFailed,
@@ -467,6 +517,13 @@ func TestClassifyGraphTokenAcquisitionError(t *testing.T) {
 
 			require.Equal(t, tc.wantDeviceDisabled, errors.Is(got, providerErrors.ErrDeviceDisabled),
 				"unexpected ErrDeviceDisabled classification")
+
+			require.Equal(t, tc.wantInvalidRedirectURI, errors.Is(got, providerErrors.ErrInvalidRedirectURI),
+				"unexpected ErrInvalidRedirectURI classification")
+
+			var authoritativeErr *providerErrors.AuthoritativeError
+			require.False(t, errors.As(got, &authoritativeErr),
+				"unexpected AuthoritativeError classification")
 		})
 	}
 }
@@ -885,25 +942,66 @@ func maybeRegisterDevice(
 	)
 }
 
-func TestIsTokenExpiredError(t *testing.T) {
+func TestClassifyRefreshTokenError(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
 		errorCode        string
 		errorDescription string
 
-		wantExpired bool
+		wantKind providerErrors.RefreshTokenErrorKind
 	}{
-		"AADSTS50078_mfa_session_expired":              {errorCode: "invalid_grant", errorDescription: "AADSTS50078: Presented multi-factor authentication has expired due to policies configured by your administrator.", wantExpired: true},
-		"AADSTS50089_flow_token_expired":               {errorCode: "invalid_grant", errorDescription: "AADSTS50089: Flow token has expired. User needs to reauthenticate.", wantExpired: true},
-		"AADSTS50173_token_expired":                    {errorCode: "invalid_grant", errorDescription: "AADSTS50173: The provided grant has expired", wantExpired: true},
-		"AADSTS70008_token_expired_due_to_inactivity":  {errorCode: "invalid_grant", errorDescription: "AADSTS70008: The refresh token has expired due to inactivity.", wantExpired: true},
-		"AADSTS70043_token_expired":                    {errorCode: "invalid_grant", errorDescription: "AADSTS70043: The refresh token has expired or is invalid", wantExpired: true},
-		"AADSTS700082_token_expired_due_to_inactivity": {errorCode: "invalid_grant", errorDescription: "AADSTS700082: The refresh token has expired due to inactivity.", wantExpired: true},
+		"AADSTS50078_mfa_session_expired": {
+			errorCode:        "invalid_grant",
+			errorDescription: "AADSTS50078: Presented multi-factor authentication has expired due to policies configured by your administrator.",
+			wantKind:         providerErrors.RefreshTokenErrorExpiredOrRevoked,
+		},
+		"AADSTS50089_token_expired_or_revoked": {
+			errorCode:        "invalid_grant",
+			errorDescription: "AADSTS50089: The refresh token has expired or been revoked by the user or an administrator.",
+			wantKind:         providerErrors.RefreshTokenErrorExpiredOrRevoked,
+		},
+		"AADSTS135011_original_device_disabled": {
+			errorCode:        "invalid_grant",
+			errorDescription: "AADSTS135011: The device used during the authentication is disabled.",
+			wantKind:         providerErrors.RefreshTokenErrorExpiredOrRevoked,
+		},
+		"AADSTS50173_grant_revoked": {
+			errorCode:        "invalid_grant",
+			errorDescription: "AADSTS50173: The provided grant has been revoked due to a password reset.",
+			wantKind:         providerErrors.RefreshTokenErrorRevoked,
+		},
+		"AADSTS70008_token_expired_due_to_inactivity": {
+			errorCode:        "invalid_grant",
+			errorDescription: "AADSTS70008: The refresh token has expired due to inactivity.",
+			wantKind:         providerErrors.RefreshTokenErrorExpired,
+		},
+		"AADSTS70043_token_expired": {
+			errorCode:        "invalid_grant",
+			errorDescription: "AADSTS70043: The refresh token has expired or is invalid",
+			wantKind:         providerErrors.RefreshTokenErrorExpiredOrRevoked,
+		},
+		"AADSTS700082_token_expired_due_to_inactivity": {
+			errorCode:        "invalid_grant",
+			errorDescription: "AADSTS700082: The refresh token has expired due to inactivity.",
+			wantKind:         providerErrors.RefreshTokenErrorExpired,
+		},
 
-		"AADSTS50057_user_disabled": {errorCode: "invalid_grant", errorDescription: "AADSTS50057: The user account is disabled.", wantExpired: false},
-		"Other_invalid_grant":       {errorCode: "invalid_grant", errorDescription: "AADSTS65001: The user or administrator has not consented to use the application.", wantExpired: false},
-		"Non_invalid_grant_error":   {errorCode: "access_denied", errorDescription: "AADSTS50173: The provided grant has expired", wantExpired: false},
+		"AADSTS50057_user_disabled": {
+			errorCode:        "invalid_grant",
+			errorDescription: "AADSTS50057: The user account is disabled.",
+			wantKind:         providerErrors.RefreshTokenErrorUnknown,
+		},
+		"Other_invalid_grant": {
+			errorCode:        "invalid_grant",
+			errorDescription: "AADSTS65001: The user or administrator has not consented to use the application.",
+			wantKind:         providerErrors.RefreshTokenErrorUnknown,
+		},
+		"Non_invalid_grant_error": {
+			errorCode:        "access_denied",
+			errorDescription: "AADSTS50173: The provided grant has expired",
+			wantKind:         providerErrors.RefreshTokenErrorUnknown,
+		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -914,10 +1012,21 @@ func TestIsTokenExpiredError(t *testing.T) {
 				ErrorCode:        tc.errorCode,
 				ErrorDescription: tc.errorDescription,
 			}
-			got := p.IsTokenExpiredError(err)
-			require.Equal(t, tc.wantExpired, got, "IsTokenExpiredError returned unexpected result")
+			got := p.ClassifyRefreshTokenError(err)
+			require.Equal(t, tc.wantKind, got, "ClassifyRefreshTokenError returned unexpected result")
 		})
 	}
+}
+
+func TestIsUserDisabledError(t *testing.T) {
+	t.Parallel()
+
+	p := msentraid.New()
+	require.False(t, p.IsUserDisabledError(nil))
+	require.True(t, p.IsUserDisabledError(&oauth2.RetrieveError{
+		ErrorCode:        "invalid_grant",
+		ErrorDescription: "AADSTS50057: The user account is disabled.",
+	}))
 }
 
 func TestMain(m *testing.M) {

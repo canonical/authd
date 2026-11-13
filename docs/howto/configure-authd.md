@@ -247,13 +247,17 @@ client_secret = <CLIENT_SECRET>
 (ref::config-force-provider-auth)=
 ## Force remote access check with the identity provider
 
-By default, remote authentication with the identity provider only happens if
-there is a working internet connection and the provider is reachable during
-login.
+By default, the provider access check during remote login is best effort. A
+valid local password is sufficient when the check cannot be completed for a
+reason that does not indicate revoked access, such as a network or token
+verification error. If the provider reports that a refresh token may be expired
+or revoked without distinguishing the two, or that the device used during the
+original authentication is disabled, authd requires re-authentication even when
+the check is optional.
 
-To ensure that user access permissions are always checked with the identity
-provider during login, even when the provider is unreachable, enable the check
-as follows:
+To require a successful access check with the identity provider for each login,
+enable the check as follows. If the provider is unreachable when a session
+starts, authd denies login.
 
 ```ini
 [oidc]
@@ -265,7 +269,7 @@ This check works by forcing a token refresh during login, which fails if the
 user does not have the necessary permissions in the identity provider.
 
 ```{warning}
-In some cases, forcing the access check may prevent login, such as when there are network issues.
+Forcing the access check prevents offline login when the provider is unreachable.
 ```
 
 Additional information on the forced access check is provided in the [security
