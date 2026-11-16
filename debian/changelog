@@ -1,8 +1,8 @@
-authd (0.7.1+git261112+1591+851ff3f5) resolute; urgency=medium
+authd (0.7.1+git261116+1595+e78c7da7) resolute; urgency=medium
 
-  * Github build. Run id: 43248253892. Run number: 1591.
+  * Github build. Run id: 43789916678. Run number: 1595.
 
- -- adombeck <18482300+adombeck@users.noreply.github.com>  Thu, 12 Nov 2026 15:30:57 +0000
+ -- dependabot <49699333+dependabot@users.noreply.github.com>  Mon, 16 Nov 2026 02:05:18 +0000
 
 authd (0.7.1) stonking; urgency=medium
 
