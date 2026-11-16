@@ -13,7 +13,7 @@
 edition = "2021"
 rust-version = "1.85"
 name = "link-section"
-version = "0.19.3"
+version = "0.19.4"
 authors = ["Matt Mastracci <matthew@mastracci.com>"]
 build = false
 autolib = false
@@ -108,4 +108,5 @@ priority = 0
 check-cfg = [
     "cfg(linktime_used_linker)",
     "cfg(linktime_asan)",
+    "cfg(bsan)",
 ]

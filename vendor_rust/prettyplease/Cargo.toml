@@ -11,12 +11,12 @@
 
 [package]
 edition = "2021"
-rust-version = "1.62"
+rust-version = "1.71"
 name = "prettyplease"
-version = "0.2.37"
+version = "0.3.0"
 authors = ["David Tolnay <dtolnay@gmail.com>"]
 build = "build.rs"
-links = "prettyplease02"
+links = "prettyplease03"
 exclude = ["cargo-expand"]
 autolib = false
 autobins = false
@@ -35,6 +35,7 @@ repository = "https://github.com/dtolnay/prettyplease"
 targets = ["x86_64-unknown-linux-gnu"]
 rustdoc-args = [
     "--generate-link-to-definition",
+    "--generate-macro-expansion",
     "--extern-html-root-url=core=https://doc.rust-lang.org",
     "--extern-html-root-url=alloc=https://doc.rust-lang.org",
     "--extern-html-root-url=std=https://doc.rust-lang.org",
@@ -63,7 +64,7 @@ version = "1.0.80"
 default-features = false
 
 [dependencies.syn]
-version = "2.0.105"
+version = "3"
 features = ["full"]
 default-features = false
 
@@ -79,7 +80,7 @@ version = "1.0.35"
 default-features = false
 
 [dev-dependencies.syn]
-version = "2.0.105"
+version = "3"
 features = [
     "clone-impls",
     "extra-traits",

@@ -13,7 +13,7 @@
 edition = "2021"
 rust-version = "1.85"
 name = "prost-derive"
-version = "0.14.4"
+version = "0.14.6"
 authors = [
     "Dan Burkert <dan@danburkert.com>",
     "Lucio Franco <luciofranco14@gmail.com>",
@@ -40,7 +40,7 @@ proc-macro = true
 version = "1.0.1"
 
 [dependencies.itertools]
-version = ">=0.10.1, <=0.14"
+version = ">=0.10.1, <=0.15"
 
 [dependencies.proc-macro2]
 version = "1.0.60"

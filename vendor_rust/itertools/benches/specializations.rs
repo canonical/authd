@@ -355,29 +355,29 @@ bench_specializations! {
         }
         v.iter().copied().update(|x| *x *= 7)
     }
-    tuple_combinations1 {
+    array_combinations1 {
         {
             let v = black_box(vec![0; 1024]);
         }
-        v.iter().tuple_combinations::<(_,)>()
+        v.iter().array_combinations::<1>()
     }
-    tuple_combinations2 {
+    array_combinations2 {
         {
             let v = black_box(vec![0; 64]);
         }
-        v.iter().tuple_combinations::<(_, _)>()
+        v.iter().array_combinations::<2>()
     }
-    tuple_combinations3 {
+    array_combinations3 {
         {
             let v = black_box(vec![0; 64]);
         }
-        v.iter().tuple_combinations::<(_, _, _)>()
+        v.iter().array_combinations::<3>()
     }
-    tuple_combinations4 {
+    array_combinations4 {
         {
             let v = black_box(vec![0; 64]);
         }
-        v.iter().tuple_combinations::<(_, _, _, _)>()
+        v.iter().array_combinations::<4>()
     }
     intersperse {
         {
@@ -440,6 +440,30 @@ bench_specializations! {
             let v = black_box(vec![0; 16]);
         }
         v.iter().combinations_with_replacement(4)
+    }
+    array_combinations_with_replacement1 {
+        {
+            let v = black_box(vec![0; 4096]);
+        }
+        v.iter().array_combinations_with_replacement::<1>()
+    }
+    array_combinations_with_replacement2 {
+        {
+            let v = black_box(vec![0; 90]);
+        }
+        v.iter().array_combinations_with_replacement::<2>()
+    }
+    array_combinations_with_replacement3 {
+        {
+            let v = black_box(vec![0; 28]);
+        }
+        v.iter().array_combinations_with_replacement::<3>()
+    }
+    array_combinations_with_replacement4 {
+        {
+            let v = black_box(vec![0; 16]);
+        }
+        v.iter().array_combinations_with_replacement::<4>()
     }
     permutations1 {
         {
