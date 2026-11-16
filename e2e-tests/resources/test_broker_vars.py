@@ -42,6 +42,19 @@ class EntraDeviceCodeTest(unittest.TestCase):
                     self.assertIsNotNone(match)
                     self.assertEqual(match.groups()[-1], "ABCD12345")
 
+    def test_gdm_frame_matches(self):
+        text = (
+            "Scan the QR code or open the URL and enter the code\n"
+            "below.\n"
+            "login.microsoft.com/device\n"
+            "Login code: F2FDCDNPV\n"
+            "Cancel\n"
+            "Request new code\n"
+        )
+        match = re.search(self.pattern, text)
+        self.assertIsNotNone(match)
+        self.assertEqual(match.groups()[-1], "F2FDCDNPV")
+
     def test_incomplete_frames_do_not_start_browser_login(self):
         for code in (
             "Code:",

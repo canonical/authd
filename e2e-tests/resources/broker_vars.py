@@ -15,10 +15,10 @@ _BROKER_CONFIGS = {
         "BROKER_CFG_DIR": "/var/snap/authd-msentraid/current/broker.conf.d",
         "PROVIDER_DISPLAY_NAME": "Microsoft Entra ID",
         "DEVICE_URL": "login.microsoft.com/device",
-        # TODO: Once the stable channel ships the new URL:/Code: format, drop the
-        # optional-prefix fallbacks and simplify to r"URL:\s*(https://)?...\nCode[:\uFF1A]\s*([A-Za-z0-9]{9})".
-        # They exist only for migration_broker.robot, which logs in before upgrading
-        # from stable (old bare format) to edge (new labeled format).
+        # Three layouts are in use. GDM shows the URL without a label and the
+        # code as "Login code:". The authd terminal UI shows "URL:" and
+        # "Code:". The stable snapshot used by the migration tests shows both
+        # unlabelled. Keep accepting all three.
         # The label can be rendered separately from the code, and OCR can drop
         # its colon, render it full-width, or change its case. OCR can also
         # append noise to the label line before the separate code line.
@@ -39,7 +39,9 @@ _BROKER_CONFIGS = {
         "BROKER_CFG_DIR": "/var/snap/authd-google/current/broker.conf.d",
         "PROVIDER_DISPLAY_NAME": "Google",
         "DEVICE_URL": "google.com/device",
-        # TODO: Same as above — simplify once stable ships the new format.
+        # GDM shows the URL without a label and the code as "Login code:".
+        # The authd terminal UI shows "URL:" and "Code:". The stable snapshot
+        # used by the migration tests shows both unlabelled.
         # The colon is optional and may be rendered as a full-width colon. The
         # code may appear on the next line because GDM renders the label and
         # value as separate widgets in its dialog.
