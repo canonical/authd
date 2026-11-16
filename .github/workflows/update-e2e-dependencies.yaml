@@ -57,7 +57,6 @@ jobs:
           PRs created with GITHUB_TOKEN do not trigger normal PR CI.
           Close and reopen the PR to run those checks and the E2E workflow.
           EOF
-            cat .github/pull_request_template.md
           } > "${RUNNER_TEMP}/e2e-dependencies-pr-body.md"
 
       - name: Create pull request

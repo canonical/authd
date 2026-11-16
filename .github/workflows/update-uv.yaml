@@ -100,7 +100,6 @@ jobs:
           These checks ran in the updater workflow. PRs created with GITHUB_TOKEN
           do not trigger normal PR CI. Close and reopen the PR to run those checks.
           EOF
-            cat .github/pull_request_template.md
           } > "${RUNNER_TEMP}/uv-update-pr-body.md"
 
       - name: Create pull request
