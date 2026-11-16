@@ -410,9 +410,6 @@ impl Printer {
         if expr.constness.is_some() {
             self.word("const ");
         }
-        if expr.movability.is_some() {
-            self.word("static ");
-        }
         if expr.asyncness.is_some() {
             self.word("async ");
         }
@@ -1111,10 +1108,6 @@ impl Printer {
         self.outer_attrs(&arm.attrs);
         self.ibox(0);
         self.pat(&arm.pat);
-        if let Some((_if_token, guard)) = &arm.guard {
-            self.word(" if ");
-            self.expr(guard, FixupContext::NONE);
-        }
         self.word(" => ");
         let empty_block;
         let mut body = &*arm.body;
@@ -1359,7 +1352,7 @@ fn is_short_ident(expr: &Expr) -> bool {
             && expr
                 .path
                 .get_ident()
-                .map_or(false, |ident| ident.to_string().len() as isize <= INDENT);
+                .is_some_and(|ident| ident.to_string().len() as isize <= INDENT);
     }
     false
 }

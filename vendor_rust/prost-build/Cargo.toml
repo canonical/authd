@@ -13,7 +13,7 @@
 edition = "2021"
 rust-version = "1.85"
 name = "prost-build"
-version = "0.14.4"
+version = "0.14.6"
 authors = [
     "Dan Burkert <dan@danburkert.com>",
     "Lucio Franco <luciofranco14@gmail.com>",
@@ -50,7 +50,7 @@ path = "src/lib.rs"
 version = ">=0.4, <=0.5"
 
 [dependencies.itertools]
-version = ">=0.10, <=0.14"
+version = ">=0.10, <=0.15"
 features = ["use_alloc"]
 default-features = false
 
@@ -67,15 +67,15 @@ features = ["std"]
 default-features = false
 
 [dependencies.prettyplease]
-version = "0.2"
+version = "0.3"
 optional = true
 
 [dependencies.prost]
-version = "0.14.4"
+version = "0.14.6"
 default-features = false
 
 [dependencies.prost-types]
-version = "0.14.4"
+version = "0.14.6"
 default-features = false
 
 [dependencies.pulldown-cmark]
@@ -96,7 +96,7 @@ features = [
 default-features = false
 
 [dependencies.syn]
-version = "2"
+version = "3"
 features = ["full"]
 optional = true
 
