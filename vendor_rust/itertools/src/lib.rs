@@ -1,4 +1,5 @@
 #![warn(missing_docs, clippy::default_numeric_fallback)]
+#![warn(missing_debug_implementations)]
 #![crate_name = "itertools"]
 #![cfg_attr(not(feature = "use_std"), no_std)]
 #![doc(test(attr(deny(warnings), allow(deprecated, unstable_name_collisions))))]
@@ -63,11 +64,13 @@ use alloc::{collections::VecDeque, string::String, vec::Vec};
 pub use either::Either;
 
 use core::borrow::Borrow;
+#[cfg(feature = "use_std")]
+use core::hash::BuildHasher;
 use std::cmp::Ordering;
 #[cfg(feature = "use_std")]
-use std::collections::HashMap;
-#[cfg(feature = "use_std")]
 use std::collections::HashSet;
+#[cfg(feature = "use_std")]
+use std::collections::{hash_map::RandomState, HashMap};
 use std::fmt;
 #[cfg(feature = "use_alloc")]
 use std::fmt::Write;
@@ -96,6 +99,8 @@ pub mod structs {
         FilterOk, Interleave, InterleaveShortest, MapInto, MapOk, Positions, Product, PutBack,
         TakeWhileRef, TupleCombinations, Update, WhileSome,
     };
+    pub use crate::all_equal_value_err::AllEqualValueError;
+    pub use crate::array_impl::{ArrayWindows, CircularArrayWindows};
     #[cfg(feature = "use_alloc")]
     pub use crate::combinations::{ArrayCombinations, Combinations};
     #[cfg(feature = "use_alloc")]
@@ -153,6 +158,8 @@ pub mod traits {
     pub use crate::tuple_impl::HomogeneousTuple;
 }
 
+#[cfg(feature = "use_alloc")]
+use crate::combinations_with_replacement::ArrayCombinationsWithReplacement;
 pub use crate::concat_impl::concat;
 pub use crate::cons_tuples_impl::cons_tuples;
 pub use crate::diff::diff_with;
@@ -171,12 +178,14 @@ pub use crate::unziptuple::{multiunzip, MultiUnzip};
 pub use crate::with_position::Position;
 pub use crate::ziptuple::multizip;
 mod adaptors;
+mod array_impl;
 mod either_or_both;
 pub use crate::either_or_both::EitherOrBoth;
 #[doc(hidden)]
 pub mod free;
 #[doc(inline)]
 pub use crate::free::*;
+mod all_equal_value_err;
 #[cfg(feature = "use_alloc")]
 mod combinations;
 #[cfg(feature = "use_alloc")]
@@ -321,14 +330,27 @@ macro_rules! iproduct {
 macro_rules! izip {
     // @closure creates a tuple-flattening closure for .map() call. usage:
     // @closure partial_pattern => partial_tuple , rest , of , iterators
-    // eg. izip!( @closure ((a, b), c) => (a, b, c) , dd , ee )
+    // eg. izip!( @closure (a, (b, c)) => (a, b, c) , dd , ee )
     ( @closure $p:pat => $tup:expr ) => {
         |$p| $tup
     };
 
     // The "b" identifier is a different identifier on each recursion level thanks to hygiene.
     ( @closure $p:pat => ( $($tup:tt)* ) , $_iter:expr $( , $tail:expr )* ) => {
-        $crate::izip!(@closure ($p, b) => ( $($tup)*, b ) $( , $tail )*)
+        $crate::izip!(@closure (b, $p) => ( b, $($tup)* ) $( , $tail )*)
+    };
+
+    // Inner recursion of the macro without final map adapter, base case
+    ( @ no_map @ $first:expr $(,)?) => {
+        $crate::__std_iter::IntoIterator::into_iter($first)
+    };
+
+    // Inner recursion of the macro without final map adapter, recursive case
+    ( @ no_map @ $first:expr, $($rest:expr),+ $(,)?) => {
+        $crate::__std_iter::Iterator::zip(
+            $crate::__std_iter::IntoIterator::into_iter($first),
+            $crate::izip!(@ no_map @ $($rest),+)
+        )
     };
 
     // unary
@@ -346,16 +368,13 @@ macro_rules! izip {
 
     // n-ary where n > 2
     ( $first:expr $( , $rest:expr )* $(,)* ) => {
-        {
-            let iter = $crate::__std_iter::IntoIterator::into_iter($first);
-            $(
-                let iter = $crate::__std_iter::Iterator::zip(iter, $rest);
-            )*
-            $crate::__std_iter::Iterator::map(
-                iter,
-                $crate::izip!(@closure a => (a) $( , $rest )*)
-            )
-        }
+        $crate::__std_iter::Iterator::map(
+            $crate::__std_iter::Iterator::zip(
+                $crate::__std_iter::IntoIterator::into_iter($first),
+                $crate::izip!(@ no_map @ $($rest),+)
+            ),
+            $crate::izip!(@closure a => (a) $( , $rest )*)
+        )
     };
 }
 
@@ -371,8 +390,8 @@ macro_rules! izip {
 ///
 /// Empty invocations of `chain!` expand to an invocation of [`std::iter::empty`]:
 /// ```
-/// use std::iter;
 /// use itertools::chain;
+/// use std::iter;
 ///
 /// let _: iter::Empty<()> = chain!();
 /// let _: iter::Empty<i8> = chain!();
@@ -380,8 +399,8 @@ macro_rules! izip {
 ///
 /// Invocations of `chain!` with one argument expand to [`arg.into_iter()`](IntoIterator):
 /// ```
-/// use std::ops::Range;
 /// use itertools::chain;
+/// use std::ops::Range;
 /// let _: <Range<_> as IntoIterator>::IntoIter = chain!(2..6,); // trailing comma optional!
 /// let _:     <&[_] as IntoIterator>::IntoIter = chain!(&[2, 3, 4]);
 /// ```
@@ -389,11 +408,11 @@ macro_rules! izip {
 /// Invocations of `chain!` with multiple arguments [`.into_iter()`](IntoIterator) each
 /// argument, and then [`chain`] them together:
 /// ```
-/// use std::{iter::*, slice};
 /// use itertools::{assert_equal, chain};
+/// use std::{iter::*, slice};
 ///
 /// // e.g., this:
-/// let with_macro:  Chain<Chain<Once<_>, Take<Repeat<_>>>, slice::Iter<_>> =
+/// let with_macro: Chain<Chain<Once<_>, Take<Repeat<_>>>, slice::Iter<_>> =
 ///     chain![once(&0), repeat(&1).take(2), &[2, 3, 5],];
 ///
 /// // ...is equivalent to this:
@@ -609,6 +628,28 @@ pub trait Itertools: Iterator {
     ///
     /// **Panics** if the iterators reach an end and they are not of equal
     /// lengths.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use itertools::Itertools;
+    ///
+    /// let a = vec![1, 2];
+    /// let b = vec![3, 4];
+    ///
+    /// let zipped: Vec<_> = a.into_iter().zip_eq(b.into_iter()).collect();
+    ///
+    /// itertools::assert_equal(zipped, vec![(1, 3), (2, 4)]);
+    /// ```
+    ///
+    /// ```should_panic
+    /// use itertools::Itertools;
+    ///
+    /// let a = [1, 2];
+    /// let b = [3, 4, 5];
+    /// // This example panics because the iterators are not of equal length.
+    /// let _zipped: Vec<_> = a.iter().zip_eq(b.iter()).collect();
+    /// ```
     #[inline]
     fn zip_eq<J>(self, other: J) -> ZipEq<Self, J::IntoIter>
     where
@@ -640,7 +681,6 @@ pub trait Itertools: Iterator {
     ///
     /// itertools::assert_equal(pit, vec![(0, 1), (2, 3)]);
     /// ```
-    ///
     fn batching<B, F>(self, f: F) -> Batching<Self, F>
     where
         F: FnMut(&mut Self) -> Option<B>,
@@ -719,6 +759,8 @@ pub trait Itertools: Iterator {
     ///
     /// **Panics** if `size` is 0.
     ///
+    /// # Examples
+    ///
     /// ```
     /// use itertools::Itertools;
     ///
@@ -731,6 +773,13 @@ pub trait Itertools: Iterator {
     ///     // Check that the sum of each chunk is 4.
     ///     assert_eq!(4, chunk.sum());
     /// }
+    /// ```
+    ///
+    /// ```should_panic
+    /// use itertools::Itertools;
+    /// let data = vec![1, 2, 3];
+    /// // Panics because chunk size is 0.
+    /// let _chunks = data.into_iter().chunks(0);
     /// ```
     #[cfg(feature = "use_alloc")]
     fn chunks(self, size: usize) -> IntoChunks<Self>
@@ -857,10 +906,130 @@ pub trait Itertools: Iterator {
         tuple_impl::tuples(self)
     }
 
+    /// Return an iterator over all contiguous windows, producing
+    /// arrays of size `N`.
+    ///
+    /// `array_windows` clones the iterator elements so that they can be
+    /// part of successive windows. This makes it most suited for iterators
+    /// of references and other values that are cheap to copy.
+    ///
+    /// If the input iterator contains fewer than `N` items, no
+    /// windows are returned. Otherwise, if the input iterator
+    /// contains `k` items, exactly `k+N-1` windows are returned.
+    ///
+    /// (This formula still applies when `N==0`, and means that `k+1`
+    /// zero-length windows are returned for `k` input items.)
+    ///
+    /// ```
+    /// use itertools::Itertools;
+    ///
+    /// // Three-element windows from the items [1, 2, 3, 4, 5].
+    /// itertools::assert_equal(
+    ///     (1..6).array_windows::<3>(),
+    ///     vec![[1, 2, 3], [2, 3, 4], [3, 4, 5]]
+    /// );
+    ///
+    /// // When the input list is shorter than the window size, no windows
+    /// // are returned at all.
+    /// let mut windows = (1..6).array_windows::<10>();
+    /// assert_eq!(None, windows.next());
+    ///
+    /// // When the window size is zero, one more window is returned
+    /// // than there are items.
+    /// itertools::assert_equal((1..6).array_windows::<0>(), vec![[]; 6]);
+    ///
+    /// // In some cases you don't have to specify the window size
+    /// // explicitly with a type hint, because Rust can infer it
+    /// for [a, b, c] in (1..6).array_windows() {
+    ///     println!("{a} {b} {c}");
+    /// }
+    /// ```
+    fn array_windows<const N: usize>(self) -> ArrayWindows<Self, N>
+    where
+        Self: Sized,
+        Self::Item: Clone,
+    {
+        array_impl::array_windows(self)
+    }
+
+    /// Return an iterator over all windows, wrapping back to the first
+    /// elements when the window would otherwise exceed the length of the
+    /// iterator, producing arrays of size `N`.
+    ///
+    /// `circular_array_windows` clones the iterator elements so that
+    /// they can be part of successive windows, this makes it most
+    /// suited for iterators of references and other values that are
+    /// cheap to copy.
+    ///
+    /// One window is returned per element of the input iterator. This
+    /// is true even if the input contains fewer elements than the
+    /// window size. In that situation, input elements are repeated
+    /// within each window. The results are as if the input had been
+    /// treated as a cyclic list, and a window of `N` items had been
+    /// returned for every starting point in the cycle.
+    ///
+    /// (If the window size is zero, the function _still_ returns one
+    /// empty window per element of the input iterator.)
+    ///
+    /// ```
+    /// use itertools::Itertools;
+    ///
+    /// // Three-element windows from [1, 2, 3, 4, 5], with two of
+    /// // them wrapping round from 5 to 1.
+    /// itertools::assert_equal(
+    ///     (1..6).circular_array_windows::<3>(),
+    ///     vec![[1, 2, 3], [2, 3, 4], [3, 4, 5], [4, 5, 1], [5, 1, 2]]
+    /// );
+    ///
+    /// // If the input is shorter than the window size, input
+    /// // items are repeated even within the same window.
+    /// itertools::assert_equal(
+    ///     (1..3).circular_array_windows::<5>(),
+    ///     vec![[1, 2, 1, 2, 1], [2, 1, 2, 1, 2]]
+    /// );
+    ///
+    /// // If the input contains only one item, the returned window
+    /// // repeats it N times.
+    /// let once = std::iter::once(1);
+    /// itertools::assert_equal(
+    ///     once.circular_array_windows::<3>(),
+    ///     vec![[1, 1, 1]]
+    /// );
+    ///
+    /// // If the input is empty, no windows are returned at all.
+    /// let empty = std::iter::empty::<i32>();
+    /// let mut windows = empty.circular_array_windows::<5>();
+    /// assert_eq!(None, windows.next());
+    ///
+    /// // If the input is empty, no windows are returned at all.
+    /// let empty = std::iter::empty::<i32>();
+    /// let mut windows = empty.circular_array_windows::<5>();
+    /// assert_eq!(None, windows.next());
+    ///
+    /// // One window is returned per item, even if the windows are empty.
+    /// itertools::assert_equal(
+    ///     (1..6).circular_array_windows::<0>(),
+    ///     vec![[]; 5]
+    /// );
+    ///
+    /// // In some cases you don't have to specify the window size
+    /// // explicitly with a type hint, because Rust can infer it.
+    /// for [a, b, c] in (1..10).circular_array_windows() {
+    ///     println!("{a} {b} {c}");
+    /// }
+    /// ```
+    fn circular_array_windows<const N: usize>(self) -> CircularArrayWindows<Self, N>
+    where
+        Self: Sized,
+        Self::Item: Clone,
+    {
+        array_impl::circular_array_windows(self)
+    }
+
     /// Split into an iterator pair that both yield all elements from
     /// the original iterator.
     ///
-    /// **Note:** If the iterator is clonable, prefer using that instead
+    /// **Note:** If the iterator is cloneable, prefer using that instead
     /// of using this method. Cloning is likely to be more efficient.
     ///
     /// Iterator element type is `Self::Item`.
@@ -888,7 +1057,10 @@ pub trait Itertools: Iterator {
     /// ```rust
     /// use itertools::Itertools;
     ///
-    /// (1i32..42i32).map_into::<f64>().collect_vec();
+    /// assert_eq!(
+    ///     (1i32..4i32).map_into::<f64>().collect_vec(),
+    ///     vec![1f64, 2f64, 3f64]
+    /// );
     /// ```
     fn map_into<R>(self) -> MapInto<Self, R>
     where
@@ -988,7 +1160,7 @@ pub trait Itertools: Iterator {
     /// as long as the original iterator produces `Ok` values.
     ///
     /// If the original iterable produces an error at any point, the adapted
-    /// iterator ends and it will return the error iself.
+    /// iterator ends and it will return the error itself.
     ///
     /// Otherwise, the return value from the closure is returned wrapped
     /// inside `Ok`.
@@ -1084,8 +1256,8 @@ pub trait Itertools: Iterator {
     ///   and remove both `i` and `j` from their respective source iterators
     ///
     /// ```
+    /// use itertools::EitherOrBoth::{Both, Left, Right};
     /// use itertools::Itertools;
-    /// use itertools::EitherOrBoth::{Left, Right, Both};
     ///
     /// let a = vec![0, 2, 4, 6, 1].into_iter();
     /// let b = (0..10).step_by(3);
@@ -1113,8 +1285,8 @@ pub trait Itertools: Iterator {
     /// "less" than the second argument.
     ///
     /// ```
-    /// use itertools::Itertools;
     /// use itertools::Either::{Left, Right};
+    /// use itertools::Itertools;
     ///
     /// let a = vec![0, 2, 4, 6, 1].into_iter();
     /// let b = (0..10).step_by(3);
@@ -1136,7 +1308,7 @@ pub trait Itertools: Iterator {
     }
 
     /// Return an iterator adaptor that flattens an iterator of iterators by
-    /// merging them in ascending order.
+    /// merging them in ascending order. Duplicates are preserved.
     ///
     /// If all base iterators are sorted (ascending), the result is sorted.
     ///
@@ -1145,11 +1317,12 @@ pub trait Itertools: Iterator {
     /// ```
     /// use itertools::Itertools;
     ///
-    /// let a = (0..6).step_by(3);
-    /// let b = (1..6).step_by(3);
-    /// let c = (2..6).step_by(3);
+    /// let a = (0..6).step_by(3); // [0, 3]
+    /// let b = (1..6).step_by(2); // [1, 3, 5 ]
+    /// let c = (2..6).step_by(3); // [2, 5]
+    ///
     /// let it = vec![a, b, c].into_iter().kmerge();
-    /// itertools::assert_equal(it, vec![0, 1, 2, 3, 4, 5]);
+    /// itertools::assert_equal(it, vec![0, 1, 2, 3, 3, 5, 5]);
     /// ```
     #[cfg(feature = "use_alloc")]
     fn kmerge(self) -> KMerge<<Self::Item as IntoIterator>::IntoIter>
@@ -1406,7 +1579,33 @@ pub trait Itertools: Iterator {
         Self: Sized,
         Self::Item: Eq + Hash,
     {
-        duplicates_impl::duplicates(self)
+        duplicates_impl::duplicates_with_hasher(self, RandomState::new())
+    }
+
+    /// Return an iterator which yields the same elements as the one returned by
+    /// [.duplicates()](crate::Itertools::duplicates), but uses the specified hash builder to hash
+    /// the elements for comparison.
+    ///
+    /// Warning: `hash_builder` is normally randomly generated, and is designed to allow it's
+    /// users to be resistant to attacks that cause many collisions and very poor performance.
+    /// Setting it manually using this function can expose a DoS attack vector.
+    ///
+    /// ```
+    /// use std::hash::RandomState;
+    /// use itertools::Itertools;
+    ///
+    /// let data = vec![10, 20, 30, 20, 40, 10, 50];
+    /// itertools::assert_equal(data.into_iter().duplicates_with_hasher(RandomState::new()),
+    ///                         vec![20,10]);
+    /// ```
+    #[cfg(feature = "use_std")]
+    fn duplicates_with_hasher<S>(self, hash_builder: S) -> Duplicates<Self, S>
+    where
+        Self: Sized,
+        Self::Item: Eq + Hash,
+        S: BuildHasher,
+    {
+        duplicates_impl::duplicates_with_hasher(self, hash_builder)
     }
 
     /// Return an iterator adaptor that produces elements that appear more than once during the
@@ -1433,7 +1632,38 @@ pub trait Itertools: Iterator {
         V: Eq + Hash,
         F: FnMut(&Self::Item) -> V,
     {
-        duplicates_impl::duplicates_by(self, f)
+        duplicates_impl::duplicates_by_with_hasher(self, f, RandomState::new())
+    }
+
+    /// Return an iterator which yields the same elements as the one returned by
+    /// [.duplicates_by()](crate::Itertools::duplicates_by), but uses the specified hash builder to
+    /// hash the keys for comparison.
+    ///
+    /// Warning: `hash_builder` is normally randomly generated, and is designed to allow it's
+    /// users to be resistant to attacks that cause many collisions and very poor performance.
+    /// Setting it manually using this function can expose a DoS attack vector.
+    ///
+    /// ```
+    /// use std::hash::RandomState;
+    /// use itertools::Itertools;
+    ///
+    /// let data = vec!["a", "bb", "aa", "c", "ccc"];
+    /// itertools::assert_equal(data.into_iter().duplicates_by_with_hasher(|s| s.len(),RandomState::new()),
+    ///                         vec!["aa", "c"]);
+    /// ```
+    #[cfg(feature = "use_std")]
+    fn duplicates_by_with_hasher<V, F, S>(
+        self,
+        f: F,
+        hash_builder: S,
+    ) -> DuplicatesBy<Self, V, F, S>
+    where
+        Self: Sized,
+        V: Eq + Hash,
+        F: FnMut(&Self::Item) -> V,
+        S: BuildHasher,
+    {
+        duplicates_impl::duplicates_by_with_hasher(self, f, hash_builder)
     }
 
     /// Return an iterator adaptor that filters out elements that have
@@ -1460,7 +1690,33 @@ pub trait Itertools: Iterator {
         Self: Sized,
         Self::Item: Clone + Eq + Hash,
     {
-        unique_impl::unique(self)
+        unique_impl::unique_with_hasher(self, RandomState::new())
+    }
+
+    /// Return an iterator which yields the same elements as the one returned by
+    /// [.unique()](crate::Itertools::unique), but uses the specified hash builder to hash the
+    /// elements for comparison.
+    ///
+    /// Warning: `hash_builder` is normally randomly generated, and is designed to allow it's
+    /// users to be resistant to attacks that cause many collisions and very poor performance.
+    /// Setting it manually using this function can expose a DoS attack vector.
+    ///
+    /// ```
+    /// use std::hash::RandomState;
+    /// use itertools::Itertools;
+    ///
+    /// let data = vec![10, 20, 30, 20, 40, 10, 50];
+    /// itertools::assert_equal(data.into_iter().unique_with_hasher(RandomState::new()),
+    ///                         vec![10, 20, 30, 40, 50]);
+    /// ```
+    #[cfg(feature = "use_std")]
+    fn unique_with_hasher<S>(self, hash_builder: S) -> Unique<Self, S>
+    where
+        Self: Sized,
+        Self::Item: Clone + Eq + Hash,
+        S: BuildHasher,
+    {
+        unique_impl::unique_with_hasher(self, hash_builder)
     }
 
     /// Return an iterator adaptor that filters out elements that have
@@ -1488,7 +1744,34 @@ pub trait Itertools: Iterator {
         V: Eq + Hash,
         F: FnMut(&Self::Item) -> V,
     {
-        unique_impl::unique_by(self, f)
+        unique_impl::unique_by_with_hasher(self, f, RandomState::new())
+    }
+
+    /// Return an iterator which yields the same elements as the one returned by
+    /// [.unique_by()](crate::Itertools::unique_by), but uses the specified hash builder to hash
+    /// the elements for comparison.
+    ///
+    /// Warning: `hash_builder` is normally randomly generated, and is designed to allow it's
+    /// users to be resistant to attacks that cause many collisions and very poor performance.
+    /// Setting it manually using this function can expose a DoS attack vector.
+    ///
+    /// ```
+    /// use std::hash::RandomState;
+    /// use itertools::Itertools;
+    ///
+    /// let data = vec!["a", "bb", "aa", "c", "ccc"];
+    /// itertools::assert_equal(data.into_iter().unique_by_with_hasher(|s| s.len(), RandomState::new()),
+    ///                         vec!["a", "bb", "ccc"]);
+    /// ```
+    #[cfg(feature = "use_std")]
+    fn unique_by_with_hasher<V, F, S>(self, f: F, hash_builder: S) -> UniqueBy<Self, V, F, S>
+    where
+        Self: Sized,
+        V: Eq + Hash,
+        F: FnMut(&Self::Item) -> V,
+        S: BuildHasher,
+    {
+        unique_impl::unique_by_with_hasher(self, f, hash_builder)
     }
 
     /// Return an iterator adaptor that borrows from this iterator and
@@ -1503,7 +1786,7 @@ pub trait Itertools: Iterator {
     ///
     /// See also [`.take_while_ref()`](Itertools::take_while_ref)
     /// which is a similar adaptor.
-    fn peeking_take_while<F>(&mut self, accept: F) -> PeekingTakeWhile<Self, F>
+    fn peeking_take_while<F>(&mut self, accept: F) -> PeekingTakeWhile<'_, Self, F>
     where
         Self: Sized + PeekingNext,
         F: FnMut(&Self::Item) -> bool,
@@ -1527,9 +1810,8 @@ pub trait Itertools: Iterator {
     ///                            .collect::<String>();
     /// assert_eq!(decimals, "0123456789");
     /// assert_eq!(hexadecimals.next(), Some('a'));
-    ///
     /// ```
-    fn take_while_ref<F>(&mut self, accept: F) -> TakeWhileRef<Self, F>
+    fn take_while_ref<F>(&mut self, accept: F) -> TakeWhileRef<'_, Self, F>
     where
         Self: Clone,
         F: FnMut(&Self::Item) -> bool,
@@ -1587,11 +1869,11 @@ pub trait Itertools: Iterator {
     /// #[derive(Debug, PartialEq)]
     /// struct NoCloneImpl(i32);
     ///
-    /// let non_clonable_items: Vec<_> = vec![1, 2, 3, 4, 5]
+    /// let non_cloneable_items: Vec<_> = vec![1, 2, 3, 4, 5]
     ///     .into_iter()
     ///     .map(NoCloneImpl)
     ///     .collect();
-    /// let filtered: Vec<_> = non_clonable_items
+    /// let filtered: Vec<_> = non_cloneable_items
     ///     .into_iter()
     ///     .take_while_inclusive(|n| n.0 % 3 != 0)
     ///     .collect();
@@ -1617,8 +1899,8 @@ pub trait Itertools: Iterator {
     /// // List all hexadecimal digits
     /// itertools::assert_equal(
     ///     (0..).map(|i| std::char::from_digit(i, 16)).while_some(),
-    ///     "0123456789abcdef".chars());
-    ///
+    ///     "0123456789abcdef".chars(),
+    /// );
     /// ```
     fn while_some<A>(self) -> WhileSome<Self>
     where
@@ -1665,9 +1947,10 @@ pub trait Itertools: Iterator {
     /// let it: TupleCombinations<Range<u32>, (u32, u32, u32)> = (1..5).tuple_combinations();
     /// itertools::assert_equal(it, vec![(1, 2, 3), (1, 2, 4), (1, 3, 4), (2, 3, 4)]);
     /// ```
+    #[deprecated(note = "Use .array_combinations() instead", since = "0.15.0")]
     fn tuple_combinations<T>(self) -> TupleCombinations<Self, T>
     where
-        Self: Sized + Clone,
+        Self: Sized,
         Self::Item: Clone,
         T: adaptors::HasCombination<Self>,
     {
@@ -1715,7 +1998,7 @@ pub trait Itertools: Iterator {
     #[cfg(feature = "use_alloc")]
     fn array_combinations<const K: usize>(self) -> ArrayCombinations<Self, K>
     where
-        Self: Sized + Clone,
+        Self: Sized,
         Self::Item: Clone,
     {
         combinations::array_combinations(self)
@@ -1791,7 +2074,35 @@ pub trait Itertools: Iterator {
     {
         combinations_with_replacement::combinations_with_replacement(self, k)
     }
-
+    /// Return an iterator that iterates over the `k`-length combinations of
+    /// the elements from an iterator, with replacement.
+    ///
+    /// Iterator element type is [Self::Item; K]. The iterator produces a new
+    /// array per iteration, and clones the iterator elements.
+    ///
+    /// ```
+    /// use itertools::Itertools;
+    ///
+    /// let it = (1..4).array_combinations_with_replacement::<2>();
+    /// itertools::assert_equal(it, vec![
+    ///     [1, 1],
+    ///     [1, 2],
+    ///     [1, 3],
+    ///     [2, 2],
+    ///     [2, 3],
+    ///     [3, 3],
+    /// ]);
+    /// ```
+    #[cfg(feature = "use_alloc")]
+    fn array_combinations_with_replacement<const K: usize>(
+        self,
+    ) -> ArrayCombinationsWithReplacement<Self, K>
+    where
+        Self: Sized,
+        Self::Item: Clone,
+    {
+        combinations_with_replacement::array_combinations_with_replacement(self)
+    }
     /// Return an iterator adaptor that iterates over all k-permutations of the
     /// elements from an iterator.
     ///
@@ -1886,13 +2197,13 @@ pub trait Itertools: Iterator {
     /// ```
     /// use itertools::Itertools;
     ///
-    /// let it = (0..5).pad_using(10, |i| 2*i);
+    /// let it = (0..5).pad_using(10, |i| 2 * i);
     /// itertools::assert_equal(it, vec![0, 1, 2, 3, 4, 10, 12, 14, 16, 18]);
     ///
-    /// let it = (0..10).pad_using(5, |i| 2*i);
+    /// let it = (0..10).pad_using(5, |i| 2 * i);
     /// itertools::assert_equal(it, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
     ///
-    /// let it = (0..5).pad_using(10, |i| 2*i).rev();
+    /// let it = (0..5).pad_using(10, |i| 2 * i).rev();
     /// itertools::assert_equal(it, vec![18, 16, 14, 12, 10, 4, 3, 2, 1, 0]);
     /// ```
     fn pad_using<F>(self, min: usize, f: F) -> PadUsing<Self, F>
@@ -1903,8 +2214,8 @@ pub trait Itertools: Iterator {
         pad_tail::pad_using(self, min, f)
     }
 
-    /// Return an iterator adaptor that combines each element with a `Position` to
-    /// ease special-case handling of the first or last elements.
+    /// Return an iterator adaptor that combines each element with a `Position`
+    /// to ease special-case handling of the first or last elements.
     ///
     /// Iterator element type is
     /// [`(Position, Self::Item)`](Position)
@@ -1913,14 +2224,21 @@ pub trait Itertools: Iterator {
     /// use itertools::{Itertools, Position};
     ///
     /// let it = (0..4).with_position();
-    /// itertools::assert_equal(it,
-    ///                         vec![(Position::First, 0),
-    ///                              (Position::Middle, 1),
-    ///                              (Position::Middle, 2),
-    ///                              (Position::Last, 3)]);
+    /// itertools::assert_equal(
+    ///     it,
+    ///     vec![
+    ///          (Position { is_first: true, is_last: false }, 0),
+    ///          (Position { is_first: false, is_last: false }, 1),
+    ///          (Position { is_first: false, is_last: false }, 2),
+    ///          (Position { is_first: false, is_last: true }, 3),
+    ///     ],
+    /// );
     ///
     /// let it = (0..1).with_position();
-    /// itertools::assert_equal(it, vec![(Position::Only, 0)]);
+    /// itertools::assert_equal(
+    ///     it,
+    ///     vec![(Position { is_first: true, is_last: true }, 0)],
+    /// );
     /// ```
     fn with_position(self) -> WithPosition<Self>
     where
@@ -2199,7 +2517,7 @@ pub trait Itertools: Iterator {
     /// assert!(data[3..5].iter().all_equal());
     /// assert!(data[5..8].iter().all_equal());
     ///
-    /// let data : Option<usize> = None;
+    /// let data: Option<usize> = None;
     /// assert!(data.into_iter().all_equal());
     /// ```
     fn all_equal(&mut self) -> bool
@@ -2219,27 +2537,27 @@ pub trait Itertools: Iterator {
     /// two non-equal elements found.
     ///
     /// ```
-    /// use itertools::Itertools;
+    /// use itertools::{Itertools, AllEqualValueError};
     ///
     /// let data = vec![1, 1, 1, 2, 2, 3, 3, 3, 4, 5, 5];
-    /// assert_eq!(data.iter().all_equal_value(), Err(Some((&1, &2))));
+    /// assert_eq!(data.iter().all_equal_value(), Err(AllEqualValueError(Some([&1, &2]))));
     /// assert_eq!(data[0..3].iter().all_equal_value(), Ok(&1));
     /// assert_eq!(data[3..5].iter().all_equal_value(), Ok(&2));
     /// assert_eq!(data[5..8].iter().all_equal_value(), Ok(&3));
     ///
-    /// let data : Option<usize> = None;
-    /// assert_eq!(data.into_iter().all_equal_value(), Err(None));
+    /// let data: Option<usize> = None;
+    /// assert_eq!(data.into_iter().all_equal_value(), Err(AllEqualValueError(None)));
     /// ```
     #[allow(clippy::type_complexity)]
-    fn all_equal_value(&mut self) -> Result<Self::Item, Option<(Self::Item, Self::Item)>>
+    fn all_equal_value(&mut self) -> Result<Self::Item, AllEqualValueError<Self::Item>>
     where
         Self: Sized,
         Self::Item: PartialEq,
     {
-        let first = self.next().ok_or(None)?;
+        let first = self.next().ok_or(AllEqualValueError(None))?;
         let other = self.find(|x| x != &first);
         if let Some(other) = other {
-            Err(Some((first, other)))
+            Err(AllEqualValueError(Some([first, other])))
         } else {
             Ok(first)
         }
@@ -2257,7 +2575,7 @@ pub trait Itertools: Iterator {
     /// assert!(data[0..4].iter().all_unique());
     /// assert!(data[1..6].iter().all_unique());
     ///
-    /// let data : Option<usize> = None;
+    /// let data: Option<usize> = None;
     /// assert!(data.into_iter().all_unique());
     /// ```
     #[cfg(feature = "use_std")]
@@ -2266,7 +2584,32 @@ pub trait Itertools: Iterator {
         Self: Sized,
         Self::Item: Eq + Hash,
     {
-        let mut used = HashSet::new();
+        self.all_unique_with_hasher(RandomState::new())
+    }
+
+    /// Check whether all elements are unique (non equal). The specified hash builder is used for
+    /// hashing the elements. See [.all_unique](crate::Itertools::all_unique).
+    ///
+    /// ```
+    /// use std::hash::RandomState;
+    /// use itertools::Itertools;
+    ///
+    /// let data = vec![1, 2, 3, 4, 1, 5];
+    /// assert!(!data.iter().all_unique_with_hasher(RandomState::new()));
+    /// assert!(data[0..4].iter().all_unique_with_hasher(RandomState::new()));
+    /// assert!(data[1..6].iter().all_unique_with_hasher(RandomState::new()));
+    ///
+    /// let data : Option<usize> = None;
+    /// assert!(data.into_iter().all_unique_with_hasher(RandomState::new()));
+    /// ```
+    #[cfg(feature = "use_std")]
+    fn all_unique_with_hasher<S>(&mut self, hash_builder: S) -> bool
+    where
+        Self: Sized,
+        Self::Item: Eq + Hash,
+        S: BuildHasher,
+    {
+        let mut used = HashSet::with_hasher(hash_builder);
         self.all(move |elt| used.insert(elt))
     }
 
@@ -2344,6 +2687,7 @@ pub trait Itertools: Iterator {
 
     /// `.collect_vec()` is simply a type specialization of [`Iterator::collect`],
     /// for convenience.
+    #[must_use = "if you really need to exhaust the iterator, consider `.for_each(drop)` instead"]
     #[cfg(feature = "use_alloc")]
     fn collect_vec(self) -> Vec<Self::Item>
     where
@@ -2358,8 +2702,8 @@ pub trait Itertools: Iterator {
     /// # Example
     ///
     /// ```
-    /// use std::{fs, io};
     /// use itertools::Itertools;
+    /// use std::{fs, io};
     ///
     /// fn process_dir_entries(entries: &[fs::DirEntry]) {
     ///     // ...
@@ -2431,10 +2775,10 @@ pub trait Itertools: Iterator {
                 // estimate lower bound of capacity needed
                 let (lower, _) = self.size_hint();
                 let mut result = String::with_capacity(sep.len() * lower);
-                write!(&mut result, "{}", first_elt).unwrap();
+                write!(&mut result, "{first_elt}").unwrap();
                 self.for_each(|elt| {
                     result.push_str(sep);
-                    write!(&mut result, "{}", elt).unwrap();
+                    write!(&mut result, "{elt}").unwrap();
                 });
                 result
             }
@@ -2456,7 +2800,7 @@ pub trait Itertools: Iterator {
     ///     format!("{:.2}", data.iter().format(", ")),
     ///            "1.10, 2.72, -3.00");
     /// ```
-    fn format(self, sep: &str) -> Format<Self>
+    fn format(self, sep: &str) -> Format<'_, Self>
     where
         Self: Sized,
     {
@@ -2495,7 +2839,7 @@ pub trait Itertools: Iterator {
     ///
     ///
     /// ```
-    fn format_with<F>(self, sep: &str, format: F) -> FormatWith<Self, F>
+    fn format_with<F>(self, sep: &str, format: F) -> FormatWith<'_, Self, F>
     where
         Self: Sized,
         F: FnMut(Self::Item, &mut dyn FnMut(&dyn fmt::Display) -> fmt::Result) -> fmt::Result,
@@ -2531,8 +2875,8 @@ pub trait Itertools: Iterator {
     /// this effectively results in *((0 + 1) + 2) + 3*
     ///
     /// ```
-    /// use std::ops::Add;
     /// use itertools::Itertools;
+    /// use std::ops::Add;
     ///
     /// let values = [1, 2, -2, -1, 2, 1];
     /// assert_eq!(
@@ -2571,8 +2915,8 @@ pub trait Itertools: Iterator {
     /// This is the `Option` equivalent to [`fold_ok`](Itertools::fold_ok).
     ///
     /// ```
-    /// use std::ops::Add;
     /// use itertools::Itertools;
+    /// use std::ops::Add;
     ///
     /// let mut values = vec![Some(1), Some(2), Some(-2)].into_iter();
     /// assert_eq!(values.fold_options(5, Add::add), Some(5 + 1 + 2 - 2));
@@ -2787,8 +3131,8 @@ pub trait Itertools: Iterator {
     /// early exit via short-circuiting.
     ///
     /// ```
-    /// use itertools::Itertools;
     /// use itertools::FoldWhile::{Continue, Done};
+    /// use itertools::Itertools;
     ///
     /// let numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     ///
@@ -2825,7 +3169,7 @@ pub trait Itertools: Iterator {
         Self: Sized,
         F: FnMut(B, Self::Item) -> FoldWhile<B>,
     {
-        use Result::{Err as Break, Ok as Continue};
+        use core::ops::ControlFlow::{Break, Continue};
 
         let result = self.try_fold(
             init,
@@ -3617,7 +3961,7 @@ pub trait Itertools: Iterator {
     /// have a distinct type.
     ///
     /// ```
-    /// use itertools::{Itertools, Either};
+    /// use itertools::{Either, Itertools};
     ///
     /// let successes_and_failures = vec![Ok(1), Err(false), Err(true), Ok(2)];
     ///
@@ -3700,7 +4044,36 @@ pub trait Itertools: Iterator {
         Self: Iterator<Item = (K, V)> + Sized,
         K: Hash + Eq,
     {
-        group_map::into_group_map(self)
+        group_map::into_group_map_with_hasher(self, RandomState::new())
+    }
+
+    /// Return a `HashMap` of keys mapped to `Vec`s of values, using the hash builder for hashing.
+    /// See [.into_group_map()](crate::Itertools::into_group_map) for more information.
+    ///
+    /// Warning: `hash_builder` is normally randomly generated, and is designed to allow it's
+    /// users to be resistant to attacks that cause many collisions and very poor performance.
+    /// Setting it manually using this function can expose a DoS attack vector.
+    ///
+    /// ```
+    /// use std::hash::RandomState;
+    /// use itertools::Itertools;
+    ///
+    /// let data = vec![(0, 10), (2, 12), (3, 13), (0, 20), (3, 33), (2, 42)];
+    /// let lookup = data.into_iter().into_group_map_with_hasher(RandomState::new());
+    ///
+    /// assert_eq!(lookup[&0], vec![10, 20]);
+    /// assert_eq!(lookup.get(&1), None);
+    /// assert_eq!(lookup[&2], vec![12, 42]);
+    /// assert_eq!(lookup[&3], vec![13, 33]);
+    /// ```
+    #[cfg(feature = "use_std")]
+    fn into_group_map_with_hasher<K, V, S>(self, hash_builder: S) -> HashMap<K, Vec<V>, S>
+    where
+        Self: Iterator<Item = (K, V)> + Sized,
+        K: Hash + Eq,
+        S: BuildHasher,
+    {
+        group_map::into_group_map_with_hasher(self, hash_builder)
     }
 
     /// Return a `HashMap` of keys mapped to `Vec`s of values. The key is specified
@@ -3716,17 +4089,17 @@ pub trait Itertools: Iterator {
     /// let lookup: HashMap<u32,Vec<(u32, u32)>> =
     ///     data.clone().into_iter().into_group_map_by(|a| a.0);
     ///
-    /// assert_eq!(lookup[&0], vec![(0,10), (0,20)]);
+    /// assert_eq!(lookup[&0], vec![(0, 10), (0, 20)]);
     /// assert_eq!(lookup.get(&1), None);
-    /// assert_eq!(lookup[&2], vec![(2,12), (2,42)]);
-    /// assert_eq!(lookup[&3], vec![(3,13), (3,33)]);
+    /// assert_eq!(lookup[&2], vec![(2, 12), (2, 42)]);
+    /// assert_eq!(lookup[&3], vec![(3, 13), (3, 33)]);
     ///
     /// assert_eq!(
     ///     data.into_iter()
     ///         .into_group_map_by(|x| x.0)
     ///         .into_iter()
-    ///         .map(|(key, values)| (key, values.into_iter().fold(0,|acc, (_,v)| acc + v )))
-    ///         .collect::<HashMap<u32,u32>>()[&0],
+    ///         .map(|(key, values)| (key, values.into_iter().fold(0, |acc, (_, v)| acc + v)))
+    ///         .collect::<HashMap<u32, u32>>()[&0],
     ///     30,
     /// );
     /// ```
@@ -3737,7 +4110,52 @@ pub trait Itertools: Iterator {
         K: Hash + Eq,
         F: FnMut(&V) -> K,
     {
-        group_map::into_group_map_by(self, f)
+        group_map::into_group_map_by_with_hasher(self, f, RandomState::new())
+    }
+
+    /// Return a `HashMap` of keys mapped to `Vec`s of values, using the hash builder for hashing.
+    /// See [.into_group_map_by()](crate::Itertools::into_group_map_by) for more information.
+    ///
+    /// Warning: `hash_builder` is normally randomly generated, and is designed to allow it's
+    /// users to be resistant to attacks that cause many collisions and very poor performance.
+    /// Setting it manually using this function can expose a DoS attack vector.
+    ///
+    /// ```
+    /// use itertools::Itertools;
+    /// use std::collections::HashMap;
+    /// use std::hash::RandomState;
+    ///
+    /// let data = vec![(0, 10), (2, 12), (3, 13), (0, 20), (3, 33), (2, 42)];
+    /// let lookup: HashMap<u32,Vec<(u32, u32)>, RandomState> =
+    ///     data.clone().into_iter().into_group_map_by_with_hasher(|a| a.0, RandomState::new());
+    ///
+    /// assert_eq!(lookup[&0], vec![(0,10), (0,20)]);
+    /// assert_eq!(lookup.get(&1), None);
+    /// assert_eq!(lookup[&2], vec![(2,12), (2,42)]);
+    /// assert_eq!(lookup[&3], vec![(3,13), (3,33)]);
+    ///
+    /// assert_eq!(
+    ///     data.into_iter()
+    ///         .into_group_map_by_with_hasher(|x| x.0, RandomState::new())
+    ///         .into_iter()
+    ///         .map(|(key, values)| (key, values.into_iter().fold(0,|acc, (_,v)| acc + v )))
+    ///         .collect::<HashMap<u32,u32>>()[&0],
+    ///     30,
+    /// );
+    /// ```
+    #[cfg(feature = "use_std")]
+    fn into_group_map_by_with_hasher<K, V, F, S>(
+        self,
+        f: F,
+        hash_builder: S,
+    ) -> HashMap<K, Vec<V>, S>
+    where
+        Self: Iterator<Item = V> + Sized,
+        K: Hash + Eq,
+        F: FnMut(&V) -> K,
+        S: BuildHasher,
+    {
+        group_map::into_group_map_by_with_hasher(self, f, hash_builder)
     }
 
     /// Constructs a `GroupingMap` to be used later with one of the efficient
@@ -3747,7 +4165,7 @@ pub trait Itertools: Iterator {
     /// value of type `K` will be used as key to identify the groups and the
     /// value of type `V` as value for the folding operation.
     ///
-    /// See [`GroupingMap`] for more informations
+    /// See [`GroupingMap`] for more information
     /// on what operations are available.
     #[cfg(feature = "use_std")]
     fn into_grouping_map<K, V>(self) -> GroupingMap<Self>
@@ -3755,7 +4173,21 @@ pub trait Itertools: Iterator {
         Self: Iterator<Item = (K, V)> + Sized,
         K: Hash + Eq,
     {
-        grouping_map::new(self)
+        grouping_map::new(self, RandomState::new())
+    }
+
+    /// Constructs a `GroupingMap` to be used later with one of the efficient
+    /// group-and-fold operations it allows to perform, using the specified hash builder for
+    /// hashing the elements.
+    /// See [.into_grouping_map()](crate::Itertools::into_grouping_map) for more information.
+    #[cfg(feature = "use_std")]
+    fn into_grouping_map_with_hasher<K, V, S>(self, hash_builder: S) -> GroupingMap<Self, S>
+    where
+        Self: Iterator<Item = (K, V)> + Sized,
+        K: Hash + Eq,
+        S: BuildHasher,
+    {
+        grouping_map::new(self, hash_builder)
     }
 
     /// Constructs a `GroupingMap` to be used later with one of the efficient
@@ -3764,7 +4196,7 @@ pub trait Itertools: Iterator {
     /// The values from this iterator will be used as values for the folding operation
     /// while the keys will be obtained from the values by calling `key_mapper`.
     ///
-    /// See [`GroupingMap`] for more informations
+    /// See [`GroupingMap`] for more information
     /// on what operations are available.
     #[cfg(feature = "use_std")]
     fn into_grouping_map_by<K, V, F>(self, key_mapper: F) -> GroupingMapBy<Self, F>
@@ -3773,7 +4205,32 @@ pub trait Itertools: Iterator {
         K: Hash + Eq,
         F: FnMut(&V) -> K,
     {
-        grouping_map::new(grouping_map::new_map_for_grouping(self, key_mapper))
+        grouping_map::new(
+            grouping_map::new_map_for_grouping(self, key_mapper),
+            RandomState::new(),
+        )
+    }
+
+    /// Constructs a `GroupingMap` to be used later with one of the efficient
+    /// group-and-fold operations it allows to perform, using the specified hash builder for
+    /// hashing the keys.
+    /// See [.into_grouping_map_by()](crate::Itertools::into_grouping_map_by) for more information.
+    #[cfg(feature = "use_std")]
+    fn into_grouping_map_by_with_hasher<K, V, F, S>(
+        self,
+        key_mapper: F,
+        hash_builder: S,
+    ) -> GroupingMapBy<Self, F, S>
+    where
+        Self: Iterator<Item = V> + Sized,
+        K: Hash + Eq,
+        F: FnMut(&V) -> K,
+        S: BuildHasher,
+    {
+        grouping_map::new(
+            grouping_map::new_map_for_grouping(self, key_mapper),
+            hash_builder,
+        )
     }
 
     /// Return all minimum elements of an iterator.
@@ -3977,8 +4434,8 @@ pub trait Itertools: Iterator {
     /// - `NoElements` if the iterator is empty.
     /// - `OneElement(x)` if the iterator has exactly one element.
     /// - `MinMax(x, y)` is returned otherwise, where `x <= y`. Two
-    ///    values are equal if and only if there is more than one
-    ///    element in the iterator and all elements are equal.
+    ///   values are equal if and only if there is more than one
+    ///   element in the iterator and all elements are equal.
     ///
     /// On an iterator of length `n`, `minmax` does `1.5 * n` comparisons,
     /// and so is faster than calling `min` and `max` separately which does
@@ -3988,7 +4445,7 @@ pub trait Itertools: Iterator {
     ///
     /// ```
     /// use itertools::Itertools;
-    /// use itertools::MinMaxResult::{NoElements, OneElement, MinMax};
+    /// use itertools::MinMaxResult::{MinMax, NoElements, OneElement};
     ///
     /// let a: [i32; 0] = [];
     /// assert_eq!(a.iter().minmax(), NoElements);
@@ -4001,6 +4458,23 @@ pub trait Itertools: Iterator {
     ///
     /// let a = [1, 1, 1, 1];
     /// assert_eq!(a.iter().minmax(), MinMax(&1, &1));
+    /// ```
+    ///
+    /// ```
+    /// use itertools::Itertools;
+    /// use itertools::MinMaxResult::{MinMax, NoElements, OneElement};
+    ///
+    /// let a: [(i32, char); 0] = [];
+    /// assert_eq!(a.iter().minmax(), NoElements);
+    ///
+    /// let a = [(1, 'a')];
+    /// assert_eq!(a.iter().minmax(), OneElement(&(1, 'a')));
+    ///
+    /// let a = [(0, 'a'), (1, 'b')];
+    /// assert_eq!(a.iter().minmax(), MinMax(&(0, 'a'), &(1, 'b')));
+    ///
+    /// let a = [(1, 'a'), (1, 'b'), (1, 'c')];
+    /// assert_eq!(a.iter().minmax(), MinMax(&(1, 'a'), &(1, 'c')));
     /// ```
     ///
     /// The elements can be floats but no particular result is guaranteed
@@ -4024,6 +4498,27 @@ pub trait Itertools: Iterator {
     ///
     /// The keys can be floats but no particular result is guaranteed
     /// if a key is NaN.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use itertools::Itertools;
+    /// use itertools::MinMaxResult::{MinMax, NoElements, OneElement};
+    ///
+    /// let cmp_key = |x: &&(i32, char)| x.0;
+    ///
+    /// let a: [(i32, char); 0] = [];
+    /// assert_eq!(a.iter().minmax_by_key(cmp_key), NoElements);
+    ///
+    /// let a = [(1, 'a')];
+    /// assert_eq!(a.iter().minmax_by_key(cmp_key), OneElement(&(1, 'a')));
+    ///
+    /// let a = [(0, 'a'), (1, 'b')];
+    /// assert_eq!(a.iter().minmax_by_key(cmp_key), MinMax(&(0, 'a'), &(1, 'b')));
+    ///
+    /// let a = [(1, 'a'), (1, 'b'), (1, 'c')];
+    /// assert_eq!(a.iter().minmax_by_key(cmp_key), MinMax(&(1, 'a'), &(1, 'c')));
+    /// ```
     fn minmax_by_key<K, F>(self, key: F) -> MinMaxResult<Self::Item>
     where
         Self: Sized,
@@ -4041,6 +4536,27 @@ pub trait Itertools: Iterator {
     /// For the minimum, the first minimal element is returned.  For the maximum,
     /// the last maximal element wins.  This matches the behavior of the standard
     /// [`Iterator::min`] and [`Iterator::max`] methods.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use itertools::Itertools;
+    /// use itertools::MinMaxResult::{MinMax, NoElements, OneElement};
+    ///
+    /// let first_item_cmp = |x: &&(i32, char), y: &&(i32, char)| x.0.cmp(&y.0);
+    ///
+    /// let a: [(i32, char); 0] = [];
+    /// assert_eq!(a.iter().minmax_by(first_item_cmp), NoElements);
+    ///
+    /// let a = [(1, 'a')];
+    /// assert_eq!(a.iter().minmax_by(first_item_cmp), OneElement(&(1, 'a')));
+    ///
+    /// let a = [(0, 'a'), (1, 'b')];
+    /// assert_eq!(a.iter().minmax_by(first_item_cmp), MinMax(&(0, 'a'), &(1, 'b')));
+    ///
+    /// let a = [(1, 'a'), (1, 'b'), (1, 'c')];
+    /// assert_eq!(a.iter().minmax_by(first_item_cmp), MinMax(&(1, 'a'), &(1, 'c')));
+    /// ```
     fn minmax_by<F>(self, mut compare: F) -> MinMaxResult<Self::Item>
     where
         Self: Sized,
@@ -4237,9 +4753,9 @@ pub trait Itertools: Iterator {
     /// - `NoElements` if the iterator is empty.
     /// - `OneElement(xpos)` if the iterator has exactly one element.
     /// - `MinMax(xpos, ypos)` is returned otherwise, where the
-    ///    element at `xpos` ≤ the element at `ypos`. While the
-    ///    referenced elements themselves may be equal, `xpos` cannot
-    ///    be equal to `ypos`.
+    ///   element at `xpos` ≤ the element at `ypos`. While the
+    ///   referenced elements themselves may be equal, `xpos` cannot
+    ///   be equal to `ypos`.
     ///
     /// On an iterator of length `n`, `position_minmax` does `1.5 * n`
     /// comparisons, and so is faster than calling `position_min` and
@@ -4257,7 +4773,7 @@ pub trait Itertools: Iterator {
     ///
     /// ```
     /// use itertools::Itertools;
-    /// use itertools::MinMaxResult::{NoElements, OneElement, MinMax};
+    /// use itertools::MinMaxResult::{MinMax, NoElements, OneElement};
     ///
     /// let a: [i32; 0] = [];
     /// assert_eq!(a.iter().position_minmax(), NoElements);
@@ -4284,7 +4800,7 @@ pub trait Itertools: Iterator {
         }
     }
 
-    /// Return the postions of the minimum and maximum elements of an
+    /// Return the positions of the minimum and maximum elements of an
     /// iterator, as determined by the specified function.
     ///
     /// The return value is a variant of [`MinMaxResult`] like for
@@ -4302,7 +4818,7 @@ pub trait Itertools: Iterator {
     ///
     /// ```
     /// use itertools::Itertools;
-    /// use itertools::MinMaxResult::{NoElements, OneElement, MinMax};
+    /// use itertools::MinMaxResult::{MinMax, NoElements, OneElement};
     ///
     /// let a: [i32; 0] = [];
     /// assert_eq!(a.iter().position_minmax_by_key(|x| x.abs()), NoElements);
@@ -4332,7 +4848,7 @@ pub trait Itertools: Iterator {
         }
     }
 
-    /// Return the postions of the minimum and maximum elements of an
+    /// Return the positions of the minimum and maximum elements of an
     /// iterator, as determined by the specified comparison function.
     ///
     /// The return value is a variant of [`MinMaxResult`] like for
@@ -4347,7 +4863,7 @@ pub trait Itertools: Iterator {
     ///
     /// ```
     /// use itertools::Itertools;
-    /// use itertools::MinMaxResult::{NoElements, OneElement, MinMax};
+    /// use itertools::MinMaxResult::{MinMax, NoElements, OneElement};
     ///
     /// let a: [i32; 0] = [];
     /// assert_eq!(a.iter().position_minmax_by(|x, y| x.cmp(y)), NoElements);
@@ -4483,7 +4999,19 @@ pub trait Itertools: Iterator {
         Self: Sized,
         Self::Item: Eq + Hash,
     {
-        let mut counts = HashMap::new();
+        self.counts_with_hasher(RandomState::new())
+    }
+
+    /// Collect the items in this iterator and return a `HashMap` the same way
+    /// [.counts()](crate::Itertools::counts) does, but use the specified hash builder for hashing.
+    #[cfg(feature = "use_std")]
+    fn counts_with_hasher<S>(self, hash_builder: S) -> HashMap<Self::Item, usize, S>
+    where
+        Self: Sized,
+        Self::Item: Eq + Hash,
+        S: BuildHasher,
+    {
+        let mut counts = HashMap::with_hasher(hash_builder);
         self.for_each(|item| *counts.entry(item).or_default() += 1);
         counts
     }
@@ -4496,9 +5024,9 @@ pub trait Itertools: Iterator {
     /// ```
     /// # use itertools::Itertools;
     /// struct Character {
-    ///   first_name: &'static str,
+    ///     first_name: &'static str,
     ///   # #[allow(dead_code)]
-    ///   last_name:  &'static str,
+    ///     last_name: &'static str,
     /// }
     ///
     /// let characters =
@@ -4528,7 +5056,20 @@ pub trait Itertools: Iterator {
         K: Eq + Hash,
         F: FnMut(Self::Item) -> K,
     {
-        self.map(f).counts()
+        self.counts_by_with_hasher(f, RandomState::new())
+    }
+
+    /// Collect the items in this iterator and return a `HashMap` the same way
+    /// [.counts_by()](crate::Itertools::counts_by) does, but use the specified hash builder for hashing.
+    #[cfg(feature = "use_std")]
+    fn counts_by_with_hasher<K, F, S>(self, f: F, hash_builder: S) -> HashMap<K, usize, S>
+    where
+        Self: Sized,
+        K: Eq + Hash,
+        F: FnMut(Self::Item) -> K,
+        S: BuildHasher,
+    {
+        self.map(f).counts_with_hasher(hash_builder)
     }
 
     /// Converts an iterator of tuples into a tuple of containers.
@@ -4581,6 +5122,95 @@ pub trait Itertools: Iterator {
             _ => Err(sh),
         }
     }
+
+    /// Removes a prefix from the iterator, returning the rest.
+    ///
+    /// If `self` begins with all the items yielded by `prefix` (in order), this
+    /// returns `Ok` of the iterator advanced past that prefix. Otherwise it
+    /// returns `Err(StripPrefixError { .. })` exposing the partially-consumed
+    /// iterator, the remaining prefix, and the items that failed to match, so
+    /// callers can recover progress made before the mismatch.
+    ///
+    /// See [`strip_prefix_by`](Itertools::strip_prefix_by) for a variant
+    /// taking an explicit equality predicate.
+    ///
+    /// ```
+    /// use itertools::Itertools;
+    ///
+    /// let ok = (1..6).strip_prefix([1, 2]).map(Itertools::collect_vec).ok();
+    /// assert_eq!(ok, Some(vec![3, 4, 5]));
+    /// assert!((1..6).strip_prefix([1, 9]).is_err());
+    /// let empty = (1..6).strip_prefix(std::iter::empty::<i32>()).map(Itertools::collect_vec).ok();
+    /// assert_eq!(empty, Some(vec![1, 2, 3, 4, 5]));
+    /// ```
+    fn strip_prefix<Prefix>(
+        self,
+        prefix: Prefix,
+    ) -> Result<Self, StripPrefixError<Self, Prefix::IntoIter, Self::Item>>
+    where
+        Self: Sized,
+        Prefix: IntoIterator,
+        Self::Item: PartialEq<Prefix::Item>,
+    {
+        self.strip_prefix_by(prefix, |a, b| a == b)
+    }
+
+    /// Removes a prefix from the iterator using `eq` to compare items.
+    ///
+    /// If `self` begins with all the items yielded by `prefix` (in order, as
+    /// judged by `eq`), this returns `Ok` of the iterator advanced past that
+    /// prefix. Otherwise it returns `Err(StripPrefixError { .. })`, allowing
+    /// the prefix items to have a different type than `Self::Item`.
+    ///
+    /// ```
+    /// use itertools::Itertools;
+    ///
+    /// let path = ["home", "user", "file"];
+    /// let stripped = path.iter().strip_prefix_by(["home", "user"], |a, b| **a == *b);
+    /// assert_eq!(stripped.map(Itertools::collect_vec).ok(), Some(vec![&"file"]));
+    /// ```
+    fn strip_prefix_by<Prefix, F>(
+        mut self,
+        prefix: Prefix,
+        mut eq: F,
+    ) -> Result<Self, StripPrefixError<Self, Prefix::IntoIter, Self::Item>>
+    where
+        Self: Sized,
+        Prefix: IntoIterator,
+        F: FnMut(&Self::Item, &Prefix::Item) -> bool,
+    {
+        let mut prefix = prefix.into_iter();
+        match prefix.by_ref().try_for_each(|wanted| match self.next() {
+            Some(got) if eq(&got, &wanted) => Ok(()),
+            got => Err((got, wanted)),
+        }) {
+            Ok(()) => Ok(self),
+            Err(mismatch) => Err(StripPrefixError {
+                iterator: self,
+                prefix,
+                mismatch,
+            }),
+        }
+    }
+}
+
+/// The error returned by [`Itertools::strip_prefix`] and
+/// [`Itertools::strip_prefix_by`] when the iterator does not start with the
+/// requested prefix.
+///
+/// All fields are public so callers can recover the partially-consumed
+/// iterators and the mismatched items.
+#[derive(Debug, Clone)]
+pub struct StripPrefixError<I, Prefix: Iterator, T> {
+    /// The remainder of the original iterator, advanced past the matched
+    /// prefix items but stopped at the position of the mismatch.
+    pub iterator: I,
+    /// The remainder of the prefix iterator, starting just after the prefix
+    /// item that failed to match.
+    pub prefix: Prefix,
+    /// The pair of items that failed to compare equal. The first element is
+    /// `None` if `iterator` was exhausted before the prefix was fully matched.
+    pub mismatch: (Option<T>, Prefix::Item),
 }
 
 impl<T> Itertools for T where T: Iterator + ?Sized {}

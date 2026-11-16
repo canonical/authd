@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.2](https://github.com/rust-lang/cc-rs/compare/cc-v1.11.1...cc-v1.11.2) - 2026-11-13
+
+### Fixed
+
+- keep GCC from merging identical variables under AddressSanitizer ([#2094](https://github.com/rust-lang/cc-rs/pull/2094))
+
+### Other
+
+- Regenerate target info ([#2099](https://github.com/rust-lang/cc-rs/pull/2099))
+
+## [1.11.1](https://github.com/rust-lang/cc-rs/compare/cc-v1.11.0...cc-v1.11.1) - 2026-11-06
+
+### Fixed
+
+- *(target-parsing)* wasm32-none-component ([#2056](https://github.com/rust-lang/cc-rs/pull/2056))
+
 ## [1.11.0](https://github.com/rust-lang/cc-rs/compare/cc-v1.10.0...cc-v1.11.0) - 2026-10-30
 
 ### Added

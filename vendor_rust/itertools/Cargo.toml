@@ -13,7 +13,7 @@
 edition = "2018"
 rust-version = "1.63.0"
 name = "itertools"
-version = "0.14.0"
+version = "0.15.0"
 authors = ["bluss"]
 build = false
 autolib = false
@@ -60,6 +60,10 @@ path = "examples/iris.rs"
 [[test]]
 name = "adaptors_no_collect"
 path = "tests/adaptors_no_collect.rs"
+
+[[test]]
+name = "arrays"
+path = "tests/arrays.rs"
 
 [[test]]
 name = "flatten_ok"
