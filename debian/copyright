@@ -649,6 +649,9 @@ License: Apache-2.0 or Expat
 Files: vendor_rust/prettyplease/*
 License: Apache-2.0 or Expat
 
+Files: vendor_rust/prettyplease-0.2.37/*
+License: Apache-2.0 or Expat
+
 Files: vendor_rust/proc-macro2/*
 License: Apache-2.0 or Expat
 
