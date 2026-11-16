@@ -5,6 +5,20 @@ All notable changes to this crate will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.14] - 2026-11-13
+
+### Added
+
+- Added UEFI support (`*-unknown-uefi`), run via `ctor::run_constructors`.
+
+### Changed
+
+- Bump `link-section` dependency to 0.19.4.
+
+### Fixed
+
+- Dereference reference statics (`static IDENT: &'static T = &...`) twice (`_ = &**$ident`) in generated startup constructors so `Static::deref` runs before `main`.
+
 ## [1.0.13] - 2026-08-09
 
 ### Changed

@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.15.0
+
+### Breaking
+- Restructure `Position` as struct instead of enum (#1042, #1043)
+- Canonicalize `all_equal_value`'s error type (#1032)
+
+### Added
+- Add `*_with_hasher` adaptors (#1007)
+- Add strip_prefix and strip_prefix_by methods (#1104)
+
+### Changed
+- Remove `Clone` bounds from `tuple_combinations` and `array_combinations`(#1011)
+- `must_use` for `collect_vec` (#1009)
+- Make `izip!` temporary friendly (#1021)
+- Add `array_combinations_with_replacement` (#1033)
+- Implement `Debug` for remaining public types (#1038)
+- Specialize `ExactlyOneError::count` (#1046)
+- Implement `PeekingNext` for more types, in particular `vec::IntoIter` (#1059, #1073)
+- Fix `PadUsing::next_back` (#1082)
+- Introduce `[circular_]array_windows`, deprecate `tuple_windows` (#1086)
+- Deprecate `tuple_combinations` (replaced by `array_combinations`) (#1085)
+
+### Notable Internal Changes
+- Make `into_group_map` code more idiomatic (#1027)
+- Fix clippy lints (#1017, #1029, #1076, #1099)
+
 ## 0.14.0
 
 ### Breaking

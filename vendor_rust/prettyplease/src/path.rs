@@ -148,9 +148,9 @@ impl Printer {
         self.cbox(INDENT);
         self.word("(");
         self.zerobreak();
-        for ty in arguments.inputs.iter().delimited() {
-            self.ty(&ty);
-            self.trailing_comma(ty.is_last);
+        for named_arg in arguments.inputs.iter().delimited() {
+            self.ty(&named_arg.ty);
+            self.trailing_comma(named_arg.is_last);
         }
         self.offset(-INDENT);
         self.word(")");
@@ -159,9 +159,7 @@ impl Printer {
     }
 
     pub fn qpath(&mut self, qself: &Option<QSelf>, path: &Path, kind: PathKind) {
-        let qself = if let Some(qself) = qself {
-            qself
-        } else {
+        let Some(qself) = qself else {
             self.path(path, kind);
             return;
         };
