@@ -50,21 +50,28 @@ jobs:
         run: |
           python3 -m unittest discover -s .github/scripts -p 'test_collect_ci_failures.py'
           python3 -m unittest discover -s .github/scripts -p 'test_sign_agentic_update.py'
+          python3 -m unittest discover -s .github/scripts -p 'test_gh_aw_version_line.py'
 
       - name: Prepare pull request description
         if: steps.update.outputs.modified == 'true'
         env:
           UPDATE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          set -euo pipefail
+
+          version_line=$(python3 .github/scripts/gh_aw_version_line.py)
+
           {
             printf 'Automated gh-aw update created by the [Update agentic workflows workflow](%s). This PR was not opened manually.\n\n' "${UPDATE_RUN_URL}"
+            printf '%s\n\n' "${version_line}"
             cat <<'EOF'
-          Updates gh-aw, its runtime Actions, and generated workflow locks together.
+          This updates the runtime Actions and generated workflow locks to match.
 
           Validation:
           - `gh aw compile`: passed.
           - `python3 -m unittest discover -s .github/scripts -p 'test_collect_ci_failures.py'`: passed.
           - `python3 -m unittest discover -s .github/scripts -p 'test_sign_agentic_update.py'`: passed.
+          - `python3 -m unittest discover -s .github/scripts -p 'test_gh_aw_version_line.py'`: passed.
 
           These checks ran in the updater workflow. PRs created with GITHUB_TOKEN
           do not trigger normal PR CI. Close and reopen the PR to run those checks.
