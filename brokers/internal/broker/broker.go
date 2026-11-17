@@ -3291,14 +3291,16 @@ func (b *Broker) getGroups(ctx context.Context, session *session, t *token.AuthC
 	// A cached token that carries device-registration data has a PRT that must be
 	// exchanged for a Graph-scoped token (strategy 2). Derive this from the
 	// presence of that data rather than tracking a separate persisted flag.
-	return gf.GetGroups(ctx,
+	result, err := gf.GetGroups(ctx,
 		b.cfg.clientID,
 		b.cfg.issuerURL,
 		t.Token,
 		t.ProviderMetadata,
 		t.DeviceRegistrationData,
 		len(t.DeviceRegistrationData) > 0,
+		"",
 	)
+	return result.Groups, err
 }
 
 // registrationIsStale reports whether err proves that the cached device

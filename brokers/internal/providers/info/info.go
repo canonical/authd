@@ -2,13 +2,44 @@
 package info
 
 import (
+	"context"
+	"errors"
+	"fmt"
+
 	"github.com/mitchellh/mapstructure"
+	"golang.org/x/oauth2"
 )
+
+// ErrUnixAttributeRequired marks an enrichment failure caused by a required
+// Unix attribute being unavailable or invalid.
+var (
+	ErrUnixAttributeRequired = errors.New("required Unix attribute is unavailable")
+	ErrUnixAttributeMissing  = errors.New("required Unix attribute is missing or invalid")
+	ErrUnixUIDRequired       = fmt.Errorf("%w: required Unix UID is unavailable", ErrUnixAttributeRequired)
+	ErrUnixGIDRequired       = fmt.Errorf("%w: required Unix GID is unavailable", ErrUnixAttributeRequired)
+)
+
+// ErrUnixAttributePartial comes with a usable user that keeps cached values for unreadable attributes.
+var ErrUnixAttributePartial = errors.New("some Unix attributes could not be read")
+
+// ErrGroupsUnavailable marks an enrichment that stopped before the groups were read.
+var ErrGroupsUnavailable = errors.New("groups could not be read from the provider")
 
 // Group represents the group information that is fetched by the broker.
 type Group struct {
-	Name string `json:"name"`
-	UGID string `json:"ugid"`
+	Name string  `json:"name"`
+	UGID string  `json:"ugid"`
+	GID  *uint32 `json:"gid,omitempty" yaml:"gid,omitempty"`
+	// AdditionalData is transient directory data used only during enrichment.
+	AdditionalData map[string]any `json:"-" yaml:"-"`
+}
+
+// GroupFetchResult contains freshly fetched groups and any non-fatal error
+// reading the configured Unix GID attribute. A GID attribute error means group
+// membership was fetched successfully, but the attribute was not available.
+type GroupFetchResult struct {
+	Groups            []Group
+	GIDAttributeError error
 }
 
 // User represents the user information obtained from the provider.
@@ -22,6 +53,58 @@ type User struct {
 	Shell      string  `json:"shell"`
 	Gecos      string  `json:"gecos"`
 	Groups     []Group `json:"groups"`
+	UID        *uint32 `json:"uid,omitempty" yaml:"uid,omitempty"`
+}
+
+// UnixAttributeConfig controls optional Microsoft Entra Unix ID enrichment.
+// Attribute names are already resolved to their full Graph property names by
+// the broker configuration parser.
+type UnixAttributeConfig struct {
+	UIDAttribute string
+	GIDAttribute string
+	UIDRequired  bool
+	GIDRequired  bool
+}
+
+// KeepCachedGIDs sets the GID of each group that has none to the cached GID of
+// the group with the same UGID.
+func KeepCachedGIDs(groups, cached []Group) {
+	// The first cached GID of a UGID wins.
+	cachedGIDs := make(map[string]uint32, len(cached))
+	for _, c := range cached {
+		if c.UGID == "" || c.GID == nil {
+			continue
+		}
+		if _, ok := cachedGIDs[c.UGID]; !ok {
+			cachedGIDs[c.UGID] = *c.GID
+		}
+	}
+
+	for i := range groups {
+		if groups[i].UGID == "" || groups[i].GID != nil {
+			continue
+		}
+		if gid, ok := cachedGIDs[groups[i].UGID]; ok {
+			groups[i].GID = &gid
+		}
+	}
+}
+
+// UnixAttributeEnricher enriches a user and already-fetched groups with
+// directory-backed Unix IDs. It does not fetch group memberships.
+// Unreadable attributes keep cached values and are reported with ErrUnixAttributePartial.
+type UnixAttributeEnricher interface {
+	EnrichUserWithUnixAttributes(
+		ctx context.Context,
+		user User,
+		groups GroupFetchResult,
+		clientID string,
+		issuerURL string,
+		token *oauth2.Token,
+		providerMetadata map[string]interface{},
+		deviceRegistrationData []byte,
+		config UnixAttributeConfig,
+	) (User, error)
 }
 
 // NewUser creates a new user with the specified values.
