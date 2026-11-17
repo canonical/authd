@@ -249,6 +249,15 @@ func (b *Broker) IsOffline(sessionID string) (bool, error) {
 	return session.isOffline, nil
 }
 
+func (b *Broker) SetOffline(sessionID string) error {
+	session, err := b.getSession(sessionID)
+	if err != nil {
+		return err
+	}
+	session.isOffline = true
+	return b.updateSession(sessionID, session)
+}
+
 func (b *Broker) SetAttemptsPerMode(sessionID, mode string, attempts int) error {
 	s, err := b.getSession(sessionID)
 	if err != nil {
