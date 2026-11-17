@@ -1255,7 +1255,7 @@ do_pam_action_thread (pam_handle_t *pamh,
   if (pam_tty != NULL && *pam_tty != '\0')
     {
       g_debug ("Trying to use PAM TTY %s", pam_tty);
-      pam_tty_fd = open (pam_tty, O_RDWR, 0600);
+      pam_tty_fd = open (pam_tty, O_RDWR | O_NOCTTY, 0600);
       errsv = errno;
 
       if (pam_tty_fd >= 0)
