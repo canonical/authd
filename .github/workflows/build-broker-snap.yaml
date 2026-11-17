@@ -12,13 +12,6 @@ on:
         description: 'Hash of files that affect the broker snap build'
         value: ${{ jobs.build-broker-snap.outputs.files-hash }}
 
-concurrency:
-  # The snap tag has no release component, so all releases of a broker
-  # share it. Serialize builds to avoid pushing the same tag at once.
-  group: build-broker-snap-${{ inputs.broker }}
-  cancel-in-progress: false
-  queue: max
-
 env:
   OCI_REPOSITORY: ${{ case(github.repository == 'canonical/authd-private', 'canonical/authd', github.repository) }}
 
