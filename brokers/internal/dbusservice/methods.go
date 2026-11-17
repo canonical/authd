@@ -41,7 +41,7 @@ func authorizeDeleteUser(sender dbus.Sender, uidForSender func(dbus.Sender) (uin
 // NewSession is the method through which the broker and the daemon will communicate once dbusInterface.NewSession is called.
 //
 // This is the v3+ version that accepts the providerID identifier for cache directory resolution.
-func (s *Interface) NewSession(username, lang, mode, providerID string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
+func (s *Interface) NewSession(sender dbus.Sender, username, lang, mode, providerID string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
 	log.Debugf(context.Background(), "Creating new session (v3) (username=%s, lang=%s, mode=%s, provider_id=%s)", username, lang, mode, providerID)
 	b, err := s.brokerForCall()
 	if err != nil {
@@ -51,6 +51,7 @@ func (s *Interface) NewSession(username, lang, mode, providerID string) (session
 	if err != nil {
 		return "", "", dbus.MakeFailedError(err)
 	}
+	s.trackSession(sender, sessionID)
 	log.Debugf(context.Background(), "Created new session %s", sessionID)
 	return sessionID, encryptionKey, nil
 }
@@ -108,6 +109,7 @@ func (s *Interface) IsAuthenticated(sessionID, authenticationData string) (acces
 // EndSession is the method through which the broker and the daemon will communicate once dbusInterface.EndSession is called.
 func (s *Interface) EndSession(sessionID string) (dbusErr *dbus.Error) {
 	log.Debugf(context.Background(), "Ending session %s", sessionID)
+	defer s.untrackSession(sessionID)
 	b, err := s.brokerForCall()
 	if err != nil {
 		return dbusErrorForBrokerCall(err)
@@ -178,7 +180,7 @@ type InterfaceV2 struct {
 }
 
 // NewSession is the method through which the broker and the daemon will communicate once dbusInterface.NewSession is called.
-func (s *InterfaceV2) NewSession(username, lang, mode string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
+func (s *InterfaceV2) NewSession(sender dbus.Sender, username, lang, mode string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
 	log.Debugf(context.Background(), "Creating new session (username=%s, lang=%s, mode=%s)", username, lang, mode)
 	b, err := s.brokerForCall()
 	if err != nil {
@@ -188,6 +190,7 @@ func (s *InterfaceV2) NewSession(username, lang, mode string) (sessionID, encryp
 	if err != nil {
 		return "", "", dbus.MakeFailedError(err)
 	}
+	s.trackSession(sender, sessionID)
 	log.Debugf(context.Background(), "Created new session %s", sessionID)
 	return sessionID, encryptionKey, nil
 }

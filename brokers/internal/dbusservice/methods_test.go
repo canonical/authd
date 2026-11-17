@@ -16,6 +16,9 @@ import (
 
 var defaultIssuerURL string
 
+// testSender is the bus client that creates sessions in tests.
+const testSender = dbus.Sender(":1.1000")
+
 // newInterfaceForTests creates a v3 dbusservice Interface backed by a real broker
 // connected to the mock provider server, so the wrappers exercise the full path.
 func newInterfaceForTests(t *testing.T) *dbusservice.Interface {
@@ -47,12 +50,12 @@ func TestNewSession(t *testing.T) {
 
 	iface := newInterfaceForTests(t)
 
-	id, key, dbusErr := iface.NewSession("user@example.com", "lang", sessionmode.Login, "provider-id")
+	id, key, dbusErr := iface.NewSession(testSender, "user@example.com", "lang", sessionmode.Login, "provider-id")
 	require.Nil(t, dbusErr, "NewSession should not return a D-Bus error")
 	require.NotEmpty(t, id, "NewSession should return a session ID")
 	require.NotEmpty(t, key, "NewSession should return an encryption key")
 
-	_, _, dbusErr = iface.NewSession("", "lang", sessionmode.Login, "")
+	_, _, dbusErr = iface.NewSession(testSender, "", "lang", sessionmode.Login, "")
 	require.NotNil(t, dbusErr, "NewSession with an empty username should return a D-Bus error")
 }
 
@@ -61,7 +64,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 
 	iface := newInterfaceForTests(t)
 
-	id, _, dbusErr := iface.NewSession("user@example.com", "lang", sessionmode.Login, "")
+	id, _, dbusErr := iface.NewSession(testSender, "user@example.com", "lang", sessionmode.Login, "")
 	require.Nil(t, dbusErr, "NewSession should not return a D-Bus error")
 
 	modes, dbusErr := iface.GetAuthenticationModes(id, supportedUILayouts)
@@ -77,7 +80,7 @@ func TestSelectAuthenticationMode(t *testing.T) {
 
 	iface := newInterfaceForTests(t)
 
-	id, _, dbusErr := iface.NewSession("user@example.com", "lang", sessionmode.Login, "")
+	id, _, dbusErr := iface.NewSession(testSender, "user@example.com", "lang", sessionmode.Login, "")
 	require.Nil(t, dbusErr, "NewSession should not return a D-Bus error")
 
 	modes, dbusErr := iface.GetAuthenticationModes(id, supportedUILayouts)
@@ -104,7 +107,7 @@ func TestEndSession(t *testing.T) {
 
 	iface := newInterfaceForTests(t)
 
-	id, _, dbusErr := iface.NewSession("user@example.com", "lang", sessionmode.Login, "")
+	id, _, dbusErr := iface.NewSession(testSender, "user@example.com", "lang", sessionmode.Login, "")
 	require.Nil(t, dbusErr, "NewSession should not return a D-Bus error")
 
 	require.Nil(t, iface.EndSession(id), "EndSession should not return a D-Bus error")
@@ -116,7 +119,7 @@ func TestCancelIsAuthenticated(t *testing.T) {
 
 	iface := newInterfaceForTests(t)
 
-	id, _, dbusErr := iface.NewSession("user@example.com", "lang", sessionmode.Login, "")
+	id, _, dbusErr := iface.NewSession(testSender, "user@example.com", "lang", sessionmode.Login, "")
 	require.Nil(t, dbusErr, "NewSession should not return a D-Bus error")
 
 	require.Nil(t, iface.CancelIsAuthenticated(id), "CancelIsAuthenticated should not return a D-Bus error")
@@ -146,11 +149,11 @@ func TestInterfaceV2(t *testing.T) {
 
 	iface := dbusservice.NewInterfaceV2ForTests(newInterfaceForTests(t).Broker())
 
-	id, _, dbusErr := iface.NewSession("user@example.com", "lang", sessionmode.Login)
+	id, _, dbusErr := iface.NewSession(testSender, "user@example.com", "lang", sessionmode.Login)
 	require.Nil(t, dbusErr, "NewSession (v2) should not return a D-Bus error")
 	require.NotEmpty(t, id, "NewSession (v2) should return a session ID")
 
-	_, _, dbusErr = iface.NewSession("", "lang", sessionmode.Login)
+	_, _, dbusErr = iface.NewSession(testSender, "", "lang", sessionmode.Login)
 	require.NotNil(t, dbusErr, "NewSession (v2) with an empty username should return a D-Bus error")
 
 	dbusErr = iface.DeleteUser(dbus.Sender(""), "user@example.com")

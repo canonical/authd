@@ -18,3 +18,8 @@ func NewInterfaceV2ForTests(b *broker.Broker) *InterfaceV2 {
 func (s *Interface) Broker() *broker.Broker {
 	return s.broker
 }
+
+// BrokerV3ForTests returns the broker backing the v3 interface, for tests.
+func (s *Service) BrokerV3ForTests() *broker.Broker {
+	return s.interfaces[len(s.interfaces)-1].broker
+}

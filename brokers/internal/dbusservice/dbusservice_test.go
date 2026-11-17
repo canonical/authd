@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/canonical/authd/brokers/internal/broker"
+	"github.com/godbus/dbus/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -60,8 +61,53 @@ func TestNewSessionReturnsBrokerUnavailableErrorAfterInitializationFailure(t *te
 
 	service.initializationFailed(wantErr)
 
-	_, _, dbusErr := iface.NewSession("user@example.com", "en", "login", "provider-id")
+	_, _, dbusErr := iface.NewSession(dbus.Sender(""), "user@example.com", "en", "login", "provider-id")
 	require.NotNil(t, dbusErr)
 	require.Equal(t, brokerUnavailableDBusErrorName, dbusErr.Name)
 	require.Equal(t, []any{wantErr.Error()}, dbusErr.Body)
+}
+
+func TestHandleNameOwnerChangedOnlyTrustsTheBus(t *testing.T) {
+	tests := []struct {
+		name        string
+		sender      string
+		wantIgnored bool
+	}{
+		{
+			name:   "the bus disconnecting a client",
+			sender: "org.freedesktop.DBus",
+		},
+		{
+			name:        "a client forging a disconnection",
+			sender:      ":1.1000",
+			wantIgnored: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			iface := &Interface{
+				iface:    "test",
+				sessions: map[string]dbus.Sender{"session-id": ":1.1"},
+			}
+			service := &Service{interfaces: []*Interface{iface}}
+
+			service.handleNameOwnerChanged(&dbus.Signal{
+				Sender: tc.sender,
+				Path:   "/org/freedesktop/DBus",
+				Name:   "org.freedesktop.DBus.NameOwnerChanged",
+				Body:   []any{":1.1", ":1.1", ""},
+			})
+
+			iface.sessionsMu.Lock()
+			defer iface.sessionsMu.Unlock()
+
+			if tc.wantIgnored {
+				require.Contains(t, iface.sessions, "session-id",
+					"Sessions must be kept for signals that do not come from the bus")
+				return
+			}
+			require.Empty(t, iface.sessions, "The sessions of the vanished client should be dropped")
+		})
+	}
 }
