@@ -977,8 +977,12 @@ dup_fd_checked (int fd, GError **error)
   return new_fd;
 }
 
-typedef const char ProgramNameResetter;
-static void program_name_resetter (ProgramNameResetter *pn) { g_set_prgname (pn); }
+typedef char ProgramNameResetter;
+static void program_name_resetter (ProgramNameResetter *pn)
+{
+  g_set_prgname (pn);
+  g_free (pn);
+}
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (ProgramNameResetter, program_name_resetter)
 
 static char *
@@ -1132,7 +1136,7 @@ do_pam_action_thread (pam_handle_t *pamh,
   G_LOCK (logger);
 
   action_name = action_type_to_string (action);
-  old_program_name = g_get_prgname ();
+  old_program_name = g_strdup (g_get_prgname ());
   program_name = get_program_name (action_name, pamh);
   g_set_prgname (program_name);
 
