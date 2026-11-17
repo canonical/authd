@@ -520,7 +520,7 @@ wait_child_thread (gpointer data)
 
   while (TRUE)
     {
-      int status;
+      int status = 0;
       pid_t ret = waitpid (child_pid, &status, 0);
       int errsv = errno;
 
@@ -553,6 +553,9 @@ wait_child_thread (gpointer data)
 
       if (ret < 0)
         {
+          if (errsv == EINTR)
+            continue;
+
           exit_status = -errsv;
           break;
         }
