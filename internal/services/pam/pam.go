@@ -459,7 +459,9 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 	bfCfg := s.authFailConfig.ForService(serviceName)
 
 	if access != auth.Granted {
-		if access == auth.Denied || access == auth.DeniedMaxTries || access == auth.Retry {
+		// Policy denials are not credential failures, so they neither count
+		// toward nor trigger the brute-force delay.
+		if (access == auth.Denied && !isPermissionDenied(data)) || access == auth.DeniedMaxTries || access == auth.Retry {
 			if count := s.failedAuths.recordFailure(serviceName, username, bfCfg.AuthFailResetWindow); count > bfCfg.AuthFailDelayThreshold {
 				log.Debugf(ctx, "%s: Delaying response after %d consecutive authentication failures for %q", sessionID, count, username)
 				timer := time.NewTimer(bfCfg.AuthFailDelay)
@@ -566,6 +568,14 @@ func (s Service) EndSession(ctx context.Context, req *authd.ESRequest) (empty *a
 	}
 
 	return &authd.Empty{}, s.brokerManager.EndSession(sessionID)
+}
+
+func isPermissionDenied(data string) bool {
+	var msg struct {
+		Code string `json:"code"`
+	}
+	return json.Unmarshal([]byte(data), &msg) == nil &&
+		msg.Code == auth.DenialCodePermissionDenied
 }
 
 func uiLayoutToMap(layout *authd.UILayout) (mapLayout map[string]string, err error) {

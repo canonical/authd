@@ -621,6 +621,31 @@ func TestIsAuthenticated_FailDelay_PerService(t *testing.T) {
 		"attempt should use the service-specific fail delay")
 }
 
+func TestIsAuthenticated_FailDelay_SkippedOnPermissionDenied(t *testing.T) {
+	t.Parallel()
+
+	delay := 200 * time.Millisecond
+	cfg := pam.Config{
+		BruteForceMitigationConfig: pam.BruteForceMitigationConfig{
+			AuthFailDelayThreshold: 0,
+			AuthFailDelay:          delay,
+			AuthFailResetWindow:    15 * time.Minute,
+		},
+	}
+	client := newPamClientWithConfig(t, nil, globalBrokerManager, cfg)
+
+	sessionID := startSessionWithService(t, client, "ia_denied_permission@example.com", "sshd")
+	start := time.Now()
+	resp, err := client.IsAuthenticated(context.Background(), &authd.IARequest{
+		SessionId:          sessionID,
+		AuthenticationData: &authd.IARequest_AuthenticationData{},
+	})
+	require.NoError(t, err)
+	require.Equal(t, auth.Denied, resp.GetAccess())
+	require.Less(t, time.Since(start), delay,
+		"policy denials must not trigger brute-force delay")
+}
+
 func TestIsAuthenticated_FailDelay_PerService_ResetWindow(t *testing.T) {
 	t.Parallel()
 

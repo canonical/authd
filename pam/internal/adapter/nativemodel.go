@@ -326,10 +326,11 @@ func (m nativeModel) Update(msg tea.Msg) (nativeModel, tea.Cmd) {
 
 	case isAuthenticatedResultReceived:
 		access := msg.access
-		authMsg, err := grantedTolerantMsg(access, msg.msg)
+		parsedMsg, err := parseAuthMessage(access, msg.msg)
 		if cmd := maybeSendPamError(err); cmd != nil {
 			return m, cmd
 		}
+		authMsg := parsedMsg.message
 
 		switch access {
 		case auth.Granted:

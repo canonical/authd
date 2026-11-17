@@ -31,11 +31,11 @@ func TestShouldSendPamMessage(t *testing.T) {
 			retStatus:  adapter.PamSuccess{},
 			want:       false,
 		},
-		"Sends_gdm_success_info_messages_via_pam_conversation": {
+		"Does_not_send_gdm_success_info_messages_via_pam_conversation": {
 			style:      pam.TextInfo,
 			clientType: adapter.Gdm,
 			retStatus:  adapter.PamSuccess{},
-			want:       true,
+			want:       false,
 		},
 		"Sends_interactive_terminal_success_info_messages": {
 			style:      pam.TextInfo,

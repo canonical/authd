@@ -133,11 +133,11 @@ func sendReturnMessageToPam(mTx pam.ModuleTransaction, clientType adapter.PamCli
 
 func shouldSendPamMessage(style pam.Style, clientType adapter.PamClientType, retStatus adapter.PamReturnValue) bool {
 	if style == pam.TextInfo {
-		// Native clients already display successful authentication messages via
-		// the native model. Keep informational PAM errors, such as PAM_IGNORE,
-		// visible to the caller.
+		// Native clients and GDM already display successful authentication
+		// messages through their own models. Keep informational PAM errors,
+		// such as PAM_IGNORE, visible to the caller.
 		if _, ok := retStatus.(adapter.PamSuccess); ok {
-			return clientType != adapter.Native
+			return clientType != adapter.Native && clientType != adapter.Gdm
 		}
 		return true
 	}

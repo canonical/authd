@@ -398,11 +398,11 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 
 		var authMsg string
 		if msg.access != auth.Cancelled {
-			var err error
-			authMsg, err = grantedTolerantMsg(msg.access, msg.msg)
+			parsedMsg, err := parseAuthMessage(msg.access, msg.msg)
 			if err != nil {
 				return m, sendEvent(pamError{status: pam.ErrSystem, msg: err.Error()})
 			}
+			authMsg = parsedMsg.message
 		}
 
 		switch msg.access {
@@ -618,36 +618,53 @@ func (m *authenticationModel) Reset() tea.Cmd {
 	return m.cancelIsAuthenticated()
 }
 
-// dataToMsg returns the data message from a given JSON message.
-func dataToMsg(data string) (string, error) {
-	if data == "" {
-		return "", nil
-	}
-
-	v := make(map[string]string)
-	if err := json.Unmarshal([]byte(data), &v); err != nil {
-		return "", fmt.Errorf("invalid json data from provider: %v", err)
-	}
-	if len(v) == 0 {
-		return "", nil
-	}
-
-	r, ok := v["message"]
-	if !ok {
-		return "", fmt.Errorf("no message entry in json data from provider: %v", v)
-	}
-	return r, nil
+type authMessage struct {
+	message string
+	code    string
 }
 
-// grantedTolerantMsg parses data via dataToMsg, treating a malformed or
+// dataToMsg parses the JSON message payload returned by a broker.
+func dataToMsg(data string) (authMessage, error) {
+	if data == "" {
+		return authMessage{}, nil
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(data), &raw); err != nil {
+		return authMessage{}, fmt.Errorf("invalid json data from provider: %v", err)
+	}
+	if len(raw) == 0 {
+		return authMessage{}, nil
+	}
+
+	var msg authMessage
+	parsed := false
+	if rawMessage, ok := raw["message"]; ok {
+		if err := json.Unmarshal(rawMessage, &msg.message); err != nil {
+			return authMessage{}, fmt.Errorf("invalid json data from provider: %v", err)
+		}
+		parsed = true
+	}
+	if rawCode, ok := raw[auth.DenialCodeKey]; ok {
+		// Ignore non-string codes instead of failing an authentication result.
+		_ = json.Unmarshal(rawCode, &msg.code)
+		parsed = true
+	}
+	if !parsed {
+		return authMessage{}, fmt.Errorf("no message entry in json data from provider: %s", data)
+	}
+	return msg, nil
+}
+
+// parseAuthMessage parses data via dataToMsg, treating a malformed or
 // unexpected message as non-fatal when access is auth.Granted: the message is
 // then a purely cosmetic notice, so an already-granted login must never fail
 // because of it. For any other access the error is returned unchanged.
-func grantedTolerantMsg(access string, data string) (string, error) {
+func parseAuthMessage(access string, data string) (authMessage, error) {
 	msg, err := dataToMsg(data)
 	if err != nil && access == auth.Granted {
 		log.Warningf(context.TODO(), "Ignoring invalid granted message: %v", err)
-		return "", nil
+		return authMessage{}, nil
 	}
 	return msg, err
 }

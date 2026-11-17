@@ -25,6 +25,10 @@
         <arg type="s" direction="in" name="authenticationModeName"/>
         <arg type="a{ss}" direction="out"  name="uiLayoutInfo"/>
     </method>
+    <!-- On a denied result, data is a JSON object with a "message" field.
+         Set {"message": "...", "code": "permission-denied"} when access is
+         denied by an account, device, or configuration policy rather than bad
+         credentials. -->
     <method name="IsAuthenticated">
         <arg type="s" direction="in" name="sessionID"/>
         <arg type="s" direction="in" name="authenticationData"/>

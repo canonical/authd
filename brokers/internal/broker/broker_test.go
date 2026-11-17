@@ -3992,10 +3992,12 @@ func TestIsAuthenticatedEntraAuthSurfacesForDisplayErrorOnFirstLogin(t *testing.
 
 	var payload struct {
 		Message string `json:"message"`
+		Code    string `json:"code"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(data), &payload))
 	require.Equal(t, graphPermMsg, payload.Message,
 		"a ForDisplayError from the group fetch must be surfaced verbatim, not replaced by the generic network message")
+	require.Equal(t, "permission-denied", payload.Code)
 	require.NotContains(t, payload.Message, "network connection")
 }
 
@@ -5344,23 +5346,24 @@ func TestEntraAuthRoutesAADSTSErrors(t *testing.T) {
 		wantNextModes []string
 		wantMsg       string
 		wantReport    bool
+		wantCode      string
 	}{
-		"Account_locked":                               {aadsts: 50053, wantAccess: broker.AuthDenied, wantMsg: "locked"},
-		"Password_expired":                             {aadsts: 50055, wantAccess: broker.AuthDenied, wantMsg: "expired"},
+		"Account_locked":                               {aadsts: 50053, wantAccess: broker.AuthDenied, wantMsg: "locked", wantCode: "permission-denied"},
+		"Password_expired":                             {aadsts: 50055, wantAccess: broker.AuthDenied, wantMsg: "expired", wantCode: "permission-denied"},
 		"External_server_retryable":                    {aadsts: 90006, wantAccess: broker.AuthRetry, wantMsg: "temporary error"},
 		"Tenant_throttling":                            {aadsts: 90055, wantAccess: broker.AuthRetry, wantMsg: "temporary error"},
 		"Invalid_credentials_retry":                    {aadsts: 50126, wantAccess: broker.AuthRetry, wantMsg: "Incorrect password"},
 		"Previous_MFA_request_not_completed":           {aadsts: 500121, wantAccess: broker.AuthRetry, wantMsg: "previous MFA prompt was not completed"},
 		"Conditional_access_blocked":                   {aadsts: 53003, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "Conditional Access"},
 		"Interactive_auth_to_device":                   {aadsts: 16000, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA registration required"},
-		"Interactive_auth_denied_when_device_disabled": {aadsts: 16000, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled"},
+		"Interactive_auth_denied_when_device_disabled": {aadsts: 16000, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled", wantCode: "permission-denied"},
 		"MFA_enrollment_to_device":                     {aadsts: 50072, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA registration required"},
 		"MFA_enrollment_alt_to_device":                 {aadsts: 50079, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA registration required"},
 		"Authenticator_registration_to_device":         {aadsts: 50203, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA registration required"},
-		"MFA_enrollment_denied_when_device_disabled":   {aadsts: 50072, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled"},
+		"MFA_enrollment_denied_when_device_disabled":   {aadsts: 50072, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled", wantCode: "permission-denied"},
 		"User_not_found_by_aadsts_code":                {aadsts: 50034, wantAccess: broker.AuthDenied, wantMsg: "does not exist"},
 		"MFA_required_to_device":                       {category: himmelblau.MFAErrorRequired, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA is required"},
-		"MFA_required_denied_when_device_disabled":     {category: himmelblau.MFAErrorRequired, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled"},
+		"MFA_required_denied_when_device_disabled":     {category: himmelblau.MFAErrorRequired, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled", wantCode: "permission-denied"},
 		"Unhandled_AADSTS_denied":                      {aadsts: 99999, wantAccess: broker.AuthDenied, wantMsg: "AADSTS99999: simulated error. Please report this error", wantReport: true},
 	}
 	for name, tc := range tests {
@@ -5403,9 +5406,11 @@ func TestEntraAuthRoutesAADSTSErrors(t *testing.T) {
 
 			var payload struct {
 				Message string `json:"message"`
+				Code    string `json:"code"`
 			}
 			require.NoError(t, json.Unmarshal([]byte(data), &payload))
 			require.Contains(t, payload.Message, tc.wantMsg)
+			require.Equal(t, tc.wantCode, payload.Code)
 			if tc.wantReport {
 				require.Contains(t, payload.Message, "Please report this error")
 			} else {
@@ -8355,6 +8360,7 @@ func TestIsAuthenticatedEntraAuthFidoAssertionErrors(t *testing.T) {
 		wantAccess      string
 		wantNextModes   []string
 		wantMsgContains string
+		wantCode        string
 	}{
 		"PIN_required_routes_to_pin_mode": {
 			assertErr:       fido.ErrPINRequired,
@@ -8372,16 +8378,19 @@ func TestIsAuthenticatedEntraAuthFidoAssertionErrors(t *testing.T) {
 			assertErr:       fido.ErrPINBlocked,
 			wantAccess:      broker.AuthDenied,
 			wantMsgContains: "blocked",
+			wantCode:        "permission-denied",
 		},
 		"Hard_blocked_PIN_requires_reset": {
 			assertErr:       fido.ErrPINResetRequired,
 			wantAccess:      broker.AuthDenied,
 			wantMsgContains: "reset",
+			wantCode:        "permission-denied",
 		},
 		"PIN_change_required_denies": {
 			assertErr:       fido.ErrPINChangeRequired,
 			wantAccess:      broker.AuthDenied,
 			wantMsgContains: "PIN to be changed",
+			wantCode:        "permission-denied",
 		},
 		"Touch_timeout_retries_the_same_mode": {
 			assertErr:       fido.ErrTimeout,
@@ -8444,9 +8453,11 @@ func TestIsAuthenticatedEntraAuthFidoAssertionErrors(t *testing.T) {
 			if tc.wantMsgContains != "" {
 				var payload struct {
 					Message string `json:"message"`
+					Code    string `json:"code"`
 				}
 				require.NoError(t, json.Unmarshal([]byte(data), &payload))
 				require.Contains(t, payload.Message, tc.wantMsgContains)
+				require.Equal(t, tc.wantCode, payload.Code)
 			}
 
 			require.NoFileExists(t, b.PasswordFilepathForSession(sessionID))

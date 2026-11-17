@@ -344,8 +344,10 @@ func (b *Broker) NewSession(ctx context.Context, username, lang, mode, providerI
 		info.pwdChange = canReset
 	}
 
-	if _, ok := exampleUsers[username]; !ok && strings.HasPrefix(username, UserIntegrationLocalGroupsPrefix) {
-		exampleUsers[username] = userInfoBroker{Password: "goodpass"}
+	for _, prefix := range []string{UserIntegrationLocalGroupsPrefix, UserIntegrationDeniedPolicyPrefix} {
+		if _, ok := exampleUsers[username]; !ok && strings.HasPrefix(username, prefix) {
+			exampleUsers[username] = userInfoBroker{Password: "goodpass"}
+		}
 	}
 
 	if _, ok := exampleUsers[username]; !ok && strings.HasPrefix(username, UserIntegrationAuthModesPrefix) {
@@ -755,6 +757,9 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, sessionInfo sessionI
 	exampleUsersMu.Unlock()
 	if !userExists {
 		return auth.Denied, `{"message": "user not found"}`
+	}
+	if strings.HasPrefix(sessionInfo.username, UserIntegrationDeniedPolicyPrefix) {
+		return auth.Denied, fmt.Sprintf(`{"message": "Your user account is disabled, please contact your administrator.", %q: %q}`, auth.DenialCodeKey, auth.DenialCodePermissionDenied)
 	}
 
 	sleepDuration := b.sleepDuration(4 * time.Second)

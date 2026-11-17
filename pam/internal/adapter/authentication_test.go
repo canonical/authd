@@ -3,6 +3,7 @@ package adapter
 import (
 	"testing"
 
+	"github.com/canonical/authd/internal/brokers/auth"
 	"github.com/canonical/authd/internal/brokers/layouts"
 	"github.com/canonical/authd/internal/brokers/layouts/entries"
 	"github.com/canonical/authd/internal/proto/authd"
@@ -141,4 +142,43 @@ func TestFormModelLocksInputOnSubmission(t *testing.T) {
 	require.True(t, ok)
 	require.True(t, updatedForm.submitting)
 	require.Equal(t, "password", entry.Value())
+}
+
+func TestDataToMsg(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		data    string
+		want    authMessage
+		wantErr bool
+	}{
+		"Empty_string":          {data: "", want: authMessage{}},
+		"Empty_object":          {data: "{}", want: authMessage{}},
+		"Message_only":          {data: `{"message":"Access denied"}`, want: authMessage{message: "Access denied"}},
+		"Granted_with_userinfo": {data: `{"userinfo":{"Name":"user"},"message":"notice"}`, want: authMessage{message: "notice"}},
+		"Permission_denied":     {data: `{"message":"Account disabled","code":"permission-denied"}`, want: authMessage{message: "Account disabled", code: auth.DenialCodePermissionDenied}},
+		"Unknown_code":          {data: `{"message":"Access denied","code":"other"}`, want: authMessage{message: "Access denied", code: "other"}},
+		"Non_string_code":       {data: `{"message":"Access denied","code":true}`, want: authMessage{message: "Access denied"}},
+		"Null_code":             {data: `{"message":"Access denied","code":null}`, want: authMessage{message: "Access denied"}},
+		"Unknown_field":         {data: `{"message":"Access denied","extra":1}`, want: authMessage{message: "Access denied"}},
+		"Code_only":             {data: `{"code":"permission-denied"}`, want: authMessage{code: auth.DenialCodePermissionDenied}},
+		"Only_unknown_field":    {data: `{"extra":1}`, wantErr: true},
+		"Non_string_msg":        {data: `{"message":123}`, wantErr: true},
+		"Invalid_json":          {data: `invalid`, wantErr: true},
+		"Non_object":            {data: `[]`, wantErr: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := dataToMsg(tc.data)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
 }

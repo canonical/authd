@@ -20,6 +20,15 @@ const (
 var Replies = []string{Granted, Denied, DeniedMaxTries, Cancelled, Retry, Next}
 
 const (
+	// DenialCodeKey is the JSON field carrying a machine-readable reason for a denied result.
+	DenialCodeKey = "code"
+	// DenialCodePermissionDenied indicates a denial by an account, device, or
+	// policy check, not by bad credentials. Keep in sync with the copy in
+	// brokers/internal/broker.
+	DenialCodePermissionDenied = "permission-denied"
+)
+
+const (
 	// SessionModeLogin is used when the session is for user login.
 	// TODO: We can change this to "login" once all broker installations are updated to use the new name.
 	SessionModeLogin = "auth"
