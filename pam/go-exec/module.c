@@ -920,6 +920,7 @@ setup_dbus_server (pam_handle_t *pamh,
   g_autoptr(GMainContext) main_context = NULL;
   g_autofree char *server_addr = NULL;
   g_autofree char *guid = NULL;
+  g_autofree char *escaped_service_name = NULL;
   const char *service_name = NULL;
 
   /* This pointer is used as a semaphore, so accessing to server-related stuff
@@ -939,8 +940,19 @@ setup_dbus_server (pam_handle_t *pamh,
   context_pusher = g_main_context_pusher_new (main_context);
 
   pam_get_item (pamh, PAM_SERVICE, (const void **) &service_name);
+
+  if (!service_name || !*service_name)
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                   "Invalid PAM service name: '%s'",
+                   service_name ? service_name : "");
+      return NULL;
+    }
+
+  escaped_service_name = g_dbus_address_escape_value (service_name);
   guid = g_dbus_generate_guid ();
-  server_addr = g_strdup_printf ("unix:abstract=authd-%s-%s", service_name, guid);
+  server_addr = g_strdup_printf ("unix:abstract=authd-%s-%s",
+                                 escaped_service_name, guid);
 
   g_debug ("Setting up connection at %s (%s)", server_addr, guid);
   server = g_dbus_server_new_sync (server_addr,
