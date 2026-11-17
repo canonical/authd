@@ -14,6 +14,26 @@ const (
 	dbusNameOwnerChanged = "NameOwnerChanged"
 )
 
+// authorizeSession checks that the given bus client created the session.
+func (s *Interface) authorizeSession(sender dbus.Sender, sessionID string) *dbus.Error {
+	s.sessionsMu.Lock()
+	owner, tracked := s.sessions[sessionID]
+	s.sessionsMu.Unlock()
+
+	if tracked && owner == sender {
+		return nil
+	}
+
+	if tracked {
+		log.Warningf(context.Background(), "%s: Client %s is not allowed to use session %s created by %s",
+			s.iface, sender, sessionID, owner)
+	}
+
+	return dbus.NewError(dbusAccessDeniedErrorName, []any{
+		"session is not owned by the caller",
+	})
+}
+
 // trackSession records the bus client that created a session, so that the
 // session can be ended if the client disappears without ending it.
 func (s *Interface) trackSession(sender dbus.Sender, sessionID string) {

@@ -67,11 +67,11 @@ func TestGetAuthenticationModes(t *testing.T) {
 	id, _, dbusErr := iface.NewSession(testSender, "user@example.com", "lang", sessionmode.Login, "")
 	require.Nil(t, dbusErr, "NewSession should not return a D-Bus error")
 
-	modes, dbusErr := iface.GetAuthenticationModes(id, supportedUILayouts)
+	modes, dbusErr := iface.GetAuthenticationModes(testSender, id, supportedUILayouts)
 	require.Nil(t, dbusErr, "GetAuthenticationModes should not return a D-Bus error")
 	require.NotEmpty(t, modes, "GetAuthenticationModes should return modes")
 
-	_, dbusErr = iface.GetAuthenticationModes("invalid-session", supportedUILayouts)
+	_, dbusErr = iface.GetAuthenticationModes(testSender, "invalid-session", supportedUILayouts)
 	require.NotNil(t, dbusErr, "GetAuthenticationModes with an invalid session should return a D-Bus error")
 }
 
@@ -83,13 +83,13 @@ func TestSelectAuthenticationMode(t *testing.T) {
 	id, _, dbusErr := iface.NewSession(testSender, "user@example.com", "lang", sessionmode.Login, "")
 	require.Nil(t, dbusErr, "NewSession should not return a D-Bus error")
 
-	modes, dbusErr := iface.GetAuthenticationModes(id, supportedUILayouts)
+	modes, dbusErr := iface.GetAuthenticationModes(testSender, id, supportedUILayouts)
 	require.Nil(t, dbusErr, "GetAuthenticationModes should not return a D-Bus error")
 
-	_, dbusErr = iface.SelectAuthenticationMode(id, modes[0]["id"])
+	_, dbusErr = iface.SelectAuthenticationMode(testSender, id, modes[0]["id"])
 	require.Nil(t, dbusErr, "SelectAuthenticationMode should not return a D-Bus error")
 
-	_, dbusErr = iface.SelectAuthenticationMode(id, "invalid-mode")
+	_, dbusErr = iface.SelectAuthenticationMode(testSender, id, "invalid-mode")
 	require.NotNil(t, dbusErr, "SelectAuthenticationMode with an invalid mode should return a D-Bus error")
 }
 
@@ -98,7 +98,7 @@ func TestIsAuthenticated(t *testing.T) {
 
 	iface := newInterfaceForTests(t)
 
-	_, _, dbusErr := iface.IsAuthenticated("invalid-session", "{}")
+	_, _, dbusErr := iface.IsAuthenticated(testSender, "invalid-session", "{}")
 	require.NotNil(t, dbusErr, "IsAuthenticated with an invalid session should return a D-Bus error")
 }
 
@@ -110,8 +110,8 @@ func TestEndSession(t *testing.T) {
 	id, _, dbusErr := iface.NewSession(testSender, "user@example.com", "lang", sessionmode.Login, "")
 	require.Nil(t, dbusErr, "NewSession should not return a D-Bus error")
 
-	require.Nil(t, iface.EndSession(id), "EndSession should not return a D-Bus error")
-	require.NotNil(t, iface.EndSession("invalid-session"), "EndSession with an invalid session should return a D-Bus error")
+	require.Nil(t, iface.EndSession(testSender, id), "EndSession should not return a D-Bus error")
+	require.NotNil(t, iface.EndSession(testSender, "invalid-session"), "EndSession with an invalid session should return a D-Bus error")
 }
 
 func TestCancelIsAuthenticated(t *testing.T) {
@@ -122,7 +122,66 @@ func TestCancelIsAuthenticated(t *testing.T) {
 	id, _, dbusErr := iface.NewSession(testSender, "user@example.com", "lang", sessionmode.Login, "")
 	require.Nil(t, dbusErr, "NewSession should not return a D-Bus error")
 
-	require.Nil(t, iface.CancelIsAuthenticated(id), "CancelIsAuthenticated should not return a D-Bus error")
+	require.Nil(t, iface.CancelIsAuthenticated(testSender, id), "CancelIsAuthenticated should not return a D-Bus error")
+}
+
+func TestSessionMethodsAreOnlyAllowedToTheCreator(t *testing.T) {
+	iface := newInterfaceForTests(t)
+
+	id, _, dbusErr := iface.NewSession(testSender, "user@example.com", "lang", sessionmode.Login, "")
+	require.Nil(t, dbusErr, "NewSession should not return a D-Bus error")
+
+	otherSender := dbus.Sender(":1.2000")
+	tests := []struct {
+		name string
+		call func() *dbus.Error
+	}{
+		{
+			name: "GetAuthenticationModes",
+			call: func() *dbus.Error {
+				_, dbusErr := iface.GetAuthenticationModes(otherSender, id, supportedUILayouts)
+				return dbusErr
+			},
+		},
+		{
+			name: "SelectAuthenticationMode",
+			call: func() *dbus.Error {
+				_, dbusErr := iface.SelectAuthenticationMode(otherSender, id, "mode")
+				return dbusErr
+			},
+		},
+		{
+			name: "IsAuthenticated",
+			call: func() *dbus.Error {
+				_, _, dbusErr := iface.IsAuthenticated(otherSender, id, "{}")
+				return dbusErr
+			},
+		},
+		{
+			name: "EndSession",
+			call: func() *dbus.Error {
+				return iface.EndSession(otherSender, id)
+			},
+		},
+		{
+			name: "CancelIsAuthenticated",
+			call: func() *dbus.Error {
+				return iface.CancelIsAuthenticated(otherSender, id)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dbusErr := tc.call()
+			require.NotNil(t, dbusErr, "A client must not use a session it did not create")
+			require.Equal(t, "org.freedesktop.DBus.Error.AccessDenied", dbusErr.Name)
+		})
+	}
+
+	modes, dbusErr := iface.GetAuthenticationModes(testSender, id, supportedUILayouts)
+	require.Nil(t, dbusErr, "The creator should still be able to use its session")
+	require.NotEmpty(t, modes, "The creator should still get the authentication modes")
 }
 
 func TestUserPreCheck(t *testing.T) {
