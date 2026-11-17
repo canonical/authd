@@ -343,6 +343,15 @@ func newBroker(cfg Config, apiVersion uint, p providers.Provider, args ...Option
 	if cfg.clientID == "" {
 		err = errors.Join(err, errors.New("client ID is required and was not provided"))
 	}
+	unixAttributesConfigured := cfg.unixUIDAttribute != "" || cfg.unixGIDAttribute != ""
+	if unixAttributesConfigured {
+		if _, ok := providers.ProviderAs[info.UnixAttributeEnricher](opts.provider); !ok {
+			err = errors.Join(err, errors.New("invalid configuration: Unix attribute configuration requires a provider that supports Unix attribute enrichment"))
+		}
+		if _, ok := providers.ProviderAs[providers.GroupFetcher](opts.provider); !ok {
+			err = errors.Join(err, errors.New("invalid configuration: Unix attribute configuration requires a provider that supports group fetching"))
+		}
+	}
 	// The entra_auth flow can only retrieve groups from Microsoft Graph when
 	// device registration or a client secret is available (see the matching check
 	// in authModeIsAvailable). If neither is configured, the flow is unusable, so
