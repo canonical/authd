@@ -2161,6 +2161,52 @@ func TestGdmModel(t *testing.T) {
 				msg:    "invalid json data from provider: invalid character 'i' looking for beginning of value",
 			},
 		},
+		"Error_on_authentication_client_denied_with_required_GID_error_message": {
+			clientOptions: append(slices.Clone(singleBrokerClientOptions),
+				pam_test.WithIsAuthenticatedReturn(&authd.IAResponse{
+					Access: auth.Denied,
+					Msg:    `{"message":"Authentication failure: required Unix GID for one or more of your groups not provided."}`,
+				}, nil),
+			),
+			pamUser: "pam-preset-user-for-client-selected-brokers-with-wrong-pass",
+			messages: []tea.Msg{
+				gdmTestWaitForStage{
+					stage: proto.Stage_brokerSelection,
+					events: []*gdm.EventData{
+						gdm_test.SelectBrokerEvent(firstBrokerInfo.Id),
+					},
+				},
+				gdmTestWaitForStage{
+					stage: proto.Stage_authModeSelection,
+					commands: []tea.Cmd{
+						sendEvent(gdmTestSendAuthDataWhenReady{&authd.IARequest_AuthenticationData_Secret{
+							Secret: "gdm-wrong-password",
+						}}),
+					},
+				},
+			},
+			wantSelectedBroker: firstBrokerInfo.Id,
+			wantGdmRequests: []gdm.RequestType{
+				gdm.RequestType_uiLayoutCapabilities,
+				gdm.RequestType_changeStage, // -> broker Selection
+				gdm.RequestType_changeStage, // -> authMode Selection
+				gdm.RequestType_changeStage, // -> password
+			},
+			wantGdmEvents: []gdm.EventType{
+				gdm.EventType_userSelected,
+				gdm.EventType_brokersReceived,
+				gdm.EventType_brokerSelected,
+				gdm.EventType_authModesReceived,
+				gdm.EventType_authModeSelected,
+				gdm.EventType_uiLayoutReceived,
+			},
+			wantNoGdmEvents: []gdm.EventType{gdm.EventType_authEvent},
+			wantStage:       gdmTestIgnoreStage,
+			wantPAMReturnValue: pamError{
+				status: pam.ErrAuth,
+				msg:    "Authentication failure: required Unix GID for one or more of your groups not provided.",
+			},
+		},
 		"Error_on_authentication_client_denied_because_of_wrong_password_-_with_error_message": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
 				pam_test.WithIsAuthenticatedWantSecret("gdm-good-password"),

@@ -1049,7 +1049,7 @@ func TestNativeChangeAuthTok(t *testing.T) {
 			expectedUser: testUserNameFull(t, examplebroker.UserIntegrationAuthModesPrefix, "password,mandatoryreset-integration-polkit"),
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
-				c.WaitFor(t, `Gimme your password`)
+				nativeWaitForPasswordPrompt(t, c, `Gimme your password`)
 				c.SendLine(t, "goodpass")
 				nativeChangePassword(t, c, "authd2404", "authd2404")
 				nativeWaitForChangeAuthTokResult(t, c)
@@ -1369,6 +1369,20 @@ func nativeWaitForLoginPasswordPrompt(t *testing.T, c *ptytest.Console, password
 		sendEchoedLine(t, c, "2")
 		c.WaitFor(t, passwordPrompt)
 	}
+	nativeWaitForPasswordInput(t, c)
+}
+
+func nativeWaitForPasswordPrompt(t *testing.T, c *ptytest.Console, passwordPrompt string) {
+	t.Helper()
+
+	c.WaitFor(t, passwordPrompt)
+	nativeWaitForPasswordInput(t, c)
+}
+
+func nativeWaitForPasswordInput(t *testing.T, c *ptytest.Console) {
+	t.Helper()
+
+	c.WaitFor(t, regexp.QuoteMeta("> "))
 }
 
 // nativeWaitForResult waits for the PAM runner Authenticate result line.
