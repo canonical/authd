@@ -264,6 +264,10 @@ force_access_check_with_provider = true
 This check works by forcing a token refresh during login, which fails if the
 user does not have the necessary permissions in the identity provider.
 
+For Microsoft Entra ID, see [Configure stable Unix IDs from Entra ID](configure-entra-unix-ids)
+for details on how this setting affects fallback to cached Unix IDs and group
+data.
+
 ```{warning}
 In some cases, forcing the access check may prevent login, such as when there are network issues.
 ```
@@ -407,6 +411,12 @@ Group membership can be used to manage user privileges, including **sudo** and
 **docker** rights.
 
 > See the [group management reference](reference::group-management) for more details.
+
+For Microsoft Entra ID, stable UID and remote group GID values can be read from
+directory extension properties and applied explicitly after login. See
+[Configure stable Unix IDs from Entra ID](configure-entra-unix-ids) for the
+extension-property workflow, cache layout, required-value policy, and
+provisioning script.
 
 In addition, you can configure extra groups for authd users.
 On login, the users are added to these groups automatically.
