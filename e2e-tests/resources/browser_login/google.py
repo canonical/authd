@@ -217,7 +217,7 @@ class GoogleLoginFlow:
         self._browser.capture_snapshot(
             self._screenshot_dir, "device-login-enter-password"
         )
-        self._browser.send_text(self._password)
+        self._browser.send_text(self._password, secret=True)
         self._browser.send_key_taps([Gdk.KEY_Return])
 
     def _handle_totp_page(self) -> None:
@@ -225,7 +225,7 @@ class GoogleLoginFlow:
             self._screenshot_dir, "device-login-enter-totp-code"
         )
         self._last_totp_code = generate_totp(self._totp_secret)
-        self._browser.send_text(self._last_totp_code)
+        self._browser.send_text(self._last_totp_code, secret=True)
         self._browser.send_key_taps([Gdk.KEY_Return])
 
     def _handle_choose_account_page(self) -> None:
@@ -273,16 +273,20 @@ class GoogleLoginFlow:
         self._browser.capture_snapshot(
             self._screenshot_dir, "device-login-wrong-password"
         )
-        self._clear_input_field(self._password)
+        self._clear_input_field(self._password, silent=True)
 
-    def _clear_input_field(self, field_value: str) -> None:
+    def _clear_input_field(self, field_value: str, silent: bool = False) -> None:
         """Delete all text from the focused input field.
 
         Sends twice as many BackSpace events as the length of field_value to
         account for text that may have accumulated from multiple typing attempts.
         Extra BackSpaces beyond the actual content are harmless.
+
+        When silent is true, the key presses are not logged.
         """
-        self._browser.send_key_taps(2 * len(field_value) * [Gdk.KEY_BackSpace])
+        self._browser.send_key_taps(
+            2 * len(field_value) * [Gdk.KEY_BackSpace], silent=silent
+        )
 
 
 def login(
