@@ -14,7 +14,7 @@ from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
-from update_dependencies import runtime_requirements, update_dependencies
+from update_dependencies import lock_changes, runtime_requirements, update_dependencies
 
 
 class UpdateDependenciesTest(unittest.TestCase):
@@ -332,6 +332,60 @@ class UpdateDependenciesTest(unittest.TestCase):
 
         self.assertEqual((self.project / "uv.lock").read_bytes(), before)
         self.assertEqual(set(self.project.iterdir()), entries_before)
+
+
+class LockChangesTest(unittest.TestCase):
+    def test_reports_version_updates_additions_and_removals(self):
+        def lock(path: Path, entries: Sequence[tuple[str, str]]) -> Path:
+            path.write_text(
+                "version = 1\n\n"
+                + "\n".join(
+                    f'[[package]]\nname = "{name}"\nversion = "{version}"\n'
+                    for name, version in entries
+                )
+            )
+            return path
+
+        with tempfile.TemporaryDirectory() as directory:
+            previous = lock(
+                Path(directory) / "previous.lock",
+                [
+                    ("dropped", "1.0"),
+                    ("kept", "2.0"),
+                    ("moved", "1.0"),
+                    ("multi", "1.0"),
+                    ("multi", "2.0"),
+                ],
+            )
+            current = lock(
+                Path(directory) / "current.lock",
+                [
+                    ("added", "3.0"),
+                    ("kept", "2.0"),
+                    ("moved", "1.1"),
+                    ("multi", "1.0"),
+                    ("multi", "3.0"),
+                ],
+            )
+            self.assertEqual(
+                lock_changes(previous, current),
+                [
+                    "- `added`: not locked -> 3.0",
+                    "- `dropped`: 1.0 -> not locked",
+                    "- `moved`: 1.0 -> 1.1",
+                    "- `multi`: 1.0, 2.0 -> 1.0, 3.0",
+                ],
+            )
+
+    def test_rejects_a_lock_the_parser_cannot_read(self):
+        with tempfile.TemporaryDirectory() as directory:
+            previous = Path(directory) / "previous.lock"
+            current = Path(directory) / "current.lock"
+            previous.write_text('[[package]]\nname = "kept"\nversion = "1.0"\n')
+            # A reordered table would be skipped instead of reported as changed.
+            current.write_text('[[package]]\nversion = "1.0"\nname = "moved"\n')
+            with self.assertRaisesRegex(ValueError, "package entries"):
+                lock_changes(previous, current)
 
 
 if __name__ == "__main__":

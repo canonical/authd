@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
-"""Refresh, upgrade, or check the E2E lock against YARF's locked runtime dependencies."""
+"""Refresh, upgrade, check, or summarize the E2E lock under YARF's runtime pins."""
 
 import argparse
 import difflib
 import json
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+# uv writes each package as a name/version pair straight after its table header.
+PACKAGE_ENTRY = re.compile(
+    r'^\[\[package\]\]\nname = "([^"]+)"\nversion = "([^"]+)"', re.MULTILINE
+)
 
 
 def runtime_requirements(project: Path, yarf_manifest: Path) -> list[str]:
@@ -67,6 +73,30 @@ def locked_python_range(project: Path) -> str:
         if line.startswith("requires-python = "):
             return json.loads(line.removeprefix("requires-python = "))
     raise ValueError(f"{project / 'uv.lock'} has no requires-python header")
+
+
+def lock_changes(previous: Path, current: Path) -> list[str]:
+    """Return one Markdown bullet per package whose versions differ in two locks."""
+
+    def locked(lock: Path) -> dict[str, list[str]]:
+        text = lock.read_text()
+        entries = PACKAGE_ENTRY.findall(text)
+        if len(entries) != text.count("[[package]]"):
+            raise ValueError(f"{lock} has package entries this parser cannot read")
+        versions: dict[str, list[str]] = {}
+        for name, version in entries:
+            versions.setdefault(name, []).append(version)
+        return versions
+
+    def described(versions: list[str] | None) -> str:
+        return ", ".join(versions) if versions else "not locked"
+
+    before, after = locked(previous), locked(current)
+    return [
+        f"- `{name}`: {described(before.get(name))} -> {described(after.get(name))}"
+        for name in sorted(before.keys() | after.keys())
+        if before.get(name) != after.get(name)
+    ]
 
 
 def check_runtime(project: Path, expected: list[str], expected_python: str) -> bool:
@@ -156,8 +186,17 @@ def main() -> int:
         action="store_true",
         help="Upgrade E2E dependencies while keeping YARF's runtime pins",
     )
+    mode.add_argument(
+        "--summary",
+        metavar="PREVIOUS_LOCK",
+        help="List the uv.lock changes since PREVIOUS_LOCK",
+    )
     args = parser.parse_args()
     try:
+        if args.summary:
+            lock = Path(__file__).parent / "uv.lock"
+            print("\n".join(lock_changes(Path(args.summary), lock)) or "- none")
+            return 0
         return (
             0
             if update_dependencies(
