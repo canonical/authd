@@ -102,7 +102,7 @@ func (c *Console) RequireSuccessfulExit(t *testing.T) {
 	c.RequireExitCode(t, 0)
 }
 
-// RequireExitCode waits for command exit and requires the expected non-zero exit code.
+// RequireExitCode waits for command exit and checks the expected exit code.
 func (c *Console) RequireExitCode(t *testing.T, expectedExitCode int) {
 	t.Helper()
 
@@ -659,17 +659,21 @@ func (c *Console) SendKey(t *testing.T, key byte) {
 	require.NoError(t, err, "ptytest: SendKey failed")
 }
 
-// WaitFor blocks until the accumulated terminal output (from the current scan
-// position) matches the given regexp pattern, or the default timeout expires.
-// On timeout, the test is failed with diagnostic output.
-// Returns the matched output.
+// WaitFor calls [Console.WaitForTimeout] with the default timeout.
 func (c *Console) WaitFor(t *testing.T, pattern string) string {
 	t.Helper()
 
 	return c.WaitForTimeout(t, pattern, c.opts.timeout)
 }
 
-// WaitForTimeout is like WaitFor but with an explicit timeout.
+// WaitForTimeout waits for a regular expression match in the terminal output
+// from the current scan position. It returns the ANSI-stripped text through
+// the match and advances the scan position. On timeout, it fails the test
+// with diagnostics.
+//
+// If it detects command exit before finding a match, it drains the PTY and
+// checks again. A descendant that keeps the PTY open can make the drain
+// outlast the timeout.
 func (c *Console) WaitForTimeout(t *testing.T, pattern string, timeout time.Duration) string {
 	t.Helper()
 
