@@ -5,9 +5,18 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from time import monotonic
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlencode, urlsplit
 
-from collect_ci_failures import COMPLETION_STEP, collect, pages
+from collect_ci_failures import (
+    COMPLETION_STEP,
+    api,
+    branch_runs,
+    collect,
+    main,
+    timestamp,
+)
 
 
 def run(run_id=1, **overrides):
@@ -35,6 +44,15 @@ CURRENT = run(
     workflow_id=20,
     event="schedule",
     run_started_at="2026-10-21T03:00:00Z",
+)
+REPOSITORY = {"default_branch": "main", "created_at": "2023-06-19T08:26:41Z"}
+RUNS_QUERY = urlencode(
+    {
+        "branch": "main",
+        "created": f"{REPOSITORY['created_at']}..{CURRENT['run_started_at']}",
+        "per_page": 100,
+        "page": 1,
+    }
 )
 
 
@@ -623,17 +641,118 @@ class CollectTests(unittest.TestCase):
         self.assertEqual([item["key"] for item in result["failures"]], ["2:1"])
 
     @patch("collect_ci_failures.api")
-    def test_pagination_is_not_limited_to_first_page(self, api):
-        api.side_effect = [
-            {"workflow_runs": list(range(100))},
-            {"workflow_runs": [100]},
+    def test_branch_scan_splits_capped_ranges_and_keeps_every_run(self, api):
+        start = "2025-01-01T00:00:00Z"
+        before_split = "2025-01-01T00:00:01Z"
+        after_split = "2025-01-01T00:00:02Z"
+        end = "2025-01-01T00:00:03Z"
+        runs = [
+            {"id": i, "created_at": before_split if i < 500 else after_split}
+            for i in range(1001)
         ]
-        self.assertEqual(
-            list(pages("repos/o/r/actions/runs", "workflow_runs")), list(range(101))
+
+        def fetch(endpoint, *, deadline):
+            query = parse_qs(urlsplit(endpoint).query)
+            self.assertEqual(query["branch"], ["release/26.04"])
+            first, last = query["created"][0].split("..")
+            matches = [run for run in runs if first <= run["created_at"] <= last][:1000]
+            size = int(query["per_page"][0])
+            offset = (int(query["page"][0]) - 1) * size
+            return {
+                "total_count": len(matches),
+                "workflow_runs": matches[offset : offset + size],
+            }
+
+        api.side_effect = fetch
+        listed = branch_runs(
+            "repos/o/r/actions/runs",
+            "release/26.04",
+            timestamp(start),
+            timestamp(end),
+            deadline=monotonic() + 30,
         )
-        self.assertEqual(
-            api.call_args.args[0], "repos/o/r/actions/runs?per_page=100&page=2"
-        )
+        self.assertEqual(list(listed), runs)
+
+    def test_metadata_request_retries_only_one_bad_gateway_within_deadline(self):
+        endpoint = f"repos/canonical/authd/actions/runs?{RUNS_QUERY}"
+        page = {"total_count": 1, "workflow_runs": [run(42)]}
+        for status, expires, recovers, requests in (
+            (502, False, True, 2),
+            (502, False, False, 2),
+            (502, True, False, 1),
+            (403, False, False, 1),
+        ):
+            with self.subTest(status=status, expires=expires, recovers=recovers):
+                error = subprocess.CalledProcessError(
+                    1, ["gh", "api", endpoint], stderr=f"gh: HTTP {status}".encode()
+                )
+                replies = iter(
+                    (error, json.dumps(page).encode() if recovers else error)
+                )
+                now = 0
+
+                def fetch(*args, **kwargs):
+                    nonlocal now
+                    now = 30 if expires else 29
+                    reply = next(replies)
+                    if reply is error:
+                        raise error
+                    return reply
+
+                with (
+                    patch("collect_ci_failures.monotonic", side_effect=lambda: now),
+                    patch(
+                        "collect_ci_failures.subprocess.check_output", side_effect=fetch
+                    ) as request,
+                ):
+                    if recovers:
+                        self.assertEqual(api(endpoint, deadline=30), page)
+                    else:
+                        with self.assertRaises(subprocess.CalledProcessError) as raised:
+                            api(endpoint, deadline=30)
+                        self.assertIs(raised.exception, error)
+                    self.assertEqual(request.call_count, requests)
+                    if requests == 2:
+                        self.assertEqual(request.call_args.kwargs["timeout"], 1)
+
+    def test_scan_deadline_prevents_publishing_a_partial_manifest(self):
+        repo = "canonical/authd"
+        base = f"repos/{repo}/actions/runs"
+        attempt = f"{base}/42/attempts/1"
+        jobs = f"{attempt}/jobs?per_page=100&page=1"
+        responses = {
+            f"{base}/100/attempts/1": CURRENT,
+            f"repos/{repo}": REPOSITORY,
+            f"{base}?{RUNS_QUERY}": {"total_count": 1, "workflow_runs": [run(42)]},
+            attempt: run(42),
+            jobs: {"jobs": []},
+        }
+        now = 0
+
+        def request(command, *, timeout, **kwargs):
+            nonlocal now
+            endpoint = command[-1]
+            if endpoint == attempt:
+                now = 12 * 60 - 1
+            if endpoint == jobs and timeout < 2:
+                raise subprocess.TimeoutExpired(command, timeout)
+            return json.dumps(responses[endpoint])
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.dict(
+                os.environ,
+                GITHUB_REPOSITORY=repo,
+                GITHUB_RUN_ID="100",
+                GITHUB_RUN_ATTEMPT="1",
+            ),
+            patch("collect_ci_failures.monotonic", side_effect=lambda: now),
+            patch("collect_ci_failures.subprocess.check_output", side_effect=request),
+        ):
+            output = Path(directory)
+            with self.assertRaises(subprocess.TimeoutExpired):
+                main(output)
+            self.assertFalse((output / "failures.json").exists())
 
 
 if __name__ == "__main__":

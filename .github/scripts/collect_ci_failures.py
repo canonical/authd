@@ -3,30 +3,70 @@
 
 import json
 import os
+import re
 import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
+from time import monotonic
+from urllib.parse import urlencode
 
 FAILURES = {"failure", "timed_out", "action_required", "startup_failure", "stale"}
 COMPLETION_STEP = "Require complete triage before advancing the checkpoint"
+SCAN_SECONDS = 12 * 60
+REQUEST_SECONDS = 60
+PAGE_SIZE = 100
+FILTERED_RUN_LIMIT = 1000
 
 
 def timestamp(value):
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
-def api(endpoint):
-    return json.loads(subprocess.check_output(["gh", "api", endpoint], text=True))
+def api(endpoint, *, deadline):
+    command = ["gh", "api", endpoint]
+    for retry in (False, True):
+        try:
+            return json.loads(
+                subprocess.check_output(
+                    command, stderr=subprocess.PIPE, timeout=request_timeout(deadline)
+                )
+            )
+        except subprocess.CalledProcessError as error:
+            if retry or command_error(error) != "HTTP 502" or monotonic() >= deadline:
+                raise
 
 
-def pages(endpoint, key):
+def pages(endpoint, key, *, deadline, first_page=None):
+    separator = "&" if "?" in endpoint else "?"
+    response = first_page
     page = 1
     while True:
-        items = api(f"{endpoint}?per_page=100&page={page}")[key]
+        if response is None:
+            request = f"{endpoint}{separator}per_page={PAGE_SIZE}&page={page}"
+            response = api(request, deadline=deadline)
+        items = response[key]
         yield from items
-        if len(items) < 100:
+        if len(items) < PAGE_SIZE:
             return
         page += 1
+        response = None
+
+
+def branch_runs(endpoint, branch, start, end, *, deadline):
+    created = f"{start:%Y-%m-%dT%H:%M:%SZ}..{end:%Y-%m-%dT%H:%M:%SZ}"
+    query = f"{endpoint}?{urlencode({'branch': branch, 'created': created})}"
+    first = api(f"{query}&per_page={PAGE_SIZE}&page=1", deadline=deadline)
+    if first["total_count"] < FILTERED_RUN_LIMIT:
+        yield from pages(query, "workflow_runs", deadline=deadline, first_page=first)
+        return
+
+    if start == end:
+        raise ValueError("One second of workflow history reaches the GitHub search cap")
+    middle = start + timedelta(seconds=int((end - start).total_seconds()) // 2)
+    yield from branch_runs(endpoint, branch, start, middle, deadline=deadline)
+    yield from branch_runs(
+        endpoint, branch, middle + timedelta(seconds=1), end, deadline=deadline
+    )
 
 
 def collect(runs, current, branch, get_attempt, get_jobs):
@@ -133,31 +173,61 @@ def collect(runs, current, branch, get_attempt, get_jobs):
     }
 
 
-def main():
+def request_timeout(deadline):
+    remaining = deadline - monotonic()
+    if remaining <= 0:
+        raise TimeoutError("CI collection deadline reached")
+    return min(remaining, REQUEST_SECONDS)
+
+
+def command_error(error):
+    status = re.search(rb"HTTP [1-5][0-9]{2}", error.stderr or b"")
+    return status.group().decode() if status else f"exit {error.returncode}"
+
+
+def main(output):
+    scan_deadline = monotonic() + SCAN_SECONDS
     repo = os.environ["GITHUB_REPOSITORY"]
     base = f"repos/{repo}/actions"
     current = api(
         f"{base}/runs/{os.environ['GITHUB_RUN_ID']}"
-        f"/attempts/{os.environ['GITHUB_RUN_ATTEMPT']}"
+        f"/attempts/{os.environ['GITHUB_RUN_ATTEMPT']}",
+        deadline=scan_deadline,
     )
-    branch = api(f"repos/{repo}")["default_branch"]
+    repository = api(f"repos/{repo}", deadline=scan_deadline)
+    branch = repository["default_branch"]
     if current["head_branch"] != branch:
         raise ValueError("CI triage must run on the default branch")
-    # Creation-date filters miss reruns of old runs. Unfiltered pagination also
-    # avoids the REST API's 1,000-result limit for filtered run searches.
-    runs = {run["id"]: run for run in pages(f"{base}/runs", "workflow_runs")}
+    # Scan all dates so a recent rerun of an old run is still found.
+    runs = {
+        run["id"]: run
+        for run in branch_runs(
+            f"{base}/runs",
+            branch,
+            timestamp(repository["created_at"]),
+            timestamp(current["run_started_at"]),
+            deadline=scan_deadline,
+        )
+    }
     manifest = collect(
         runs.values(),
         current,
         branch,
-        lambda run_id, attempt: api(f"{base}/runs/{run_id}/attempts/{attempt}"),
+        lambda run_id, attempt: api(
+            f"{base}/runs/{run_id}/attempts/{attempt}", deadline=scan_deadline
+        ),
         lambda run_id, attempt: pages(
-            f"{base}/runs/{run_id}/attempts/{attempt}/jobs", "jobs"
+            f"{base}/runs/{run_id}/attempts/{attempt}/jobs",
+            "jobs",
+            deadline=scan_deadline,
         ),
     )
-    output = Path("/tmp/gh-aw/ci-triage")
+    request_timeout(scan_deadline)
     output.mkdir(parents=True, exist_ok=True)
-    (output / "failures.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    path = output / "failures.json"
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(manifest, indent=2) + "\n")
+    temporary.replace(path)
     print(
         f"Found {len(manifest['failures'])} failed attempts "
         f"from {manifest['since']} to {manifest['until']}"
@@ -165,4 +235,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main(Path("/tmp/gh-aw/ci-triage"))
+    except subprocess.CalledProcessError as error:
+        raise SystemExit(
+            f"Could not collect CI failures: {error.cmd[-1]} ({command_error(error)})"
+        ) from None

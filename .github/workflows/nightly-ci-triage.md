@@ -152,6 +152,9 @@ post-steps:
       path: /tmp/gh-aw/ci-triage/*.json
       if-no-files-found: ignore
 jobs:
+  agent:
+    # Leave room for collection and post-steps around the 50-minute agent step.
+    timeout-minutes: 75
   verify_triage_writes:
     needs: [agent, safe_outputs]
     if: always() && github.repository == 'canonical/authd'
@@ -191,9 +194,9 @@ dropping untriaged failures. It includes completed attempts by completion
 time, including reruns of old runs and failed jobs in otherwise successful
 workflows. Do not narrow this window or skip entries.
 
-The agent has 50 minutes within the 60-minute job limit, leaving time for
-setup, completion checks, and artifact uploads. The `ci-triage-manifests`
-artifact retains `failures.json` and any `completed.json`, even on failure.
+The collector fails rather than handing off an incomplete failure list.
+The `ci-triage-manifests` artifact retains `failures.json` and any
+`completed.json` for debugging.
 After safe-output processing, a final job requires successful processing with
 no deferred, skipped, failed, or cancelled items. Missing results also fail
 the run, leaving the window for retry even if the completion file is present.
