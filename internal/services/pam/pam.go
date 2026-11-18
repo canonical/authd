@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/canonical/authd/internal/brokers/layouts"
 	"github.com/canonical/authd/internal/decorate"
 	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/internal/services/permissions"
 	"github.com/canonical/authd/internal/users"
 	"github.com/canonical/authd/internal/users/types"
 	"github.com/canonical/authd/log"
@@ -186,23 +188,25 @@ func (t *authFailTracker) recordSuccess(serviceName, username string) {
 
 // Service is the implementation of the PAM module service.
 type Service struct {
-	userManager    *users.Manager
-	brokerManager  *brokers.Manager
-	failedAuths    *authFailTracker
-	authFailConfig Config
+	userManager       *users.Manager
+	brokerManager     *brokers.Manager
+	permissionManager *permissions.Manager
+	failedAuths       *authFailTracker
+	authFailConfig    Config
 
 	authd.UnimplementedPAMServer
 }
 
 // NewService returns a new PAM GRPC service.
-func NewService(ctx context.Context, userManager *users.Manager, brokerManager *brokers.Manager, cfg Config) Service {
+func NewService(ctx context.Context, userManager *users.Manager, brokerManager *brokers.Manager, permissionManager *permissions.Manager, cfg Config) Service {
 	log.Debug(ctx, "Building new gRPC PAM service")
 
 	return Service{
-		userManager:    userManager,
-		brokerManager:  brokerManager,
-		failedAuths:    newAuthFailTracker(),
-		authFailConfig: cfg,
+		userManager:       userManager,
+		brokerManager:     brokerManager,
+		permissionManager: permissionManager,
+		failedAuths:       newAuthFailTracker(),
+		authFailConfig:    cfg,
 	}
 }
 
@@ -226,6 +230,10 @@ func (s Service) AvailableBrokers(ctx context.Context, _ *authd.Empty) (*authd.A
 func (s Service) GetBroker(ctx context.Context, req *authd.GBRequest) (*authd.GBResponse, error) {
 	// authd usernames are lowercase
 	username := strings.ToLower(req.GetUsername())
+
+	if err := s.checkUserAccess(ctx, username); err != nil {
+		return nil, err
+	}
 
 	// Use in memory cache first
 	if b := s.brokerManager.BrokerForUser(username); b != nil {
@@ -297,6 +305,9 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 	if username == "" {
 		log.Errorf(ctx, "SelectBroker: No user name provided")
 		return nil, status.Error(codes.InvalidArgument, "no user name provided")
+	}
+	if err := s.checkUserAccess(ctx, username); err != nil {
+		return nil, err
 	}
 	if brokerID == "" {
 		log.Errorf(ctx, "SelectBroker: No broker selected")
@@ -566,6 +577,53 @@ func (s Service) EndSession(ctx context.Context, req *authd.ESRequest) (empty *a
 	}
 
 	return &authd.Empty{}, s.brokerManager.EndSession(sessionID)
+}
+
+// checkUserAccess ensures that the request comes from root or from the user it is about.
+// The reply is the same whether or not the user exists.
+func (s Service) checkUserAccess(ctx context.Context, username string) error {
+	if err := s.permissionManager.CheckRequestIsFromRootOrUser(ctx, func() (uint32, error) {
+		return s.userUID(username)
+	}); err != nil {
+		log.Warningf(ctx, "Refusing request about user %q: %v", username, err)
+		return status.Error(codes.PermissionDenied, err.Error())
+	}
+
+	return nil
+}
+
+// userUID returns the UID of the user that a request about username acts on.
+// This is the one of the authd user, as its record provides the broker of the
+// user, or the one of the user that NSS provides if authd does not manage it.
+func (s Service) userUID(username string) (uint32, error) {
+	if username == "" {
+		return 0, errors.New("no user name provided")
+	}
+
+	u, err := s.userManager.UserByName(username)
+	if err == nil {
+		return checkUserUID(u.UID)
+	}
+	if !errors.Is(err, users.NoDataFoundError{}) {
+		return 0, err
+	}
+
+	nssUser, err := user.Lookup(username)
+	if err != nil {
+		return 0, err
+	}
+	uid, err := strconv.ParseUint(nssUser.Uid, 10, 32)
+	if err != nil {
+		return 0, err
+	}
+	return checkUserUID(uint32(uid))
+}
+
+func checkUserUID(uid uint32) (uint32, error) {
+	if uid == 0 {
+		return 0, errors.New("users cannot be root")
+	}
+	return uid, nil
 }
 
 func uiLayoutToMap(layout *authd.UILayout) (mapLayout map[string]string, err error) {
