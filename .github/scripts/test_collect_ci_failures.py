@@ -1,19 +1,24 @@
 import json
 import os
+import stat
 import subprocess
 import tempfile
 import textwrap
 import unittest
+from io import BytesIO
 from pathlib import Path
 from time import monotonic
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlencode, urlsplit
+from zipfile import ZIP_BZIP2, ZipFile, ZipInfo
 
 from collect_ci_failures import (
     COMPLETION_STEP,
     api,
     branch_runs,
     collect,
+    collect_evidence,
+    command_error,
     main,
     timestamp,
 )
@@ -181,9 +186,53 @@ class CollectTests(unittest.TestCase):
                     [item["key"] for item in result["failures"]], expected_failures
                 )
 
-    def test_lock_contains_completion_step(self):
-        lock = Path(__file__).parents[1] / "workflows/nightly-ci-triage.lock.yml"
-        self.assertIn(f"      - name: {COMPLETION_STEP}\n", lock.read_text())
+    def test_completion_requires_the_collector_manifest(self):
+        lock = (
+            Path(__file__).parents[1] / "workflows/nightly-ci-triage.lock.yml"
+        ).read_text()
+        manifest = b'{"failures": [{"key": "42:1"}]}'
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def run_step(name, **env):
+                step = lock.split(f"name: {name}\n", 1)[1]
+                script = json.loads(step.split("        run: ", 1)[1].splitlines()[0])
+                return subprocess.run(
+                    [
+                        "bash",
+                        "-euo",
+                        "pipefail",
+                        "-c",
+                        script.replace("/tmp/gh-aw/ci-triage", directory),
+                    ],
+                    env={**os.environ, **env},
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+
+            step_output = root / "step-output"
+            (root / "failures.json").write_bytes(manifest)
+            result = run_step(
+                "Record CI failure manifest digest", GITHUB_OUTPUT=str(step_output)
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            digest = step_output.read_text().removeprefix("manifest_sha256=").strip()
+            completed = {"42:1": "Already tracked"}
+            cases = (
+                ("complete", manifest, completed, digest, True),
+                ("missing digest", manifest, completed, "", False),
+                ("changed manifest", b'{"failures": []}', {}, digest, False),
+                ("incomplete", manifest, {}, digest, False),
+            )
+            for label, contents, summaries, expected, success in cases:
+                with self.subTest(label=label):
+                    (root / "failures.json").write_bytes(contents)
+                    (root / "completed.json").write_text(json.dumps(summaries))
+                    result = run_step(
+                        COMPLETION_STEP, EXPECTED_MANIFEST_SHA256=expected
+                    )
+                    self.assertEqual(result.returncode == 0, success, result.stderr)
 
     def test_incomplete_safe_outputs_keep_window_for_retry(self):
         workflows = Path(__file__).parents[1] / "workflows"
@@ -753,6 +802,522 @@ class CollectTests(unittest.TestCase):
             with self.assertRaises(subprocess.TimeoutExpired):
                 main(output)
             self.assertFalse((output / "failures.json").exists())
+
+    def test_command_error_reports_value_error_message(self):
+        self.assertEqual(command_error(ValueError("search cap")), "search cap")
+        self.assertEqual(command_error(KeyError("jobs")), "KeyError")
+
+
+class EvidenceTests(unittest.TestCase):
+    @staticmethod
+    def job(job_id, name="tests", attempt=2, **kwargs):
+        return {
+            "id": job_id,
+            "name": name,
+            "attempt": attempt,
+            "run_attempt": attempt,
+            "html_url": f"https://example.test/job/{job_id}",
+            "conclusion": "failure",
+            **kwargs,
+        }
+
+    def e2e_job(self, job_id, release, attempt, started_at):
+        return self.job(
+            job_id,
+            f"provision-and-run ({release}) / e2e-test (authd-msentraid) / "
+            "Run e2e-tests (authd-msentraid)",
+            attempt,
+            started_at=started_at,
+        )
+
+    @staticmethod
+    def failure(run_id=42, path=".github/workflows/qa.yaml", jobs=()):
+        return {"run_id": run_id, "attempt": 2, "path": path, "jobs": list(jobs)}
+
+    @staticmethod
+    def artifact(artifact_id, name, **kwargs):
+        return {"id": artifact_id, "name": name, "size_in_bytes": 1024, **kwargs}
+
+    @staticmethod
+    def write_archive(destination, files):
+        with ZipFile(destination, "w") as archive:
+            for name, contents in files.items():
+                archive.writestr(name, contents)
+
+    def test_logs_are_sanitized_and_failed_download_leaves_no_partial_file(self):
+        good, bad = self.job(10), self.job(11)
+        failure = self.failure(jobs=(good, bad))
+
+        def download(command, **kwargs):
+            if command[-1].endswith("/10/logs"):
+                kwargs["stdout"].write(b"\x1b[31mred\x1b[0m\x00 text\nnext\x07 line\n")
+                return
+            kwargs["stdout"].write(b"partial")
+            raise subprocess.CalledProcessError(
+                1, command, stderr=b"HTTP 403: https://signed.example/secret"
+            )
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("collect_ci_failures.subprocess.run", side_effect=download),
+        ):
+            output = Path(directory)
+            collect_evidence("canonical/authd", [failure], output, monotonic() + 30)
+            self.assertEqual(
+                Path(good["log_path"]).read_text(), "red text\nnext line\n"
+            )
+            self.assertEqual(bad["log_error"], "Job log unavailable (HTTP 403)")
+            self.assertNotIn("log_path", bad)
+            self.assertFalse((output / "logs/42-2/11.log").exists())
+
+    def test_main_persists_artifacts_for_failed_jobs_across_reruns(self):
+        repo = "canonical/authd"
+        base = f"repos/{repo}/actions/runs"
+        first = run(
+            42,
+            path=".github/workflows/e2e-tests.yaml@main",
+            created_at="2026-10-20T08:00:00Z",
+            run_started_at="2026-10-20T08:00:00Z",
+            updated_at="2026-10-20T09:00:00Z",
+        )
+        second = {
+            **first,
+            "run_attempt": 2,
+            "run_started_at": "2026-10-20T10:00:00Z",
+            "updated_at": "2026-10-20T11:00:00Z",
+        }
+        noble = self.e2e_job(10, "noble", 1, first["run_started_at"])
+        retained = {**noble, "id": 20, "run_attempt": 2}
+        stonking = self.e2e_job(21, "stonking", 2, second["run_started_at"])
+        resolute = self.e2e_job(22, "resolute", 2, second["run_started_at"])
+        noble_name = "e2e-tests-noble-authd-msentraid-42-1"
+        resolute_name = "e2e-tests-resolute-authd-msentraid-42-2"
+        unrelated = "e2e-tests-jammy-authd-msentraid-42-2"
+        endpoints = {
+            f"repos/{repo}": REPOSITORY,
+            f"{base}/100/attempts/1": CURRENT,
+            f"{base}?{RUNS_QUERY}": {"total_count": 1, "workflow_runs": [second]},
+            f"{base}/42/attempts/1": first,
+            f"{base}/42/attempts/2": second,
+            f"{base}/42/attempts/1/jobs?per_page=100&page=1": {"jobs": [noble]},
+            f"{base}/42/attempts/2/jobs?per_page=100&page=1": {
+                "jobs": [retained, stonking, resolute]
+            },
+            f"{base}/42/artifacts?per_page=100&page=1": {
+                "artifacts": [self.artifact(i, f"irrelevant-{i}") for i in range(99)]
+                + [self.artifact(100, unrelated)]
+            },
+            f"{base}/42/artifacts?per_page=100&page=2": {
+                "artifacts": [
+                    self.artifact(101, noble_name),
+                    self.artifact(102, resolute_name),
+                ]
+            },
+        }
+        archives = []
+
+        def download(command, *, stdout, **kwargs):
+            endpoint = command[-1]
+            if endpoint.endswith("/logs"):
+                stdout.write(b"job log\n")
+                return
+            artifact_id = int(endpoint.split("/")[-2])
+            archives.append(artifact_id)
+            self.write_archive(
+                stdout,
+                {
+                    "output.xml": str(artifact_id),
+                    "journal/vm.journal": b"journal\x00",
+                    "recording.mp4": b"video",
+                },
+            )
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.dict(
+                os.environ,
+                GITHUB_REPOSITORY=repo,
+                GITHUB_RUN_ID="100",
+                GITHUB_RUN_ATTEMPT="1",
+            ),
+            patch(
+                "collect_ci_failures.api", side_effect=lambda path, **_: endpoints[path]
+            ),
+            patch("collect_ci_failures.subprocess.run", side_effect=download),
+        ):
+            output = Path(directory)
+            main(output)
+            one, two = json.loads((output / "failures.json").read_text())["failures"]
+            self.assertEqual((one["key"], two["key"]), ("42:1", "42:2"))
+            original = one["jobs"][0]
+            inherited, missing, current = two["jobs"]
+            self.assertEqual(inherited["attempt"], 1)
+            self.assertEqual(inherited["artifact_path"], original["artifact_path"])
+            self.assertEqual(
+                Path(inherited["artifact_path"], "output.xml").read_text(), "101"
+            )
+            self.assertEqual(
+                Path(current["artifact_path"], "output.xml").read_text(), "102"
+            )
+            self.assertEqual(
+                Path(current["artifact_path"], "journal/vm.journal").read_bytes(),
+                b"journal\x00",
+            )
+            self.assertFalse(Path(current["artifact_path"], "recording.mp4").exists())
+            self.assertNotIn("artifact_path", missing)
+            self.assertIn("stonking", missing["artifact_error"])
+            self.assertEqual(archives, [101, 102])
+
+    def test_e2e_stages_failed_suite_before_passing_suites(self):
+        name = "e2e-tests-noble-authd-msentraid-42-2"
+        job = self.e2e_job(10, "noble", 2, None)
+        failure = self.failure(path=".github/workflows/e2e-tests.yaml", jobs=[job])
+        failed_journal = "Regenerate Qrcode/journal/vm.journal"
+
+        def download(command, *, stdout, **kwargs):
+            if command[-1].endswith("/logs"):
+                stdout.write(
+                    b"2026-11-16T08:39:29.3228407Z Suite  Allowed Users  PASS  1m52s\n"
+                    b"2026-11-16T09:35:08.6649622Z \x1b[36mSuite  Regenerate Qrcode"
+                    b"  \x1b[31mFAIL\x1b[0m  2m44s  1 test, 0 passed, 1 failed\n"
+                )
+            else:
+                self.write_archive(
+                    stdout,
+                    {
+                        "Allowed Users/journal/vm.journal": bytes(8),
+                        "Authd Disabled/journal/vm.journal": bytes(7),
+                        failed_journal: b"failed",
+                        "log.html": b"log",
+                        "report.html": b"report",
+                    },
+                )
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("collect_ci_failures.MAX_DIAGNOSTIC_BYTES", 15),
+            patch(
+                "collect_ci_failures.api",
+                return_value={"artifacts": [self.artifact(50, name)]},
+            ),
+            patch("collect_ci_failures.subprocess.run", side_effect=download),
+        ):
+            collect_evidence(
+                "canonical/authd", [failure], Path(directory), monotonic() + 30
+            )
+            staged = Path(job["artifact_path"])
+            self.assertCountEqual(
+                (
+                    path.relative_to(staged).as_posix()
+                    for path in staged.rglob("*")
+                    if path.is_file()
+                ),
+                (failed_journal, "log.html", "report.html"),
+            )
+            self.assertIn("size limit", job["artifact_error"])
+
+    def test_bad_archive_does_not_prevent_staging_other_diagnostics(self):
+        bad = self.job(10, "Go Tests with Coverage Collection")
+        good = self.job(11, "Go Tests with Race Detector")
+        failure = self.failure(jobs=(bad, good))
+        artifacts = [
+            self.artifact(50, "authd-go-tests-coverage-artifacts-2"),
+            self.artifact(51, "authd-go-tests-race-artifacts-2"),
+        ]
+
+        def download(command, *, stdout, **kwargs):
+            endpoint = command[-1]
+            if endpoint.endswith("/logs"):
+                stdout.write(b"log\n")
+            elif endpoint.endswith("/50/zip"):
+                stdout.write(b"broken zip")
+            else:
+                self.write_archive(
+                    stdout, {"gorace.log.123": "race", "too-long.log": "x" * 20}
+                )
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("collect_ci_failures.MAX_DIAGNOSTIC_BYTES", 10),
+            patch("collect_ci_failures.api", return_value={"artifacts": artifacts}),
+            patch("collect_ci_failures.subprocess.run", side_effect=download),
+        ):
+            collect_evidence(
+                "canonical/authd", [failure], Path(directory), monotonic() + 30
+            )
+            self.assertNotIn("artifact_path", bad)
+            self.assertIn("BadZipFile", bad["artifact_error"])
+            path = Path(good["artifact_path"])
+            self.assertEqual((path / "gorace.log.123").read_text(), "race")
+            self.assertFalse((path / "too-long.log").exists())
+            self.assertIn("size limit", good["artifact_error"])
+
+    def test_unsafe_archive_members_are_not_staged(self):
+        artifact = self.artifact(50, "authd-go-tests-race-artifacts-2")
+        link = ZipInfo("link.log")
+        link.external_attr = stat.S_IFLNK << 16
+        compressed = ZipInfo("compressed.log")
+        compressed.compress_type = ZIP_BZIP2
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("collect_ci_failures.api", return_value={"artifacts": [artifact]}),
+            patch("collect_ci_failures.subprocess.run"),
+            patch("collect_ci_failures.zipfile.ZipFile") as reader,
+        ):
+            output = Path(directory)
+            absolute = output / "absolute.log"
+            archive = reader.return_value.__enter__.return_value
+            archive.open.side_effect = AssertionError("unsafe member was opened")
+            for member in (
+                ZipInfo("../outside.log"),
+                ZipInfo(str(absolute)),
+                ZipInfo(r"reports\job.log"),
+                link,
+                compressed,
+            ):
+                with self.subTest(member=member.filename):
+                    archive.infolist.return_value = [member]
+                    job = self.job(10, "Go Tests with Race Detector")
+                    collect_evidence(
+                        "canonical/authd",
+                        [self.failure(jobs=(job,))],
+                        output,
+                        monotonic() + 30,
+                    )
+                    self.assertIn("BadZipFile", job["artifact_error"])
+                    self.assertNotIn("artifact_path", job)
+                    self.assertFalse(any((output / "artifacts/42").iterdir()))
+                    self.assertFalse(absolute.exists())
+
+    def test_archive_member_limit_does_not_block_later_artifacts(self):
+        first = self.job(10, "Go Tests with Coverage Collection")
+        second = self.job(11, "Go Tests with Race Detector")
+        artifacts = [
+            self.artifact(50, "authd-go-tests-coverage-artifacts-2"),
+            self.artifact(51, "authd-go-tests-race-artifacts-2"),
+        ]
+
+        def download(command, *, stdout, **kwargs):
+            endpoint = command[-1]
+            if endpoint.endswith("/logs"):
+                stdout.write(b"log\n")
+            elif endpoint.endswith("/50/zip"):
+                self.write_archive(stdout, {"a.log": "a", "b.log": "b", "c.log": "c"})
+            else:
+                self.write_archive(stdout, {"race.log": "report"})
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("collect_ci_failures.MAX_ARCHIVE_MEMBERS", 2),
+            patch("collect_ci_failures.api", return_value={"artifacts": artifacts}),
+            patch("collect_ci_failures.subprocess.run", side_effect=download),
+        ):
+            collect_evidence(
+                "canonical/authd",
+                [self.failure(jobs=(first, second))],
+                Path(directory),
+                monotonic() + 30,
+            )
+            self.assertNotIn("artifact_path", first)
+            self.assertIn("2-member limit", first["artifact_error"])
+            path = Path(second["artifact_path"])
+            self.assertEqual((path / "race.log").read_text(), "report")
+
+    def test_archive_file_limit_does_not_block_later_artifacts(self):
+        first = self.job(10, "Go Tests with Coverage Collection")
+        second = self.job(11, "Go Tests with Race Detector")
+        artifacts = [
+            self.artifact(50, "authd-go-tests-coverage-artifacts-2"),
+            self.artifact(51, "authd-go-tests-race-artifacts-2"),
+        ]
+
+        def download(command, *, stdout, **kwargs):
+            endpoint = command[-1]
+            if endpoint.endswith("/logs"):
+                stdout.write(b"log\n")
+            elif endpoint.endswith("/50/zip"):
+                self.write_archive(stdout, {"a.log": "a", "b.log": "b"})
+            else:
+                self.write_archive(stdout, {"race.log": "report"})
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("collect_ci_failures.MAX_ARCHIVE_FILES", 1),
+            patch("collect_ci_failures.api", return_value={"artifacts": artifacts}),
+            patch("collect_ci_failures.subprocess.run", side_effect=download),
+        ):
+            collect_evidence(
+                "canonical/authd",
+                [self.failure(jobs=(first, second))],
+                Path(directory),
+                monotonic() + 30,
+            )
+            self.assertNotIn("artifact_path", first)
+            self.assertIn("1-file staging limit", first["artifact_error"])
+            path = Path(second["artifact_path"])
+            self.assertEqual((path / "race.log").read_text(), "report")
+
+    def test_deadline_records_missing_evidence_instead_of_dropping_jobs(self):
+        job = self.job(10, "Go Tests with Race Detector")
+        failure = self.failure(jobs=(job,))
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("collect_ci_failures.subprocess.run") as download,
+        ):
+            collect_evidence(
+                "canonical/authd", [failure], Path(directory), monotonic() - 1
+            )
+            self.assertIn("deadline", job["log_error"])
+            self.assertIn("deadline", job["artifact_error"])
+            download.assert_not_called()
+
+    def test_slow_archive_can_finish_within_evidence_deadline(self):
+        artifact = self.artifact(50, "authd-go-tests-race-artifacts-2")
+
+        def download(command, *, stdout, timeout, **kwargs):
+            if command[-1].endswith("/logs"):
+                stdout.write(b"job log")
+            elif timeout < 97:
+                raise subprocess.TimeoutExpired(command, timeout)
+            else:
+                self.write_archive(stdout, {"race.log": "race report"})
+
+        with (
+            patch("collect_ci_failures.monotonic", return_value=0),
+            patch("collect_ci_failures.api", return_value={"artifacts": [artifact]}),
+            patch("collect_ci_failures.subprocess.run", side_effect=download),
+        ):
+            for deadline, available in ((110, True), (80, False)):
+                with (
+                    self.subTest(deadline=deadline),
+                    tempfile.TemporaryDirectory() as directory,
+                ):
+                    job = self.job(10, "Go Tests with Race Detector")
+                    collect_evidence(
+                        "canonical/authd",
+                        [self.failure(jobs=(job,))],
+                        Path(directory),
+                        deadline,
+                    )
+                    if available:
+                        self.assertEqual(
+                            Path(job["artifact_path"], "race.log").read_text(),
+                            "race report",
+                        )
+                    else:
+                        self.assertIn("request timed out", job["artifact_error"])
+                        self.assertNotIn("artifact_path", job)
+
+    def test_slow_logs_leave_a_time_slice_for_artifacts(self):
+        slow = self.job(10, "C Code sanity")
+        artifact_job = self.job(11, "Go Tests with Race Detector")
+        artifact = self.artifact(50, "authd-go-tests-race-artifacts-2")
+        clock = [0.0]
+
+        def download(command, *, stdout, **kwargs):
+            endpoint = command[-1]
+            if endpoint.endswith("/10/logs"):
+                stdout.write(b"slow log\n")
+                clock[0] = 85  # past the log phase's 80-second slice
+            elif endpoint.endswith("/11/logs"):
+                raise AssertionError("the log phase should have ended")
+            else:
+                self.write_archive(stdout, {"race.log": "report"})
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("collect_ci_failures.monotonic", side_effect=lambda: clock[0]),
+            patch("collect_ci_failures.ARTIFACT_RESERVE_SECONDS", 20),
+            patch("collect_ci_failures.api", return_value={"artifacts": [artifact]}),
+            patch("collect_ci_failures.subprocess.run", side_effect=download),
+        ):
+            collect_evidence(
+                "canonical/authd",
+                [self.failure(jobs=(slow, artifact_job))],
+                Path(directory),
+                100,
+            )
+            self.assertEqual(Path(slow["log_path"]).read_text(), "slow log\n")
+            self.assertIn("deadline", artifact_job["log_error"])
+            self.assertEqual(
+                Path(artifact_job["artifact_path"], "race.log").read_text(),
+                "report",
+            )
+
+    def test_jobs_without_logs_get_artifact_budget_first(self):
+        first = self.job(10, "Go Tests with Race Detector")
+        second = self.job(11, "Go Tests with Coverage Collection")
+        third = self.job(12)
+        archive = BytesIO()
+        self.write_archive(archive, {"error.log": "artifact diagnostics"})
+        payload = archive.getvalue()
+        artifacts = [
+            self.artifact(
+                50, "authd-go-tests-race-artifacts-2", size_in_bytes=len(payload)
+            ),
+            self.artifact(
+                51, "authd-go-tests-coverage-artifacts-2", size_in_bytes=len(payload)
+            ),
+        ]
+        log = b"job diagnostics\n"
+
+        def download(command, *, stdout, **kwargs):
+            endpoint = command[-1]
+            if endpoint.endswith("/11/logs"):
+                raise subprocess.CalledProcessError(1, command, stderr=b"HTTP 404")
+            stdout.write(log if endpoint.endswith("/logs") else payload)
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch(
+                "collect_ci_failures.MAX_DOWNLOAD_BYTES", 2 * len(log) + len(payload)
+            ),
+            patch("collect_ci_failures.api", return_value={"artifacts": artifacts}),
+            patch("collect_ci_failures.subprocess.run", side_effect=download),
+        ):
+            collect_evidence(
+                "canonical/authd",
+                [self.failure(jobs=(first, second)), self.failure(43, jobs=(third,))],
+                Path(directory),
+                monotonic() + 30,
+            )
+            self.assertEqual(Path(first["log_path"]).read_bytes(), log)
+            self.assertEqual(Path(third["log_path"]).read_bytes(), log)
+            self.assertIn("HTTP 404", second["log_error"])
+            self.assertEqual(
+                Path(second["artifact_path"], "error.log").read_text(),
+                "artifact diagnostics",
+            )
+            self.assertIn("size budget", first["artifact_error"])
+
+    def test_staged_archive_respects_space_used_by_logs(self):
+        job = self.job(10, "Go Tests with Race Detector")
+        artifact = self.artifact(50, "authd-go-tests-race-artifacts-2")
+
+        def download(command, *, stdout, **kwargs):
+            if command[-1].endswith("/logs"):
+                stdout.write(b"log\n")
+            else:
+                self.write_archive(stdout, {"first.log": "1234", "second.log": "5678"})
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("collect_ci_failures.MAX_STAGED_BYTES", 9),
+            patch("collect_ci_failures.api", return_value={"artifacts": [artifact]}),
+            patch("collect_ci_failures.subprocess.run", side_effect=download),
+        ):
+            collect_evidence(
+                "canonical/authd",
+                [self.failure(jobs=(job,))],
+                Path(directory),
+                monotonic() + 30,
+            )
+            self.assertEqual(Path(job["log_path"]).read_text(), "log\n")
+            path = Path(job["artifact_path"])
+            self.assertEqual((path / "first.log").read_text(), "1234")
+            self.assertFalse((path / "second.log").exists())
+            self.assertIn("size limit", job["artifact_error"])
 
 
 if __name__ == "__main__":
