@@ -520,7 +520,7 @@ wait_child_thread (gpointer data)
 
   while (TRUE)
     {
-      int status;
+      int status = 0;
       pid_t ret = waitpid (child_pid, &status, 0);
       int errsv = errno;
 
@@ -553,6 +553,9 @@ wait_child_thread (gpointer data)
 
       if (ret < 0)
         {
+          if (errsv == EINTR)
+            continue;
+
           exit_status = -errsv;
           break;
         }
@@ -917,6 +920,7 @@ setup_dbus_server (pam_handle_t *pamh,
   g_autoptr(GMainContext) main_context = NULL;
   g_autofree char *server_addr = NULL;
   g_autofree char *guid = NULL;
+  g_autofree char *escaped_service_name = NULL;
   const char *service_name = NULL;
 
   /* This pointer is used as a semaphore, so accessing to server-related stuff
@@ -936,8 +940,19 @@ setup_dbus_server (pam_handle_t *pamh,
   context_pusher = g_main_context_pusher_new (main_context);
 
   pam_get_item (pamh, PAM_SERVICE, (const void **) &service_name);
+
+  if (!service_name || !*service_name)
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                   "Invalid PAM service name: '%s'",
+                   service_name ? service_name : "");
+      return NULL;
+    }
+
+  escaped_service_name = g_dbus_address_escape_value (service_name);
   guid = g_dbus_generate_guid ();
-  server_addr = g_strdup_printf ("unix:abstract=authd-%s-%s", service_name, guid);
+  server_addr = g_strdup_printf ("unix:abstract=authd-%s-%s",
+                                 escaped_service_name, guid);
 
   g_debug ("Setting up connection at %s (%s)", server_addr, guid);
   server = g_dbus_server_new_sync (server_addr,
@@ -974,8 +989,12 @@ dup_fd_checked (int fd, GError **error)
   return new_fd;
 }
 
-typedef const char ProgramNameResetter;
-static void program_name_resetter (ProgramNameResetter *pn) { g_set_prgname (pn); }
+typedef char ProgramNameResetter;
+static void program_name_resetter (ProgramNameResetter *pn)
+{
+  g_set_prgname (pn);
+  g_free (pn);
+}
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (ProgramNameResetter, program_name_resetter)
 
 static char *
@@ -1129,7 +1148,7 @@ do_pam_action_thread (pam_handle_t *pamh,
   G_LOCK (logger);
 
   action_name = action_type_to_string (action);
-  old_program_name = g_get_prgname ();
+  old_program_name = g_strdup (g_get_prgname ());
   program_name = get_program_name (action_name, pamh);
   g_set_prgname (program_name);
 
@@ -1236,7 +1255,7 @@ do_pam_action_thread (pam_handle_t *pamh,
   if (pam_tty != NULL && *pam_tty != '\0')
     {
       g_debug ("Trying to use PAM TTY %s", pam_tty);
-      pam_tty_fd = open (pam_tty, O_RDWR, 0600);
+      pam_tty_fd = open (pam_tty, O_RDWR | O_NOCTTY, 0600);
       errsv = errno;
 
       if (pam_tty_fd >= 0)
