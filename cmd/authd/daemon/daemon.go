@@ -23,9 +23,6 @@ const cmdName = "authd"
 // oldDBDir is the path of the old DB directory.
 var oldDBDir = consts.OldDBDir
 
-// pamDDirs are the directories containing PAM service configuration files.
-var pamDDirs = []string{"/etc/pam.d", "/usr/lib/pam.d"}
-
 // App encapsulate commands and options of the daemon, which can be controlled by env variables and config files.
 type App struct {
 	rootCmd cobra.Command
@@ -111,7 +108,7 @@ func New(args ...Option) *App {
 			log.Debugf(context.Background(), "Verbosity: %d", a.config.Verbosity)
 
 			if a.config.PAMConfig != nil {
-				a.config.PAMConfig.WarnOnUnknownServices(context.Background(), pamDDirs)
+				a.config.PAMConfig.WarnOnUnknownServices(context.Background(), pam.ConfigDirs())
 			}
 
 			// If we are only checking the configuration, we exit now.

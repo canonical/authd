@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,6 +31,18 @@ import (
 )
 
 var _ authd.PAMServer = Service{}
+
+// pamDDirs are the directories containing PAM service configuration files.
+var pamDDirs = []string{"/etc/pam.d", "/usr/lib/pam.d"}
+
+// pamDefaultService is the service whose configuration PAM uses when a
+// service has no configuration of its own.
+const pamDefaultService = "other"
+
+// ConfigDirs returns the directories containing PAM service configuration files.
+func ConfigDirs() []string {
+	return slices.Clone(pamDDirs)
+}
 
 // authFailMaxTracked is the maximum number of distinct (service, username) pairs tracked
 // simultaneously to bound memory usage.
@@ -103,17 +116,7 @@ func (c Config) ForService(name string) BruteForceMitigationConfig {
 // is removed from the system but still present in the config file.
 func (c Config) WarnOnUnknownServices(ctx context.Context, pamDDirs []string) {
 	for name := range c.Services {
-		found := false
-		for _, pamDDir := range pamDDirs {
-			if _, err := os.Stat(filepath.Join(pamDDir, name)); err == nil {
-				found = true
-				break
-			} else if !os.IsNotExist(err) {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !hasPAMServiceFile(pamDDirs, name) {
 			log.Warningf(ctx, "PAM service %q configured in authd but not found in %s", name, strings.Join(pamDDirs, " or "))
 		}
 	}
@@ -347,7 +350,7 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 	}
 
 	// Create a session and Memorize selected broker for it.
-	sessionID, encryptionKey, err := s.brokerManager.NewSession(brokerID, username, lang, mode, userProviderID, req.GetServiceName())
+	sessionID, encryptionKey, err := s.brokerManager.NewSession(brokerID, username, lang, mode, userProviderID, pamServiceName(req.GetServiceName()))
 	if err != nil {
 		log.Errorf(ctx, "SelectBroker: Could not create session for user %q with broker %q: %v", username, brokerID, err)
 		return nil, err
@@ -624,6 +627,37 @@ func checkUserUID(uid uint32) (uint32, error) {
 		return 0, errors.New("users cannot be root")
 	}
 	return uid, nil
+}
+
+// pamServiceName returns the name of the service whose configuration PAM uses
+// for the given service name.
+//
+// PAM lowercases service names and only keeps the part after the last '/'.
+// If there is no configuration file for the service, it uses the one of the
+// default service.
+func pamServiceName(name string) string {
+	name = strings.ToLower(name)
+	if i := strings.LastIndexByte(name, '/'); i >= 0 {
+		name = name[i+1:]
+	}
+
+	if name == "" || name == "." || name == ".." || !hasPAMServiceFile(pamDDirs, name) {
+		return pamDefaultService
+	}
+
+	return name
+}
+
+// hasPAMServiceFile returns whether there is a configuration file for the PAM
+// service in one of the given directories.
+func hasPAMServiceFile(dirs []string, name string) bool {
+	for _, dir := range dirs {
+		if fi, err := os.Stat(filepath.Join(dir, name)); err == nil && fi.Mode().IsRegular() {
+			return true
+		}
+	}
+
+	return false
 }
 
 func uiLayoutToMap(layout *authd.UILayout) (mapLayout map[string]string, err error) {

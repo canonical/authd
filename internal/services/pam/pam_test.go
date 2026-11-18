@@ -576,12 +576,15 @@ func TestConfigWarnOnUnknownServices(t *testing.T) {
 	pamDDirAlt := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(pamDDirAlt, "sshd"), []byte{}, 0600),
 		"Setup: could not create PAM service file")
+	require.NoError(t, os.Mkdir(filepath.Join(pamDDir, "a-directory"), 0700),
+		"Setup: could not create a directory with a PAM service name")
 
 	cfg := pam.Config{
 		BruteForceMitigationConfig: pam.DefaultConfig.BruteForceMitigationConfig,
 		Services: map[string]pam.BruteForceOverride{
 			"sshd":        {},
 			"no-such-app": {},
+			"a-directory": {},
 		},
 	}
 
@@ -593,8 +596,10 @@ func TestConfigWarnOnUnknownServices(t *testing.T) {
 
 	cfg.WarnOnUnknownServices(context.Background(), []string{pamDDir, pamDDirAlt})
 
-	require.Len(t, warnings, 1, "Expected exactly one warning for the missing service")
-	require.Contains(t, warnings[0], `"no-such-app"`, "Warning should mention the missing service name")
+	require.Len(t, warnings, 2, "Expected a warning for the missing service and for the directory")
+	warningsText := strings.Join(warnings, "\n")
+	require.Contains(t, warningsText, `"no-such-app"`, "Warning should mention the missing service name")
+	require.Contains(t, warningsText, `"a-directory"`, "Warning should mention the directory")
 }
 
 func TestIsAuthenticated_FailDelay_PerService(t *testing.T) {
@@ -1136,6 +1141,64 @@ func TestUserRequestsAreOnlyAllowedToRootOrTheUser(t *testing.T) {
 	}
 }
 
+func TestPAMServiceName(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		service string
+
+		want string
+	}{
+		"Known_service":                  {service: "sshd", want: "sshd"},
+		"Known_service_in_another_case":  {service: "SSHD", want: "sshd"},
+		"Known_service_from_a_path":      {service: "/usr/sbin/sshd", want: "sshd"},
+		"Known_service_from_another_dir": {service: "login", want: "login"},
+
+		"Unknown_service_uses_the_default_one":     {service: "no-such-service", want: "other"},
+		"Empty_service_uses_the_default_one":       {service: "", want: "other"},
+		"Directory_uses_the_default_one":           {service: "a-directory", want: "other"},
+		"Parent_directory_uses_the_default_one":    {service: "..", want: "other"},
+		"Path_to_a_directory_uses_the_default_one": {service: "sshd/", want: "other"},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tc.want, pam.PAMServiceName(tc.service))
+		})
+	}
+}
+
+func TestIsAuthenticated_FailDelay_UnknownServiceUsesDefaultService(t *testing.T) {
+	t.Parallel()
+
+	overrideDelay := 200 * time.Millisecond
+	cfg := pam.Config{
+		BruteForceMitigationConfig: pam.BruteForceMitigationConfig{
+			AuthFailDelayThreshold: 0,
+			AuthFailDelay:          0,
+			AuthFailResetWindow:    15 * time.Minute,
+		},
+		Services: map[string]pam.BruteForceOverride{
+			"other": {
+				AuthFailDelayThreshold: new(int),
+				AuthFailDelay:          &overrideDelay,
+			},
+		},
+	}
+	client := newPamClientWithConfig(t, nil, globalBrokerManager, cfg)
+
+	sessionID := startSessionWithService(t, client, "ia_denied@example.com", "no-such-service")
+	start := time.Now()
+	_, err := client.IsAuthenticated(context.Background(), &authd.IARequest{
+		SessionId:          sessionID,
+		AuthenticationData: &authd.IARequest_AuthenticationData{},
+	})
+	require.NoError(t, err, "IsAuthenticated should not return an error")
+	require.GreaterOrEqual(t, time.Since(start), overrideDelay,
+		"a service without PAM configuration should use the settings of the default service")
+}
+
 func TestMain(m *testing.M) {
 	log.SetLevel(log.DebugLevel)
 
@@ -1149,6 +1212,12 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	defer cleanup()
+
+	restorePAMDDirs := pam.SetPAMDDirsForTests([]string{
+		filepath.Join("testdata", "pam.d"),
+		filepath.Join("testdata", "lib-pam.d"),
+	})
+	defer restorePAMDDirs()
 
 	m.Run()
 }
