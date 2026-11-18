@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +30,18 @@ import (
 )
 
 var _ authd.PAMServer = Service{}
+
+// pamDDirs are the directories containing PAM service configuration files.
+var pamDDirs = []string{"/etc/pam.d", "/usr/lib/pam.d"}
+
+// pamDefaultService is the service whose configuration PAM uses when a
+// service has no configuration of its own.
+const pamDefaultService = "other"
+
+// ConfigDirs returns the directories containing PAM service configuration files.
+func ConfigDirs() []string {
+	return slices.Clone(pamDDirs)
+}
 
 // authFailMaxTracked is the maximum number of distinct (service, username) pairs tracked
 // simultaneously to bound memory usage.
@@ -346,7 +359,7 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 	}
 
 	// Create a session and Memorize selected broker for it.
-	sessionID, encryptionKey, err := s.brokerManager.NewSession(brokerID, username, lang, mode, userProviderID, req.GetServiceName())
+	sessionID, encryptionKey, err := s.brokerManager.NewSession(brokerID, username, lang, mode, userProviderID, pamServiceName(req.GetServiceName()))
 	if err != nil {
 		log.Errorf(ctx, "SelectBroker: Could not create session for user %q with broker %q: %v", username, brokerID, err)
 		return nil, err
@@ -588,6 +601,31 @@ func (s Service) checkUserAccess(ctx context.Context, username string) error {
 	}
 
 	return nil
+}
+
+// pamServiceName returns the name of the service whose configuration PAM uses
+// for the given service name.
+//
+// PAM lowercases service names and only keeps the part after the last '/'.
+// If there is no configuration file for the service, it uses the one of the
+// default service.
+func pamServiceName(name string) string {
+	name = strings.ToLower(name)
+	if i := strings.LastIndexByte(name, '/'); i >= 0 {
+		name = name[i+1:]
+	}
+
+	if name == "" || name == "." || name == ".." {
+		return pamDefaultService
+	}
+
+	for _, dir := range pamDDirs {
+		if fi, err := os.Stat(filepath.Join(dir, name)); err == nil && fi.Mode().IsRegular() {
+			return name
+		}
+	}
+
+	return pamDefaultService
 }
 
 func uiLayoutToMap(layout *authd.UILayout) (mapLayout map[string]string, err error) {
