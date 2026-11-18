@@ -1367,6 +1367,42 @@ func TestSessionEndsWhenTheClientDisconnectsDuringItsCreation(t *testing.T) {
 	require.Error(t, err, "The late session should not be kept by the manager")
 }
 
+func TestSessionsEndWhenTheClientDisconnectsWhileEndingOne(t *testing.T) {
+	conn, _ := newPamServerForTests(t, nil, globalBrokerManager, pam.DefaultConfig)
+	client := authd.NewPAMClient(conn)
+
+	stalledID := startSession(t, client, "stalled@example.com")
+	otherID := startSession(t, client, "other@example.com")
+
+	stalledBrokerID := strings.TrimPrefix(stalledID, mockBrokerGeneratedID+"-")
+	otherBrokerID := strings.TrimPrefix(otherID, mockBrokerGeneratedID+"-")
+
+	endSession := testutils.BlockBrokerMockCall(stalledBrokerID)
+	t.Cleanup(endSession.Release)
+	otherEnded := testutils.WatchBrokerMockEndSession(otherBrokerID)
+
+	go func() {
+		_, _ = client.EndSession(context.Background(), &authd.ESRequest{SessionId: stalledID})
+	}()
+
+	select {
+	case <-endSession.Started():
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "The broker did not receive the EndSession call")
+	}
+
+	require.NoError(t, conn.Close(), "Closing the client connection should not fail")
+
+	select {
+	case <-otherEnded:
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "The other sessions of the connection should be ended while the broker is busy ending one")
+	}
+
+	_, err := globalBrokerManager.BrokerFromSessionID(otherID)
+	require.Error(t, err, "The other sessions of the connection should be forgotten")
+}
+
 func TestMain(m *testing.M) {
 	log.SetLevel(log.DebugLevel)
 
