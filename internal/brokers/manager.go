@@ -239,6 +239,45 @@ func (m *Manager) CheckSessionOwnership(sessionID, connectionID string) error {
 	return nil
 }
 
+// EndSessionsForConnection ends all the sessions created by the given client connection.
+func (m *Manager) EndSessionsForConnection(connectionID string) {
+	m.transactionsToBrokerMu.RLock()
+	var sessionIDs []string
+	for sessionID, sessionConnectionID := range m.sessionsToConnection {
+		if sessionConnectionID == connectionID {
+			sessionIDs = append(sessionIDs, sessionID)
+		}
+	}
+	m.transactionsToBrokerMu.RUnlock()
+
+	for _, sessionID := range sessionIDs {
+		m.AbandonSession(sessionID)
+	}
+}
+
+// AbandonSession forgets the session and asks the broker to end it, without
+// waiting for the broker to reply.
+func (m *Manager) AbandonSession(sessionID string) {
+	m.transactionsToBrokerMu.Lock()
+	broker := m.transactionsToBroker[sessionID]
+	delete(m.transactionsToBroker, sessionID)
+	delete(m.sessionsToUsername, sessionID)
+	delete(m.sessionsToServiceName, sessionID)
+	delete(m.sessionsToConnection, sessionID)
+	m.transactionsToBrokerMu.Unlock()
+
+	if broker == nil {
+		return
+	}
+
+	log.Debugf(context.Background(), "%s: End abandoned session", sessionID)
+	go func() {
+		if err := broker.endSession(context.Background(), sessionID); err != nil {
+			log.Warningf(context.Background(), "%s: Could not end abandoned session: %v", sessionID, err)
+		}
+	}()
+}
+
 // UsernameFromSessionID returns the username associated with the given session ID.
 func (m *Manager) UsernameFromSessionID(sessionID string) string {
 	m.transactionsToBrokerMu.RLock()
