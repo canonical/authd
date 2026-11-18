@@ -2993,14 +2993,17 @@ func (b *Broker) getSession(sessionID string) (session, error) {
 	return s, nil
 }
 
-// updateSession checks if the session is still active and updates the session info.
+// updateSession updates the session info, if the session is still active.
 func (b *Broker) updateSession(sessionID string, session session) error {
-	// Checks if the session was ended in the meantime, otherwise we would just accidentally recreate it.
-	if _, err := b.getSession(sessionID); err != nil {
-		return err
-	}
 	b.currentSessionsMu.Lock()
 	defer b.currentSessionsMu.Unlock()
+
+	// Check that the session has not been ended in the meantime, otherwise we
+	// would just accidentally recreate it.
+	if _, active := b.currentSessions[sessionID]; !active {
+		return fmt.Errorf("%s is not a current transaction", sessionID)
+	}
+
 	b.currentSessions[sessionID] = session
 	return nil
 }

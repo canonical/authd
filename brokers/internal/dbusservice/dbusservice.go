@@ -35,6 +35,7 @@ type Service struct {
 	name              string
 	interfaces        []*Interface
 	conn              *dbus.Conn
+	signals           chan *dbus.Signal
 	disconnect        func()
 	serve             chan struct{}
 	initializing      chan struct{}
@@ -48,6 +49,9 @@ type Interface struct {
 	iface   string
 	broker  *broker.Broker
 	service *Service
+
+	sessionsMu sync.Mutex
+	sessions   map[string]dbus.Sender
 }
 
 var interfaceNames = []string{
@@ -149,6 +153,12 @@ func New(_ context.Context, brokerConfig broker.Config) (*Service, error) {
 		s.broker = brokers[i]
 	}
 
+	if err := service.watchNameOwnerChanges(); err != nil {
+		service.initializationFailed(err)
+		service.disconnect()
+		return nil, err
+	}
+
 	service.initializationDone()
 	return service, nil
 }
@@ -212,6 +222,9 @@ func (s *Service) Stop() error {
 	case <-s.serve:
 	default:
 		close(s.serve)
+		if s.conn != nil && s.signals != nil {
+			s.conn.RemoveSignal(s.signals)
+		}
 		s.disconnect()
 	}
 

@@ -315,3 +315,96 @@ Exec=%s
 		t.Fatal("The queued activation call did not complete")
 	}
 }
+
+func TestSessionsAreEndedWhenTheClientDisappears(t *testing.T) {
+	cleanup, err := testutils.StartSystemBusMock()
+	require.NoError(t, err, "Setup: starting the mock bus should not fail")
+	defer cleanup()
+
+	configPath := filepath.Join(t.TempDir(), "broker.conf")
+	require.NoError(t, os.WriteFile(configPath, []byte(`[oidc]
+issuer = `+defaultIssuerURL+`
+client_id = test-client-id
+
+[flows]
+entra_auth = false
+`), 0600), "Setup: writing the broker config should not fail")
+
+	service, err := dbusservice.New(context.Background(), broker.Config{
+		ConfigFile: configPath,
+		DataDir:    t.TempDir(),
+	})
+	require.NoError(t, err, "Setup: starting the D-Bus service should not fail")
+	defer func() { _ = service.Stop() }()
+
+	client, err := testutils.GetSystemBusConnection(t)
+	require.NoError(t, err, "Setup: connecting to the mock bus should not fail")
+
+	call := client.Object(consts.DbusName, dbus.ObjectPath(consts.DbusObject)).Call(
+		"com.ubuntu.authd.Broker3.NewSession", 0,
+		"user@example.com", "en", sessionmode.Login, "provider-id")
+	require.NoError(t, call.Err, "NewSession should not fail")
+
+	var sessionID, encryptionKey string
+	require.NoError(t, call.Store(&sessionID, &encryptionKey), "NewSession result should be readable")
+	require.NotEmpty(t, sessionID, "NewSession should return a session ID")
+
+	b := service.BrokerV3ForTests()
+	_, err = b.GetAuthenticationModes(sessionID, supportedUILayouts)
+	require.NoError(t, err, "The session should be active while its client is connected")
+
+	require.NoError(t, client.Close(), "Closing the client should not fail")
+
+	require.Eventually(t, func() bool {
+		_, err := b.GetAuthenticationModes(sessionID, supportedUILayouts)
+		return err != nil
+	}, 5*time.Second, 10*time.Millisecond, "The session should be ended when its client disappears")
+}
+
+func TestSessionsCanOnlyBeUsedByTheirCreator(t *testing.T) {
+	cleanup, err := testutils.StartSystemBusMock()
+	require.NoError(t, err, "Setup: starting the mock bus should not fail")
+	defer cleanup()
+
+	configPath := filepath.Join(t.TempDir(), "broker.conf")
+	require.NoError(t, os.WriteFile(configPath, []byte(`[oidc]
+issuer = `+defaultIssuerURL+`
+client_id = test-client-id
+
+[flows]
+entra_auth = false
+`), 0600), "Setup: writing the broker config should not fail")
+
+	service, err := dbusservice.New(context.Background(), broker.Config{
+		ConfigFile: configPath,
+		DataDir:    t.TempDir(),
+	})
+	require.NoError(t, err, "Setup: starting the D-Bus service should not fail")
+	defer func() { _ = service.Stop() }()
+
+	creator, err := testutils.GetSystemBusConnection(t)
+	require.NoError(t, err, "Setup: connecting the session creator should not fail")
+	defer creator.Close()
+
+	call := creator.Object(consts.DbusName, dbus.ObjectPath(consts.DbusObject)).Call(
+		"com.ubuntu.authd.Broker3.NewSession", 0,
+		"user@example.com", "en", sessionmode.Login, "provider-id")
+	require.NoError(t, call.Err, "NewSession should not fail")
+
+	var sessionID, encryptionKey string
+	require.NoError(t, call.Store(&sessionID, &encryptionKey), "NewSession result should be readable")
+
+	other, err := testutils.GetSystemBusConnection(t)
+	require.NoError(t, err, "Setup: connecting another client should not fail")
+	defer other.Close()
+
+	call = other.Object(consts.DbusName, dbus.ObjectPath(consts.DbusObject)).Call(
+		"com.ubuntu.authd.Broker3.GetAuthenticationModes", 0, sessionID, supportedUILayouts)
+	var dbusErr dbus.Error
+	require.ErrorAs(t, call.Err, &dbusErr, "A client must not use a session it did not create")
+	require.Equal(t, "org.freedesktop.DBus.Error.AccessDenied", dbusErr.Name)
+
+	call = creator.Object(consts.DbusName, dbus.ObjectPath(consts.DbusObject)).Call(
+		"com.ubuntu.authd.Broker3.GetAuthenticationModes", 0, sessionID, supportedUILayouts)
+	require.NoError(t, call.Err, "The session creator should still be able to use its session")
+}
