@@ -62,13 +62,9 @@ func New(args ...Option) Manager {
 // CheckRequestIsFromRoot checks if the current gRPC request is from a root user and returns an error if not.
 // The pid and uid are extracted from peerAuthInfo in the gRPC context.
 func (m Manager) CheckRequestIsFromRoot(ctx context.Context) (err error) {
-	p, ok := peer.FromContext(ctx)
-	if !ok {
-		return errors.New("context request doesn't have gRPC peer information")
-	}
-	pci, ok := p.AuthInfo.(peerAuthInfo)
-	if !ok {
-		return errors.New("context request doesn't have valid gRPC peer credential information")
+	pci, err := peerCredentials(ctx)
+	if err != nil {
+		return err
 	}
 
 	if pci.uid != m.rootUID {
@@ -76,4 +72,38 @@ func (m Manager) CheckRequestIsFromRoot(ctx context.Context) (err error) {
 	}
 
 	return nil
+}
+
+// CheckRequestIsFromRootOrUser checks if the current gRPC request is from a
+// root user or from the user with the UID returned by userUID, and returns an
+// error if not. userUID is only called for requests that are not from root.
+func (m Manager) CheckRequestIsFromRootOrUser(ctx context.Context, userUID func() (uint32, error)) (err error) {
+	pci, err := peerCredentials(ctx)
+	if err != nil {
+		return err
+	}
+
+	if pci.uid == m.rootUID {
+		return nil
+	}
+
+	uid, err := userUID()
+	if err != nil || uid != pci.uid {
+		return errors.New("only root can perform this operation for other users")
+	}
+
+	return nil
+}
+
+func peerCredentials(ctx context.Context) (peerAuthInfo, error) {
+	p, ok := peer.FromContext(ctx)
+	if !ok {
+		return peerAuthInfo{}, errors.New("context request doesn't have gRPC peer information")
+	}
+	pci, ok := p.AuthInfo.(peerAuthInfo)
+	if !ok {
+		return peerAuthInfo{}, errors.New("context request doesn't have valid gRPC peer credential information")
+	}
+
+	return pci, nil
 }
