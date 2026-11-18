@@ -21,6 +21,9 @@ var (
 	brokerConfFixtures = filepath.Join("testdata", "broker.d")
 )
 
+// testConnectionID is the client connection used to create sessions in tests.
+const testConnectionID = "test-connection"
+
 func TestNewManager(t *testing.T) {
 	tests := map[string]struct {
 		brokerConfigDir   string
@@ -225,7 +228,7 @@ func TestNewSession(t *testing.T) {
 				tc.sessionMode = "auth"
 			}
 
-			gotID, gotEKey, err := m.NewSession(tc.brokerID, tc.username, "some_lang", tc.sessionMode, "", "sshd")
+			gotID, gotEKey, err := m.NewSession(tc.brokerID, tc.username, "some_lang", tc.sessionMode, "", "sshd", testConnectionID)
 			if tc.wantErr {
 				require.Error(t, err, "NewSession should return an error, but did not")
 				return
@@ -240,6 +243,12 @@ func TestNewSession(t *testing.T) {
 			require.NoError(t, err, "NewSession should have assigned a broker for the session, but did not")
 			require.Equal(t, wantBroker.ID, gotBroker.ID, "BrokerFromSessionID should have assigned the expected broker for the session, but did not")
 			require.Equal(t, "sshd", m.ServiceNameFromSessionID(gotID), "NewSession should remember the PAM service name for the session")
+			require.NoError(t, m.CheckSessionOwnership(gotID, testConnectionID),
+				"NewSession should remember the client connection of the session")
+			require.ErrorIs(t, m.CheckSessionOwnership(gotID, "other-connection"), brokers.ErrSessionNotOwned,
+				"CheckSessionOwnership should refuse another client connection")
+			require.Error(t, m.CheckSessionOwnership("unknown-session", testConnectionID),
+				"CheckSessionOwnership should refuse unknown sessions")
 		})
 	}
 }
@@ -323,13 +332,13 @@ func TestStartAndEndSession(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		id, key, err := m.NewSession(b1.ID, "user1@example.com", "some_lang", "auth", "", "sshd")
+		id, key, err := m.NewSession(b1.ID, "user1@example.com", "some_lang", "auth", "", "sshd", testConnectionID)
 		firstID, firstKey, firstErr = &id, &key, &err
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		id, key, err := m.NewSession(b2.ID, "user2", "some_lang", "auth", "", "gdm-authd")
+		id, key, err := m.NewSession(b2.ID, "user2", "some_lang", "auth", "", "gdm-authd", testConnectionID+"-other")
 		secondID, secondKey, secondErr = &id, &key, &err
 	}()
 	wg.Wait()
@@ -345,6 +354,11 @@ func TestStartAndEndSession(t *testing.T) {
 		*secondID, "Second NewSession should return the expected session ID, but did not")
 	require.Equal(t, testutils.GenerateEncryptionKey(b2.Name),
 		*secondKey, "Second NewSession should return the expected encryption key, but did not")
+
+	require.NoError(t, m.CheckSessionOwnership(*firstID, testConnectionID),
+		"First NewSession should have assigned the expected connection to the session, but did not")
+	require.NoError(t, m.CheckSessionOwnership(*secondID, testConnectionID+"-other"),
+		"Second NewSession should have assigned the expected connection to the session, but did not")
 
 	assignedBroker, err := m.BrokerFromSessionID(*firstID)
 	require.NoError(t, err, "First NewSession should have assigned a broker for the session, but did not")
@@ -374,6 +388,11 @@ func TestStartAndEndSession(t *testing.T) {
 
 	_, err = m.BrokerFromSessionID(*secondID)
 	require.Error(t, err, "Second EndSession should have removed the broker for the session, but did not")
+
+	require.Error(t, m.CheckSessionOwnership(*firstID, testConnectionID),
+		"First EndSession should have removed the connection of the session, but did not")
+	require.Error(t, m.CheckSessionOwnership(*secondID, testConnectionID+"-other"),
+		"Second EndSession should have removed the connection of the session, but did not")
 }
 
 func TestMain(m *testing.M) {
