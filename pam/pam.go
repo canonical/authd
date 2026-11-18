@@ -25,7 +25,9 @@ import (
 	"github.com/coreos/go-systemd/v22/journal"
 	"github.com/msteinert/pam/v2"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
 
 // pamModule is the structure that implements the pam.ModuleHandler interface
@@ -316,6 +318,12 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 		}
 
 		response, err := c.GetBroker(context.TODO(), &authd.GBRequest{Username: username})
+		if status.Code(err) == codes.PermissionDenied {
+			// We are not allowed to know the broker of the user, so let the
+			// user select it.
+			log.Debugf(context.TODO(), "Not allowed to get the broker for user %q: %v", username, err)
+			return nil
+		}
 		if err != nil {
 			err = fmt.Errorf("could not get current available brokers: %w", err)
 			if msgErr := showPamMessage(mTx, pam.ErrorMsg, err.Error()); msgErr != nil {
