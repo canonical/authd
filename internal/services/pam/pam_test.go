@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"os"
 	"os/user"
@@ -73,7 +74,7 @@ func TestNewService(t *testing.T) {
 	m, err := users.NewManager(users.DefaultConfig, t.TempDir())
 	require.NoError(t, err, "Setup: could not create user manager")
 
-	service := pam.NewService(context.Background(), m, globalBrokerManager, pam.DefaultConfig)
+	service := pam.NewService(context.Background(), m, globalBrokerManager, rootPermissionManager(), pam.DefaultConfig)
 
 	brokers, err := service.AvailableBrokers(context.Background(), &authd.Empty{})
 	require.NoError(t, err, "can’t create the service directly")
@@ -889,6 +890,18 @@ func newPamClient(t *testing.T, m *users.Manager, brokerManager *brokers.Manager
 
 func newPamClientWithConfig(t *testing.T, m *users.Manager, brokerManager *brokers.Manager, cfg pam.Config) (client authd.PAMClient) {
 	t.Helper()
+	return newPamClientWithPermissions(t, m, brokerManager, rootPermissionManager(), cfg)
+}
+
+// rootPermissionManager returns a permission manager that considers the current user as root,
+// so that the tests can make requests about any user.
+func rootPermissionManager() *permissions.Manager {
+	pm := permissions.New(permissions.Z_ForTests_WithCurrentUserAsRoot())
+	return &pm
+}
+
+func newPamClientWithPermissions(t *testing.T, m *users.Manager, brokerManager *brokers.Manager, pm *permissions.Manager, cfg pam.Config) (client authd.PAMClient) {
+	t.Helper()
 
 	// socket path is limited in length.
 	tmpDir, err := os.MkdirTemp("", "authd-socket-dir")
@@ -905,7 +918,7 @@ func newPamClientWithConfig(t *testing.T, m *users.Manager, brokerManager *broke
 		t.Cleanup(func() { _ = m.Stop() })
 	}
 
-	service := pam.NewService(context.Background(), m, brokerManager, cfg)
+	service := pam.NewService(context.Background(), m, brokerManager, pm, cfg)
 
 	grpcServer := grpc.NewServer(permissions.WithUnixPeerCreds(), grpc.ChainUnaryInterceptor(errmessages.RedactErrorInterceptor))
 	authd.RegisterPAMServer(grpcServer, service)
@@ -997,6 +1010,62 @@ func setupGlobalBrokerMock() (cleanup func(), err error) {
 	}
 
 	return cleanup, nil
+}
+
+func TestUserRequestsAreOnlyAllowedToRootOrTheUser(t *testing.T) {
+	currentUser, err := user.Current()
+	require.NoError(t, err, "Setup: could not get the current user")
+	if _, err := user.LookupId(currentUser.Uid); err != nil {
+		t.Skipf("Setup: current user %s can't be resolved: %v", currentUser.Uid, err)
+	}
+
+	pm := permissions.New(permissions.Z_ForTests_WithRootUID(math.MaxUint32 - 1))
+	client := newPamClientWithPermissions(t, nil, globalBrokerManager, &pm, pam.DefaultConfig)
+
+	// The same error is returned for any other user, so that it does not
+	// reveal whether the user exists.
+	const deniedError = "permission denied: only root can perform this operation for other users"
+
+	tests := map[string]struct {
+		username string
+
+		wantDenied bool
+	}{
+		"Allowed_for_the_user_itself":                 {username: currentUser.Username},
+		"Allowed_for_the_user_itself_in_another_case": {username: strings.ToUpper(currentUser.Username)},
+
+		"Denied_for_an_existing_user":    {username: "root", wantDenied: true},
+		"Denied_for_a_non_existing_user": {username: "no-such-user@example.com", wantDenied: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			if tc.wantDenied && strings.EqualFold(tc.username, currentUser.Username) {
+				t.Skip("The current user is the user that should be denied")
+			}
+
+			_, err := client.GetBroker(context.Background(), &authd.GBRequest{Username: tc.username})
+			if tc.wantDenied {
+				require.EqualError(t, err, deniedError, "GetBroker should be denied")
+			} else {
+				require.NoError(t, err, "GetBroker should be allowed")
+			}
+
+			sbResp, err := client.SelectBroker(context.Background(), &authd.SBRequest{
+				BrokerId: mockBrokerGeneratedID,
+				Username: tc.username,
+				Mode:     authd.SessionMode_LOGIN,
+			})
+			if tc.wantDenied {
+				require.EqualError(t, err, deniedError, "SelectBroker should be denied")
+				return
+			}
+			require.NoError(t, err, "SelectBroker should be allowed")
+			require.NotEmpty(t, sbResp.GetSessionId(), "SelectBroker should start a session")
+
+			_, err = client.EndSession(context.Background(), &authd.ESRequest{SessionId: sbResp.GetSessionId()})
+			require.NoError(t, err, "EndSession should be allowed")
+		})
+	}
 }
 
 func TestMain(m *testing.M) {
