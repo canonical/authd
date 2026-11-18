@@ -348,6 +348,14 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 		return nil, err
 	}
 
+	// The client may have gone away while the session was being created, in
+	// which case the connection closure has already been notified and will not
+	// clean up this session, so abandon it ourselves.
+	if ctx.Err() != nil {
+		s.brokerManager.AbandonSession(sessionID)
+		return nil, status.FromContextError(ctx.Err()).Err()
+	}
+
 	return &authd.SBResponse{
 		SessionId:     sessionID,
 		EncryptionKey: encryptionKey,
@@ -584,6 +592,11 @@ func (s Service) EndSession(ctx context.Context, req *authd.ESRequest) (empty *a
 	}
 
 	return &authd.Empty{}, s.brokerManager.EndSession(sessionID)
+}
+
+// EndSessionsForConnection ends the sessions created by the given client connection.
+func (s Service) EndSessionsForConnection(connectionID string) {
+	s.brokerManager.EndSessionsForConnection(connectionID)
 }
 
 // checkSessionOwnership ensures that the session was created by the client connection sending the request.

@@ -899,6 +899,13 @@ func newPamClientWithConfig(t *testing.T, m *users.Manager, brokerManager *broke
 // and the socket path it listens on.
 func newPamServerForTests(t *testing.T, m *users.Manager, brokerManager *brokers.Manager, cfg pam.Config) (conn *grpc.ClientConn, socketPath string) {
 	t.Helper()
+	return newPamServerWithConnectionHandler(t, m, brokerManager, cfg, nil)
+}
+
+// newPamServerWithConnectionHandler is like newPamServerForTests, but also calls
+// connectionClosed once the service handled the closure of a client connection.
+func newPamServerWithConnectionHandler(t *testing.T, m *users.Manager, brokerManager *brokers.Manager, cfg pam.Config, connectionClosed func()) (conn *grpc.ClientConn, socketPath string) {
+	t.Helper()
 
 	// socket path is limited in length.
 	tmpDir, err := os.MkdirTemp("", "authd-socket-dir")
@@ -919,7 +926,12 @@ func newPamServerForTests(t *testing.T, m *users.Manager, brokerManager *brokers
 
 	grpcServer := grpc.NewServer(
 		permissions.WithUnixPeerCreds(),
-		grpc.StatsHandler(permissions.NewConnectionTracker()),
+		grpc.StatsHandler(permissions.NewConnectionTracker(func(connectionID string) {
+			pamService.EndSessionsForConnection(connectionID)
+			if connectionClosed != nil {
+				connectionClosed()
+			}
+		})),
 		grpc.ChainUnaryInterceptor(errmessages.RedactErrorInterceptor))
 	authd.RegisterPAMServer(grpcServer, pamService)
 	done := make(chan struct{})
@@ -1074,6 +1086,78 @@ func TestSessionIsOnlyUsableByItsCreator(t *testing.T) {
 
 	_, err = client.EndSession(context.Background(), &authd.ESRequest{SessionId: sessionID})
 	require.NoError(t, err, "The session creator should still be able to end its session")
+}
+
+func TestSessionEndsWhenTheClientDisconnects(t *testing.T) {
+	conn, _ := newPamServerForTests(t, nil, globalBrokerManager, pam.DefaultConfig)
+	client := authd.NewPAMClient(conn)
+
+	sessionID := startSession(t, client, "user@example.com")
+	_, err := client.GetAuthenticationModes(context.Background(), &authd.GAMRequest{
+		SessionId:          sessionID,
+		SupportedUiLayouts: []*authd.UILayout{requiredEntry},
+	})
+	require.NoError(t, err, "The session should be active while the client is connected")
+
+	require.NoError(t, conn.Close(), "Closing the client connection should not fail")
+
+	require.Eventually(t, func() bool {
+		_, err := globalBrokerManager.BrokerFromSessionID(sessionID)
+		return err != nil
+	}, 5*time.Second, 10*time.Millisecond, "The session should be ended when its client disconnects")
+}
+
+func TestSessionEndsWhenTheClientDisconnectsDuringItsCreation(t *testing.T) {
+	connectionClosed := make(chan struct{})
+	conn, _ := newPamServerWithConnectionHandler(t, nil, globalBrokerManager, pam.DefaultConfig,
+		func() { close(connectionClosed) })
+	client := authd.NewPAMClient(conn)
+
+	username := t.Name() + testutils.IDSeparator + "user@example.com"
+	// The broker receives the normalized username.
+	brokerUsername := strings.ToLower(username)
+	brokerSessionID := testutils.GenerateSessionID(brokerUsername)
+	sessionID := mockBrokerGeneratedID + "-" + brokerSessionID
+
+	newSession := testutils.BlockBrokerMockCall(brokerUsername)
+	t.Cleanup(newSession.Release)
+	sessionEnded := testutils.WatchBrokerMockEndSession(brokerSessionID)
+
+	selectBrokerDone := make(chan error, 1)
+	go func() {
+		_, err := client.SelectBroker(context.Background(), &authd.SBRequest{
+			BrokerId: mockBrokerGeneratedID,
+			Username: username,
+			Mode:     authd.SessionMode_LOGIN,
+		})
+		selectBrokerDone <- err
+	}()
+
+	select {
+	case <-newSession.Started():
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "The broker did not receive the NewSession call")
+	}
+
+	require.NoError(t, conn.Close(), "Closing the client connection should not fail")
+
+	select {
+	case <-connectionClosed:
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "The closure of the client connection was not handled")
+	}
+
+	newSession.Release()
+	require.Error(t, <-selectBrokerDone, "SelectBroker should fail once the client went away")
+
+	select {
+	case <-sessionEnded:
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "The broker should be asked to end the late session")
+	}
+
+	_, err := globalBrokerManager.BrokerFromSessionID(sessionID)
+	require.Error(t, err, "The late session should not be kept by the manager")
 }
 
 func TestMain(m *testing.M) {

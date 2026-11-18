@@ -59,7 +59,7 @@ func (m Manager) RegisterGRPCServices(ctx context.Context) *grpc.Server {
 
 	opts := []grpc.ServerOption{
 		permissions.WithUnixPeerCreds(),
-		grpc.StatsHandler(permissions.NewConnectionTracker()),
+		grpc.StatsHandler(permissions.NewConnectionTracker(m.pamService.EndSessionsForConnection)),
 		grpc.ChainUnaryInterceptor(errmessages.RedactErrorInterceptor),
 	}
 	grpcServer := grpc.NewServer(opts...)
