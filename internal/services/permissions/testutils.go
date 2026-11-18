@@ -27,6 +27,17 @@ func Z_ForTests_WithCurrentUserAsRoot() Option {
 	}
 }
 
+// Z_ForTests_WithRootUID returns an Option that sets the rootUID to the given UID.
+//
+// nolint:revive,nolintlint // We want to use underscores in the function name here.
+func Z_ForTests_WithRootUID(uid uint32) Option {
+	testsdetection.MustBeTesting()
+
+	return func(o *options) {
+		o.rootUID = uid
+	}
+}
+
 // currentUserUID returns the current user UID or panics.
 func currentUserUID() uint32 {
 	testsdetection.MustBeTesting()
