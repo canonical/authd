@@ -81,6 +81,61 @@ Test Entra Unix IDs are cached and can be applied
 
     Check Private Group Matches UID    ${username}    ${expected_uid}
 
+Test Entra Unix IDs can be applied with the snap helper
+    [Documentation]    Verify that authd-entra-unix-ids reads cached Entra UID/GID values,
+    ...    shows the planned authctl commands, and applies them when --apply is specified.
+    ...    The private group and primary GID must match the UID, including after a repeat application.
+
+    Log In
+
+    Open Terminal
+    Log In With Remote User Through CLI: QR Code
+    ...    ${username}    ${local_password}    ${username}    ${entra_password_env}    ${entra_totp_env}
+    Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
+
+    Wait Until Keyword Succeeds    30s    2s    Find User Token Cache    ${username}
+    ${token_path}=    Find User Token Cache    ${username}
+
+    ${cached_uid}=    Read Cached UID    ${token_path}
+    Should Be Equal As Strings    ${cached_uid}    ${expected_uid}
+    ${cached_gid}=    Read Cached Group Field    ${token_path}    ${configured_group}    gid
+    Should Be Equal As Strings    ${cached_gid}    ${expected_gid}
+
+    Log Out From Terminal Session
+    Close Focused Window
+    SSH.Execute    loginctl terminate-user ${username} || true
+    Wait Until Keyword Succeeds    30s    1s    SSH.Execute    test -z "$(pgrep -u ${username} || true)"
+
+    ${helper_path}=    Set Variable    /snap/authd-msentraid/current/usr/bin/authd-entra-unix-ids
+    SSH.Execute    ln -sfn ${helper_path} /usr/local/bin/authd-entra-unix-ids
+    ${apply_command}=    Set Variable    authd-entra-unix-ids
+    ${installed_path}=    SSH.Execute    command -v ${apply_command}
+    Should Be Equal As Strings    ${installed_path}    /usr/local/bin/authd-entra-unix-ids
+
+    ${attribute_args}=    Set Variable    --uid-attribute ${uid_attribute} --gid-attribute ${gid_attribute}
+    ${dry_run_output}=    SSH.Execute    ${apply_command} ${attribute_args} --authctl authctl ${token_path}
+    Should Contain    ${dry_run_output}    authctl user set-uid -- ${username} ${expected_uid}
+    Should Contain    ${dry_run_output}    authctl group set-gid -- ${username} ${expected_uid}
+    Should Contain    ${dry_run_output}    authctl group set-gid -- ${configured_group} ${expected_gid}
+
+    ${apply_output}=    SSH.Execute    ${apply_command} --apply ${attribute_args} --authctl authctl ${token_path} 2>&1
+    Should Contain    ${apply_output}    Applying cached assignments for ${username}:
+    Should Contain    ${apply_output}    UID of user '${username}' set to ${expected_uid}.
+    Should Contain    ${apply_output}    GID of group '${username}' set to ${expected_uid}.
+    Should Contain    ${apply_output}    GID of group '${configured_group}' set to ${expected_gid}.
+
+    ${actual_uid}=    SSH.Execute    getent passwd '${username}' | cut -d: -f3
+    Should Be Equal As Strings    ${actual_uid}    ${expected_uid}
+    ${actual_gid}=    SSH.Execute    getent group '${configured_group}' | cut -d: -f3
+    Should Be Equal As Strings    ${actual_gid}    ${expected_gid}
+
+    Check Private Group Matches UID    ${username}    ${expected_uid}
+
+    ${repeat_output}=    SSH.Execute    ${apply_command} --apply ${attribute_args} --authctl authctl ${token_path} 2>&1
+    Should Contain    ${repeat_output}    User '${username}' already has UID ${expected_uid}.
+    Should Contain    ${repeat_output}    Group '${username}' already has GID ${expected_uid}.
+    Check Private Group Matches UID    ${username}    ${expected_uid}
+
 Test Offline Login Uses Complete Cached Unix IDs Unless Provider Check Is Forced
     [Documentation]    Verify complete cached required UID/GID values allow offline login when
     ...    force_access_check_with_provider is false, but do not bypass a forced provider check.
