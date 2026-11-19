@@ -415,7 +415,8 @@ Group membership can be used to manage user privileges, including **sudo** and
 For Microsoft Entra ID, stable UID and remote group GID values can be read from
 directory extension properties and applied explicitly after login. See
 [Configure stable Unix IDs from Entra ID](configure-entra-unix-ids) for the
-extension-property workflow, cache layout, and required-value policy.
+extension-property workflow, cache layout, required-value policy, and
+provisioning script.
 
 In addition, you can configure extra groups for authd users.
 On login, the users are added to these groups automatically.

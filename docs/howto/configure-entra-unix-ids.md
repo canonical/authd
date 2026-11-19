@@ -12,8 +12,11 @@ Unix GIDs from the user's remote groups. It stores the values in the broker's
 `token.json` cache.
 
 The broker does not apply these values to the authd database
-during login. After reviewing the cached values, you can
-[apply them](#apply-the-cached-values) with `authctl`.
+during login. After reviewing the cached values, you can apply them individually
+with `authctl` or use the [provisioning helper](#apply-the-cached-values) to
+prepare the user's UID and remote-group GID updates from one cache for review.
+The helper is bundled with the `authd-msentraid` snap and runs on the host so
+it can call the host's `authctl`.
 
 ```{note}
 This feature is disabled unless `unix_uid_attribute` or
@@ -136,11 +139,14 @@ Replace `<USER_UPN>` with the user's Entra sign-in name or object ID, and
 ### Naming conventions
 
 An Entra group with the same name as the user collides with the private group
-automatically created by authd. Applying that group's GID with `authctl` would
-change the private group's GID. If the cache has a UID, the group's GID must
-match that UID. Entra groups whose names are the same in lowercase also
-conflict. Avoid names that match local groups. `authctl` is the final check for
-local and authd database conflicts.
+automatically created by authd.
+If the cache has no UID, the [script](#apply-the-cached-values) refuses to apply
+the cache, because applying the group's GID would change the private group's
+GID.
+If the cache has a UID, the group's GID must match that UID.
+Entra groups whose names are the same in lowercase conflict, and the script
+refuses them. Also avoid names that match local groups. `authctl` is the final
+check for local and authd database conflicts.
 
 Use the full property names returned when the properties were created. For
 example, an attribute created by Entra Connect or Cloud Sync may use
@@ -293,22 +299,61 @@ no cached `gid` should also be skipped.
 
 After you change the attribute configuration, log in as the user before you
 apply the values. The broker drops IDs from the old attribute only during a
-login. The cache records which attribute names produced its IDs, so check that
-the cache was refreshed with the current configuration before you use it.
+login.
 
-Review the cache as described in the previous section. Then apply each value
-with `authctl`:
+Review the cache first. The `authd-entra-unix-ids` helper is bundled in the
+`authd-msentraid` snap. Install the snap if needed, then create a host command
+symlink to the snap's `current` path. This path follows snap refreshes:
+
+```shell
+sudo snap install authd-msentraid  # Skip if the snap is already installed.
+sudo ln -sfn /snap/authd-msentraid/current/usr/bin/authd-entra-unix-ids \
+  /usr/local/bin/authd-entra-unix-ids
+```
+
+The helper needs `jq`, which the `authd` package recommends. See
+`man authd-entra-unix-ids` for all options, environment variables, and exit
+codes. Pass the attribute names from the `[msentraid]` section of the broker
+configuration:
+
+```shell
+sudo authd-entra-unix-ids --uid-attribute extension_abc123_uidNumber \
+  --gid-attribute extension_abc123_gidNumber /path/to/token.json
+```
+
+From a source checkout, run `scripts/authd-entra-unix-ids` instead of the
+installed `authd-entra-unix-ids` command.
+
+For short attribute names, use the `client_id` from the `[oidc]` section:
+
+```shell
+sudo authd-entra-unix-ids --uid-attribute uidNumber --gid-attribute gidNumber \
+  --client-id <APPLICATION_CLIENT_ID> /path/to/token.json
+```
+
+Use `--apply` only after reviewing the planned changes:
+
+```shell
+sudo authd-entra-unix-ids --apply --uid-attribute extension_abc123_uidNumber \
+  --gid-attribute extension_abc123_gidNumber /path/to/token.json
+```
+
+If the command refuses the cache because its attribute names do not match the
+current configuration, log in again with that configuration to refresh the
+cache, then review it again.
+
+When the cache contains a UID, applying it also sets the GID of the user's
+private group to that UID. Details about local groups and conflict handling are
+in the
+[flow explanation](../explanation/entra-unix-id-flows).
+
+For individual changes, use:
 
 ```shell
 sudo authctl user set-uid <user> <uid>
 sudo authctl group set-gid <user> <uid>
 sudo authctl group set-gid <normalized-group-name> <gid>
 ```
-
-Set the GID of the user's private group to the cached UID, as in the second
-command. Skip groups with an empty `ugid` and groups with no cached `gid`.
-Details about local groups and conflict handling are in the
-[flow explanation](../explanation/entra-unix-id-flows).
 
 Before changing an existing UID, stop the user's active sessions. Check for
 duplicate IDs before applying a batch. `authctl` remains the final check for
