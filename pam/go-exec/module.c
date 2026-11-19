@@ -204,6 +204,8 @@ typedef struct
   GCond    completion_cond;
   gboolean completed;
 
+  GCancellable *cancellable;
+
 #ifdef AUTHD_TEST_MODULE
   GThread      *main_thread;
   GMainContext *action_context;
@@ -237,15 +239,19 @@ invoke_conversation_on_action_context (gpointer data)
   g_assert (g_main_context_is_owner (conversation_invocation->action_context));
 #endif
 
-  if (conversation_invocation->style == PAM_PROMPT_ECHO_ON ||
-      conversation_invocation->style == PAM_PROMPT_ECHO_OFF)
-    response_ptr = &conversation_invocation->response;
+  conversation_invocation->ret = PAM_CONV_ERR;
+  if (!g_cancellable_is_cancelled (conversation_invocation->cancellable))
+    {
+      if (conversation_invocation->style == PAM_PROMPT_ECHO_ON ||
+          conversation_invocation->style == PAM_PROMPT_ECHO_OFF)
+        response_ptr = &conversation_invocation->response;
 
-  conversation_invocation->ret = pam_prompt (conversation_invocation->pamh,
-                                             conversation_invocation->style,
-                                             response_ptr,
-                                             "%s",
-                                             conversation_invocation->message);
+      conversation_invocation->ret = pam_prompt (conversation_invocation->pamh,
+                                                 conversation_invocation->style,
+                                                 response_ptr,
+                                                 "%s",
+                                                 conversation_invocation->message);
+    }
 
   g_mutex_lock (&conversation_invocation->completion_mutex);
   conversation_invocation->completed = TRUE;
@@ -256,11 +262,15 @@ invoke_conversation_on_action_context (gpointer data)
 }
 
 static int
-conversation_invocation_run (ActionData  *action_data,
-                             int          style,
-                             const char  *prompt,
-                             char       **response)
+conversation_invocation_run (ActionData   *action_data,
+                             int           style,
+                             const char   *prompt,
+                             char        **response,
+                             GCancellable *cancellable)
 {
+  if (g_cancellable_is_cancelled (cancellable))
+    return PAM_CONV_ERR;
+
   g_auto(ConversationInvocation) conversation_invocation = {
     .pamh = action_data->pamh,
 #ifdef AUTHD_TEST_MODULE
@@ -269,6 +279,7 @@ conversation_invocation_run (ActionData  *action_data,
 #endif
     .style = style,
     .message = g_strdup (prompt),
+    .cancellable = cancellable,
   };
 
   g_mutex_init (&conversation_invocation.completion_mutex);
@@ -318,7 +329,7 @@ notify_error (ActionData *action_data,
   else
     g_warning ("%s", prompt);
 
-  conversation_invocation_run (action_data, PAM_ERROR_MSG, prompt, NULL);
+  conversation_invocation_run (action_data, PAM_ERROR_MSG, prompt, NULL, NULL);
 }
 
 static GLogWriterOutput
@@ -508,6 +519,7 @@ typedef struct
   pid_t             child_pid;
   GMainLoop        *main_loop;
   GDBusConnection **connection_ptr;
+  GCancellable     *cancellable;
 } WaitChildThreadData;
 
 static gpointer
@@ -560,6 +572,8 @@ wait_child_thread (gpointer data)
           break;
         }
     }
+
+  g_cancellable_cancel (thread_data->cancellable);
 
   /* This is safe to do because the main thread is waiting for us at this point */
   if ((connection = g_atomic_pointer_get (thread_data->connection_ptr)))
@@ -761,7 +775,8 @@ on_pam_method_call (GDBusConnection       *connection,
 
       g_variant_get (parameters, "(i&s)", &style, &prompt);
 
-      ret = conversation_invocation_run (action_data, style, prompt, &response);
+      ret = conversation_invocation_run (action_data, style, prompt, &response,
+                                         action_data->cancellable);
       g_dbus_method_invocation_return_value (invocation,
                                              g_variant_new ("(is)", ret,
                                                             response ? response : ""));
@@ -1392,6 +1407,7 @@ do_pam_action_thread (pam_handle_t *pamh,
     .child_pid = child_pid,
     .main_loop = g_main_loop_ref (action_data.loop),
     .connection_ptr = &action_data.connection,
+    .cancellable = action_data.cancellable,
   });
 
   g_main_loop_run (action_data.loop);
