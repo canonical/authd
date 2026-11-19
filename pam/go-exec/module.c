@@ -772,9 +772,7 @@ on_pam_method_call (GDBusConnection       *connection,
       g_autoptr (GError) error = NULL;
 
 
-      g_dbus_connection_close_sync (action_data->connection,
-                                    action_data->cancellable,
-                                    &error);
+      g_dbus_connection_close_sync (action_data->connection, NULL, &error);
       g_assert_no_error (error);
     }
 #endif
