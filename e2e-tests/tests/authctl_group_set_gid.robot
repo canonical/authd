@@ -51,7 +51,7 @@ Test authctl group set-gid
     ${output} =    SSH.Execute    authctl group set-gid ${group_name} ${new_gid} 2>&1
     Should Contain    ${output}    GID of group '${group_name}' set to ${new_gid}.
 
-    ${actual_gid} =    SSH.Execute    getent group ${group_name} | cut -d: -f3
+    ${actual_gid} =    SSH.Execute    AUTHD_NSS_INFO=1 getent group ${group_name} | cut -d: -f3
     Should Be Equal As Strings    ${actual_gid}    ${new_gid}
 
     ${reverse_lookup} =    SSH.Execute    getent group ${new_gid} | cut -d: -f1

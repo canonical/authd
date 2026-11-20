@@ -87,6 +87,8 @@ fn get_entry_by_gid(gid: gid_t) -> Response<Group> {
 
 /// get_entry_by_name connects to the grpc server and asks for the group entry with the given name.
 fn get_entry_by_name(name: String) -> Response<Group> {
+    info!("starting group lookup by name");
+
     let rt = match super::build_runtime() {
         Some(rt) => rt,
         None => {
@@ -103,10 +105,16 @@ fn get_entry_by_name(name: String) -> Response<Group> {
             }
         };
 
+        info!("connected to authd for group name lookup");
+
         let mut req = Request::new(authd::GetGroupByNameRequest { name: name.clone() });
         req.set_timeout(REQUEST_TIMEOUT);
+        info!("sending group name lookup request");
         match client.get_group_by_name(req).await {
-            Ok(r) => Response::Success(authd_group_to_group_entry(r.into_inner())),
+            Ok(r) => {
+                info!("group name lookup request completed");
+                Response::Success(authd_group_to_group_entry(r.into_inner()))
+            }
             Err(e) => {
                 info!(
                     "error when getting group by name '{}': {}",
