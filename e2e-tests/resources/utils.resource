@@ -497,9 +497,6 @@ Log Installed Package Information
     ...    snap list %{BROKER} | awk -v broker='%{BROKER}' '$1 == broker {if ($3 ~ /^x[0-9]+$/) printf "%s (local, rev %s)\\n", $2, $3; else printf "%s (%s, rev %s)\\n", $2, $4, $3; exit}'
     ${authd_dependencies}=    SSH.Execute
     ...    { printf '%s\\n' authd gnome-shell; apt-cache depends authd | awk '/^[[:space:]|]+(Pre-Depends|Depends|Recommends|Breaks): / {print $2}'; } | sort -u | while read -r package; do if ! dpkg-query --show "$package" 2>/dev/null; then printf '%s (not installed)\\n' "$package"; fi; done
-    ${authd_apt_policy}=    SSH.Execute    apt-cache policy authd
-    ${gnome_shell_apt_policy}=    SSH.Execute    apt-cache policy gnome-shell yaru-theme-gnome-shell
-
     # Keep stable package versions separate so migration setup does not
     # overwrite the under-test versions stored on the root suite.
     IF    '${snapshot}' == '%{BROKER}-stable-installed'
@@ -510,6 +507,11 @@ Log Installed Package Information
         Set Suite Metadata    Broker Version    ${broker_version}    top=True
     END
 
+    Log Authd Package Policies
+
+Log Authd Package Policies
+    ${authd_apt_policy}=    SSH.Execute    apt-cache policy authd
+    ${gnome_shell_apt_policy}=    SSH.Execute    apt-cache policy gnome-shell yaru-theme-gnome-shell
     Log    authd apt policy:\n${authd_apt_policy}
     Log    gnome-shell apt policy:\n${gnome_shell_apt_policy}
 

@@ -45,10 +45,7 @@ Test login after upgrading authd and broker
     Update Broker
     Update Authd    skip_if_authd_stable_ppa_is_unavailable=${True}
 
-    ${authd_apt_policy}=    SSH.Execute    apt-cache policy authd
-    ${gnome_shell_apt_policy}=    SSH.Execute    apt-cache policy gnome-shell yaru-theme-gnome-shell
-    Log    authd apt policy:\n${authd_apt_policy}
-    Log    gnome-shell apt policy:\n${gnome_shell_apt_policy}
+    Log Authd Package Policies
 
     # Log in with remote user with local password after upgrading
     Open Terminal

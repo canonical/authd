@@ -27,9 +27,7 @@ Test synced passkey user is offered Entra password fallback
     Start Log In With Remote User Through GDM    ${username}
     Select Broker Through GDM
 
-    # The password fallback must be the first usable step. A pre-fix broker waits
-    # for a local security key here and does not reach this prompt promptly.
-    Match Text    Enter your Entra ID password    30    similarity=90
+    Check Entra Password Fallback Is Offered
 
 Test passwordless synced passkey user falls back to TAP
     [Documentation]    Verify that a synced-passkey account can use a
@@ -52,6 +50,11 @@ Test passwordless synced passkey user falls back to TAP
 
 
 *** Keywords ***
+Check Entra Password Fallback Is Offered
+    # The password fallback must be the first usable step. A pre-fix broker waits
+    # for a local security key here and does not reach this prompt promptly.
+    Match Text    Enter your Entra ID password    30    similarity=90
+
 Test Setup
     ${passkey_user} =    Get Environment Variable    E2E_PASSKEY_USER    ${EMPTY}
     Set Suite Variable    ${username}    ${passkey_user}
