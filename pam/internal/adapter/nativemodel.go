@@ -153,7 +153,7 @@ func (m nativeModel) checkStage(expected proto.Stage) bool {
 }
 
 func (m nativeModel) requestStageChange(stage proto.Stage) tea.Cmd {
-	return sendEvent(nativeStageChangeRequest{stage})
+	return sendEvent(nativeStageChangeRequest{Stage: stage})
 }
 
 func (m nativeModel) Update(msg tea.Msg) (nativeModel, tea.Cmd) {

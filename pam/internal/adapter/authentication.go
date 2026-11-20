@@ -557,7 +557,7 @@ func (m *authenticationModel) Compose(brokerID, sessionID string, encryptionKey 
 
 	if m.clientType != InteractiveTerminal {
 		m.currentModel = &focusTrackerModel{}
-		return sendEvent(ChangeStage{pam_proto.Stage_challenge})
+		return sendEvent(ChangeStage{Stage: pam_proto.Stage_challenge})
 	}
 
 	switch layout.Type {
@@ -586,7 +586,7 @@ func (m *authenticationModel) Compose(brokerID, sessionID string, encryptionKey 
 
 	return tea.Sequence(
 		m.currentModel.Init(),
-		sendEvent(ChangeStage{pam_proto.Stage_challenge}))
+		sendEvent(ChangeStage{Stage: pam_proto.Stage_challenge}))
 }
 
 // View renders a text view of the authentication UI.

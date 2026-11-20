@@ -16,10 +16,15 @@ import (
 type authModeSelectionModel struct {
 	List
 
-	supportedUILayouts        []*authd.UILayout
-	availableAuthModes        []*authd.GAMResponse_AuthenticationMode
-	autoSelectedAuthModeID    string
-	currentAuthModeSelectedID string
+	supportedUILayouts     []*authd.UILayout
+	availableAuthModes     []*authd.GAMResponse_AuthenticationMode
+	autoSelectedAuthModeID string
+	// autoSelectedAuthModeFromGDM preserves the source of an early GDM selection.
+	autoSelectedAuthModeFromGDM bool
+	currentAuthModeSelectedID   string
+	// pendingAutoSelectedAuthModeID suppresses a matching GDM selection while
+	// the local auto-selection is being sent back.
+	pendingAutoSelectedAuthModeID string
 }
 
 // supportedUILayoutsReceived is the internal event signalling that the current supported ui layout in the context have been received.
@@ -33,6 +38,9 @@ type supportedUILayoutsSet struct{}
 // authModesReceived is the internal event signalling that the supported authentication modes have been received.
 type authModesReceived struct {
 	authModes []*authd.GAMResponse_AuthenticationMode
+	sessionID string
+	// stageReady means GDM acknowledged authModeSelection; local selection can run.
+	stageReady bool
 }
 
 // authModeSelected is the internal event signalling that the an authentication mode has been selected.
@@ -122,7 +130,13 @@ func (m authModeSelectionModel) Update(msg tea.Msg) (authModeSelectionModel, tea
 
 		if m.autoSelectedAuthModeID != "" {
 			authMode := m.autoSelectedAuthModeID
+			fromGDM := m.autoSelectedAuthModeFromGDM
 			m.autoSelectedAuthModeID = ""
+			m.autoSelectedAuthModeFromGDM = false
+			if fromGDM {
+				return m, tea.Sequence(cmd, selectGdmAuthMode(authMode))
+			}
+			m.pendingAutoSelectedAuthModeID = authMode
 			return m, tea.Sequence(cmd, selectAuthMode(authMode))
 		}
 
@@ -165,12 +179,15 @@ func (m authModeSelectionModel) Update(msg tea.Msg) (authModeSelectionModel, tea
 
 		firstAuthModeID := m.availableAuthModes[0].Id
 		selectedID := firstAuthModeID
+		selectedFromGDM := false
 		if validAuthModeID(m.autoSelectedAuthModeID, m.availableAuthModes) {
 			selectedID = m.autoSelectedAuthModeID
+			selectedFromGDM = m.autoSelectedAuthModeFromGDM
 		}
 
 		if m.clientType != InteractiveTerminal && !m.Focused() {
 			m.autoSelectedAuthModeID = selectedID
+			m.autoSelectedAuthModeFromGDM = selectedFromGDM
 			return m, cmd
 		}
 
@@ -179,6 +196,11 @@ func (m authModeSelectionModel) Update(msg tea.Msg) (authModeSelectionModel, tea
 		// arrived before the mode list was fetched). Fall back to the first
 		// available mode.
 		m.autoSelectedAuthModeID = ""
+		m.autoSelectedAuthModeFromGDM = false
+		if selectedFromGDM {
+			return m, tea.Sequence(cmd, selectGdmAuthMode(selectedID))
+		}
+		m.pendingAutoSelectedAuthModeID = selectedID
 
 		return m, tea.Sequence(cmd, selectAuthMode(selectedID))
 
@@ -194,6 +216,17 @@ func (m authModeSelectionModel) Update(msg tea.Msg) (authModeSelectionModel, tea
 
 	case authModeSelected:
 		safeMessageDebug(msg)
+		if m.pendingAutoSelectedAuthModeID != "" {
+			if msg.fromGDM && msg.id == m.pendingAutoSelectedAuthModeID {
+				log.Debugf(context.TODO(),
+					"Ignoring duplicate GDM auth mode selection for pending auto-selection %q",
+					msg.id)
+				return m, nil
+			}
+			if msg.id != m.pendingAutoSelectedAuthModeID {
+				m.pendingAutoSelectedAuthModeID = ""
+			}
+		}
 		// Ensure auth mode id is valid
 		if !validAuthModeID(msg.id, m.availableAuthModes) {
 			if len(m.availableAuthModes) == 0 {
@@ -202,6 +235,7 @@ func (m authModeSelectionModel) Update(msg tea.Msg) (authModeSelectionModel, tea
 				// where changeStageCmd runs before getModesCmd). Defer this
 				// selection; it will be applied when authModesReceived fires.
 				m.autoSelectedAuthModeID = msg.id
+				m.autoSelectedAuthModeFromGDM = msg.fromGDM
 				return m, nil
 			}
 			log.Infof(context.TODO(), "authentication mode %q is not part of currently available authentication mode", msg.id)
@@ -280,6 +314,7 @@ func getAuthenticationModes(client authd.PAMClient, sessionID string, uiLayouts 
 
 		return authModesReceived{
 			authModes: authModes,
+			sessionID: sessionID,
 		}
 	}
 }
@@ -289,6 +324,8 @@ func (m *authModeSelectionModel) Reset() {
 	log.Debugf(context.TODO(), "%T: Reset", m)
 	m.currentAuthModeSelectedID = ""
 	m.autoSelectedAuthModeID = ""
+	m.autoSelectedAuthModeFromGDM = false
+	m.pendingAutoSelectedAuthModeID = ""
 }
 
 // SupportedUILayouts returns safely currently loaded supported ui layouts.
