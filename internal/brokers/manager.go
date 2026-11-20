@@ -17,6 +17,9 @@ import (
 	"github.com/godbus/dbus/v5"
 )
 
+// ErrSessionNotOwned is returned when a session is used by a connection that did not create it.
+var ErrSessionNotOwned = errors.New("session is not owned by the caller")
+
 // Manager is the object that manages the available brokers and the session->broker and user->broker relationships.
 type Manager struct {
 	brokers      map[string]*Broker
@@ -28,6 +31,7 @@ type Manager struct {
 	transactionsToBroker   map[string]*Broker
 	sessionsToUsername     map[string]string
 	sessionsToServiceName  map[string]string
+	sessionsToConnection   map[string]string
 	transactionsToBrokerMu sync.RWMutex
 
 	cleanup func()
@@ -116,6 +120,7 @@ func NewManager(ctx context.Context, brokersConfPath string, configuredBrokers [
 		transactionsToBroker:  make(map[string]*Broker),
 		sessionsToUsername:    make(map[string]string),
 		sessionsToServiceName: make(map[string]string),
+		sessionsToConnection:  make(map[string]string),
 
 		cleanup: cleanup,
 	}, nil
@@ -161,14 +166,19 @@ func (m *Manager) BrokerFromSessionID(id string) (broker *Broker, err error) {
 
 	broker, exists := m.transactionsToBroker[id]
 	if !exists {
-		return nil, fmt.Errorf("no broker found for session %q", id)
+		return nil, sessionNotFoundError(id)
 	}
 
 	return broker, nil
 }
 
+func sessionNotFoundError(sessionID string) error {
+	return fmt.Errorf("no broker found for session %q", sessionID)
+}
+
 // NewSession create a new session for the broker and store the sessionID on the manager.
-func (m *Manager) NewSession(brokerID, username, lang, mode, providerID, serviceName string) (sessionID string, encryptionKey string, err error) {
+// The connectionID identifies the client connection that requested the session.
+func (m *Manager) NewSession(brokerID, username, lang, mode, providerID, serviceName, connectionID string) (sessionID string, encryptionKey string, err error) {
 	broker, err := m.BrokerFromID(brokerID)
 	if err != nil {
 		return "", "", fmt.Errorf("invalid broker: %v", err)
@@ -186,6 +196,7 @@ func (m *Manager) NewSession(brokerID, username, lang, mode, providerID, service
 	m.transactionsToBroker[sessionID] = broker
 	m.sessionsToUsername[sessionID] = username
 	m.sessionsToServiceName[sessionID] = serviceName
+	m.sessionsToConnection[sessionID] = connectionID
 	return sessionID, encryptionKey, nil
 }
 
@@ -207,8 +218,64 @@ func (m *Manager) EndSession(sessionID string) error {
 	delete(m.transactionsToBroker, sessionID)
 	delete(m.sessionsToUsername, sessionID)
 	delete(m.sessionsToServiceName, sessionID)
+	delete(m.sessionsToConnection, sessionID)
 	m.transactionsToBrokerMu.Unlock()
 	return nil
+}
+
+// CheckSessionOwnership checks that the session exists and was created by the given client connection.
+func (m *Manager) CheckSessionOwnership(sessionID, connectionID string) error {
+	m.transactionsToBrokerMu.RLock()
+	defer m.transactionsToBrokerMu.RUnlock()
+
+	ownerConnectionID, found := m.sessionsToConnection[sessionID]
+	if !found {
+		return sessionNotFoundError(sessionID)
+	}
+	if ownerConnectionID != connectionID {
+		return ErrSessionNotOwned
+	}
+
+	return nil
+}
+
+// EndSessionsForConnection ends all the sessions created by the given client connection.
+func (m *Manager) EndSessionsForConnection(connectionID string) {
+	m.transactionsToBrokerMu.RLock()
+	var sessionIDs []string
+	for sessionID, sessionConnectionID := range m.sessionsToConnection {
+		if sessionConnectionID == connectionID {
+			sessionIDs = append(sessionIDs, sessionID)
+		}
+	}
+	m.transactionsToBrokerMu.RUnlock()
+
+	for _, sessionID := range sessionIDs {
+		m.AbandonSession(sessionID)
+	}
+}
+
+// AbandonSession forgets the session and asks the broker to end it, without
+// waiting for the broker to reply.
+func (m *Manager) AbandonSession(sessionID string) {
+	m.transactionsToBrokerMu.Lock()
+	broker := m.transactionsToBroker[sessionID]
+	delete(m.transactionsToBroker, sessionID)
+	delete(m.sessionsToUsername, sessionID)
+	delete(m.sessionsToServiceName, sessionID)
+	delete(m.sessionsToConnection, sessionID)
+	m.transactionsToBrokerMu.Unlock()
+
+	if broker == nil {
+		return
+	}
+
+	log.Debugf(context.Background(), "%s: End abandoned session", sessionID)
+	go func() {
+		if err := broker.endSession(context.Background(), sessionID); err != nil {
+			log.Warningf(context.Background(), "%s: Could not end abandoned session: %v", sessionID, err)
+		}
+	}()
 }
 
 // UsernameFromSessionID returns the username associated with the given session ID.

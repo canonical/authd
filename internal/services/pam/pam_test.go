@@ -31,7 +31,9 @@ import (
 	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -882,19 +884,34 @@ func initBrokers() (brokerConfigPath string, cleanup func(), err error) {
 
 // newPAMClient returns a new GRPC PAM client for tests connected to brokerManager with the given database.
 // If the one passed is nil, this function will create the database and close it upon test teardown.
-func newPamClient(t *testing.T, m *users.Manager, brokerManager *brokers.Manager) (client authd.PAMClient) {
+func newPamClient(t *testing.T, m *users.Manager, brokerManager *brokers.Manager) authd.PAMClient {
 	t.Helper()
 	return newPamClientWithConfig(t, m, brokerManager, pam.DefaultConfig)
 }
 
-func newPamClientWithConfig(t *testing.T, m *users.Manager, brokerManager *brokers.Manager, cfg pam.Config) (client authd.PAMClient) {
+func newPamClientWithConfig(t *testing.T, m *users.Manager, brokerManager *brokers.Manager, cfg pam.Config) authd.PAMClient {
+	t.Helper()
+	conn, _ := newPamServerForTests(t, m, brokerManager, cfg)
+	return authd.NewPAMClient(conn)
+}
+
+// newPamServerForTests starts a new PAM service and returns a connection to it
+// and the socket path it listens on.
+func newPamServerForTests(t *testing.T, m *users.Manager, brokerManager *brokers.Manager, cfg pam.Config) (conn *grpc.ClientConn, socketPath string) {
+	t.Helper()
+	return newPamServerWithConnectionHandler(t, m, brokerManager, cfg, nil)
+}
+
+// newPamServerWithConnectionHandler is like newPamServerForTests, but also calls
+// connectionClosed once the service handled the closure of a client connection.
+func newPamServerWithConnectionHandler(t *testing.T, m *users.Manager, brokerManager *brokers.Manager, cfg pam.Config, connectionClosed func()) (conn *grpc.ClientConn, socketPath string) {
 	t.Helper()
 
 	// socket path is limited in length.
 	tmpDir, err := os.MkdirTemp("", "authd-socket-dir")
 	require.NoError(t, err, "Setup: could not setup temporary socket dir path")
 	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
-	socketPath := filepath.Join(tmpDir, "authd.sock")
+	socketPath = filepath.Join(tmpDir, "authd.sock")
 
 	lis, err := net.Listen("unix", socketPath)
 	require.NoError(t, err, "Setup: could not create unix socket")
@@ -905,10 +922,18 @@ func newPamClientWithConfig(t *testing.T, m *users.Manager, brokerManager *broke
 		t.Cleanup(func() { _ = m.Stop() })
 	}
 
-	service := pam.NewService(context.Background(), m, brokerManager, cfg)
+	pamService := pam.NewService(context.Background(), m, brokerManager, cfg)
 
-	grpcServer := grpc.NewServer(permissions.WithUnixPeerCreds(), grpc.ChainUnaryInterceptor(errmessages.RedactErrorInterceptor))
-	authd.RegisterPAMServer(grpcServer, service)
+	grpcServer := grpc.NewServer(
+		permissions.WithUnixPeerCreds(),
+		grpc.StatsHandler(permissions.NewConnectionTracker(func(connectionID string) {
+			pamService.EndSessionsForConnection(connectionID)
+			if connectionClosed != nil {
+				connectionClosed()
+			}
+		})),
+		grpc.ChainUnaryInterceptor(errmessages.RedactErrorInterceptor))
+	authd.RegisterPAMServer(grpcServer, pamService)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -919,12 +944,21 @@ func newPamClientWithConfig(t *testing.T, m *users.Manager, brokerManager *broke
 		<-done
 	})
 
+	conn = dialPamServer(t, socketPath)
+
+	return conn, socketPath
+}
+
+// dialPamServer connects to the PAM service listening at the given socket path.
+func dialPamServer(t *testing.T, socketPath string) *grpc.ClientConn {
+	t.Helper()
+
 	conn, err := grpc.NewClient("unix://"+socketPath, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithUnaryInterceptor(errmessages.FormatErrorMessage))
 	require.NoError(t, err, "Setup: Could not connect to gRPC server")
 
 	t.Cleanup(func() { _ = conn.Close() }) // We don't care about the error on cleanup
 
-	return authd.NewPAMClient(conn)
+	return conn
 }
 
 // getMockBrokerGeneratedID returns the generated ID for the mock broker.
@@ -997,6 +1031,169 @@ func setupGlobalBrokerMock() (cleanup func(), err error) {
 	}
 
 	return cleanup, nil
+}
+
+func TestSessionIsOnlyUsableByItsCreator(t *testing.T) {
+	conn, socketPath := newPamServerForTests(t, nil, globalBrokerManager, pam.DefaultConfig)
+	client := authd.NewPAMClient(conn)
+
+	sessionID := startSession(t, client, "user@example.com")
+
+	// Do not use the error formatting interceptor, so that the gRPC status is preserved.
+	otherConn, err := grpc.NewClient("unix://"+socketPath, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err, "Setup: could not connect another client")
+	t.Cleanup(func() { _ = otherConn.Close() })
+	otherClient := authd.NewPAMClient(otherConn)
+
+	gamReq := func() *authd.GAMRequest {
+		return &authd.GAMRequest{SessionId: sessionID, SupportedUiLayouts: []*authd.UILayout{requiredEntry}}
+	}
+
+	_, err = client.GetAuthenticationModes(context.Background(), gamReq())
+	require.NoError(t, err, "The session creator should be allowed to use the session")
+
+	tests := map[string]func() error{
+		"GetAuthenticationModes": func() error {
+			_, err := otherClient.GetAuthenticationModes(context.Background(), gamReq())
+			return err
+		},
+		"SelectAuthenticationMode": func() error {
+			_, err := otherClient.SelectAuthenticationMode(context.Background(), &authd.SAMRequest{
+				SessionId:            sessionID,
+				AuthenticationModeId: "mode-id",
+			})
+			return err
+		},
+		"IsAuthenticated": func() error {
+			_, err := otherClient.IsAuthenticated(context.Background(), &authd.IARequest{
+				SessionId:          sessionID,
+				AuthenticationData: &authd.IARequest_AuthenticationData{},
+			})
+			return err
+		},
+		"EndSession": func() error {
+			_, err := otherClient.EndSession(context.Background(), &authd.ESRequest{SessionId: sessionID})
+			return err
+		},
+	}
+	for name, call := range tests {
+		t.Run(name, func(t *testing.T) {
+			err := call()
+			require.Error(t, err, "Another client should not be allowed to use the session")
+			require.Equal(t, codes.PermissionDenied, status.Code(err))
+		})
+	}
+
+	_, err = client.EndSession(context.Background(), &authd.ESRequest{SessionId: sessionID})
+	require.NoError(t, err, "The session creator should still be able to end its session")
+}
+
+func TestSessionEndsWhenTheClientDisconnects(t *testing.T) {
+	conn, _ := newPamServerForTests(t, nil, globalBrokerManager, pam.DefaultConfig)
+	client := authd.NewPAMClient(conn)
+
+	sessionID := startSession(t, client, "user@example.com")
+	_, err := client.GetAuthenticationModes(context.Background(), &authd.GAMRequest{
+		SessionId:          sessionID,
+		SupportedUiLayouts: []*authd.UILayout{requiredEntry},
+	})
+	require.NoError(t, err, "The session should be active while the client is connected")
+
+	require.NoError(t, conn.Close(), "Closing the client connection should not fail")
+
+	require.Eventually(t, func() bool {
+		_, err := globalBrokerManager.BrokerFromSessionID(sessionID)
+		return err != nil
+	}, 5*time.Second, 10*time.Millisecond, "The session should be ended when its client disconnects")
+}
+
+func TestSessionEndsWhenTheClientDisconnectsDuringItsCreation(t *testing.T) {
+	connectionClosed := make(chan struct{})
+	conn, _ := newPamServerWithConnectionHandler(t, nil, globalBrokerManager, pam.DefaultConfig,
+		func() { close(connectionClosed) })
+	client := authd.NewPAMClient(conn)
+
+	username := t.Name() + testutils.IDSeparator + "user@example.com"
+	// The broker receives the normalized username.
+	brokerUsername := strings.ToLower(username)
+	brokerSessionID := testutils.GenerateSessionID(brokerUsername)
+	sessionID := mockBrokerGeneratedID + "-" + brokerSessionID
+
+	newSession := testutils.BlockBrokerMockCall(brokerUsername)
+	t.Cleanup(newSession.Release)
+	sessionEnded := testutils.WatchBrokerMockEndSession(brokerSessionID)
+
+	selectBrokerDone := make(chan error, 1)
+	go func() {
+		_, err := client.SelectBroker(context.Background(), &authd.SBRequest{
+			BrokerId: mockBrokerGeneratedID,
+			Username: username,
+			Mode:     authd.SessionMode_LOGIN,
+		})
+		selectBrokerDone <- err
+	}()
+
+	select {
+	case <-newSession.Started():
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "The broker did not receive the NewSession call")
+	}
+
+	require.NoError(t, conn.Close(), "Closing the client connection should not fail")
+
+	select {
+	case <-connectionClosed:
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "The closure of the client connection was not handled")
+	}
+
+	newSession.Release()
+	require.Error(t, <-selectBrokerDone, "SelectBroker should fail once the client went away")
+
+	select {
+	case <-sessionEnded:
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "The broker should be asked to end the late session")
+	}
+
+	_, err := globalBrokerManager.BrokerFromSessionID(sessionID)
+	require.Error(t, err, "The late session should not be kept by the manager")
+}
+
+func TestSessionsEndWhenTheClientDisconnectsWhileEndingOne(t *testing.T) {
+	conn, _ := newPamServerForTests(t, nil, globalBrokerManager, pam.DefaultConfig)
+	client := authd.NewPAMClient(conn)
+
+	stalledID := startSession(t, client, "stalled@example.com")
+	otherID := startSession(t, client, "other@example.com")
+
+	stalledBrokerID := strings.TrimPrefix(stalledID, mockBrokerGeneratedID+"-")
+	otherBrokerID := strings.TrimPrefix(otherID, mockBrokerGeneratedID+"-")
+
+	endSession := testutils.BlockBrokerMockCall(stalledBrokerID)
+	t.Cleanup(endSession.Release)
+	otherEnded := testutils.WatchBrokerMockEndSession(otherBrokerID)
+
+	go func() {
+		_, _ = client.EndSession(context.Background(), &authd.ESRequest{SessionId: stalledID})
+	}()
+
+	select {
+	case <-endSession.Started():
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "The broker did not receive the EndSession call")
+	}
+
+	require.NoError(t, conn.Close(), "Closing the client connection should not fail")
+
+	select {
+	case <-otherEnded:
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "The other sessions of the connection should be ended while the broker is busy ending one")
+	}
+
+	_, err := globalBrokerManager.BrokerFromSessionID(otherID)
+	require.Error(t, err, "The other sessions of the connection should be forgotten")
 }
 
 func TestMain(m *testing.M) {
