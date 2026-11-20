@@ -47,6 +47,8 @@ const (
 	// Keep this in sync with the service file installed by the package.
 	gdmServiceName = "gdm-authd"
 
+	gdmDisplayableAuthErrorPrefix = "Authentication failure: "
+
 	// defaultConnectionTimeout is the default connection timeout.
 	defaultConnectionTimeout = 2 * time.Second
 )
@@ -145,8 +147,15 @@ func shouldSendPamMessage(style pam.Style, clientType adapter.PamClientType, ret
 	if style == pam.ErrorMsg && clientType == adapter.Gdm {
 		// GDM renders authentication failures itself. Preserve messages for
 		// service and system errors because GDM does not own those details.
+		// Explicitly user-facing authentication failures are sent as PAM error
+		// messages; denied authentications still do not emit GDM auth events.
 		if rs, ok := retStatus.(adapter.PamReturnError); ok {
-			return rs.Status() != pam.ErrAuth && rs.Status() != pam.ErrMaxtries
+			switch rs.Status() {
+			case pam.ErrAuth:
+				return strings.HasPrefix(rs.Message(), gdmDisplayableAuthErrorPrefix)
+			case pam.ErrMaxtries:
+				return false
+			}
 		}
 	}
 
