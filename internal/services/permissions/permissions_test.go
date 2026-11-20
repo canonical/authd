@@ -4,6 +4,9 @@ import (
 	"context"
 	"math"
 	"os"
+	"os/user"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/canonical/authd/internal/services/permissions"
@@ -62,6 +65,66 @@ func TestCheckRequestIsFromRoot(t *testing.T) {
 				return
 			}
 			require.NoError(t, err, "CheckRequestIsFromRoot should allow access but didn't")
+		})
+	}
+}
+
+func TestCheckRequestIsFromRootOrUser(t *testing.T) {
+	t.Parallel()
+
+	currentUID := permissions.CurrentUserUID()
+	currentUser, err := user.LookupId(strconv.FormatUint(uint64(currentUID), 10))
+	if err != nil {
+		t.Skipf("Setup: current user %d can't be resolved: %v", currentUID, err)
+	}
+
+	const (
+		unresolvableUID uint32 = math.MaxUint32 - 1
+		notRootUID      uint32 = math.MaxUint32 - 2
+	)
+
+	tests := map[string]struct {
+		peerUID        uint32
+		username       string
+		peerIsRoot     bool
+		noPeerInfo     bool
+		noPeerAuthInfo bool
+
+		wantErr bool
+	}{
+		"Granted_if_peer_is_root":                     {peerIsRoot: true, username: "any-other-user"},
+		"Granted_if_peer_is_the_user":                 {username: currentUser.Username},
+		"Granted_if_peer_is_the_user_in_another_case": {username: strings.ToUpper(currentUser.Username)},
+
+		"Error_if_peer_is_another_user":    {username: "any-other-user", wantErr: true},
+		"Error_if_peer_cannot_be_resolved": {peerUID: unresolvableUID, username: currentUser.Username, wantErr: true},
+		"Error_if_username_is_empty":       {username: "", wantErr: true},
+		"Error_if_missing_peer_info":       {noPeerInfo: true, username: currentUser.Username, wantErr: true},
+		"Error_if_missing_peer_auth_info":  {noPeerAuthInfo: true, username: currentUser.Username, wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			peerUID := currentUID
+			if tc.peerUID != 0 {
+				peerUID = tc.peerUID
+			}
+			ctx := setupPermissionTestContext(t, tc.noPeerInfo, tc.noPeerAuthInfo, peerUID)
+
+			rootUID := notRootUID
+			if tc.peerIsRoot {
+				rootUID = currentUID
+			}
+			pm := permissions.New(permissions.Z_ForTests_WithRootUID(rootUID))
+
+			err := pm.CheckRequestIsFromRootOrUser(ctx, tc.username)
+
+			if tc.wantErr {
+				require.Error(t, err, "CheckRequestIsFromRootOrUser should deny access but didn't")
+				return
+			}
+			require.NoError(t, err, "CheckRequestIsFromRootOrUser should allow access but didn't")
 		})
 	}
 }

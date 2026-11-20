@@ -3,6 +3,7 @@ package main_test
 import (
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -822,6 +823,154 @@ func TestCLIAuthenticate(t *testing.T) {
 			if !tc.skipRunnerCheck {
 				requireRunnerResultForUser(t, authd.SessionMode_LOGIN, tc.clientOptions.PamUser, consoleOutput)
 			}
+		})
+	}
+}
+
+// TestCLIAuthenticateWithoutRootPrivileges checks that a PAM client that is
+// not running as root can only authenticate the user it is running as.
+func TestCLIAuthenticateWithoutRootPrivileges(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("This test requires to run as a non-root user")
+	}
+
+	currentUser, err := user.Current()
+	require.NoError(t, err, "Setup: could not get the current user")
+	if _, err := user.LookupId(currentUser.Uid); err != nil {
+		t.Skipf("Setup: current user %s can't be resolved: %v", currentUser.Uid, err)
+	}
+
+	clientPath := t.TempDir()
+	cliEnv := preparePamRunnerTest(t, clientPath)
+
+	selectLocalBroker := func(t *testing.T, c *ptytest.Console) {
+		t.Helper()
+
+		c.WaitFor(t, `Select your provider:`)
+		c.WaitFor(t, `1\. local`)
+		c.Send(t, "1")
+	}
+
+	tests := map[string]struct {
+		pamUser string
+		action  pam_test.RunnerAction
+		// boundUser makes pamUser bound to a broker by a previous login.
+		boundUser bool
+		test      func(t *testing.T, c *ptytest.Console)
+	}{
+		"Denied_for_another_user": {
+			pamUser: testUserName(t, "other-user"),
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `permission denied: only root can perform this operation for other users`)
+				c.WaitFor(t, `PAM Authenticate\(\)(?s:.*)Result: error: PAM exit code: 4\b`)
+			},
+		},
+		"Denied_for_another_user_bound_to_a_broker": {
+			pamUser:   testUserName(t, "bound-user"),
+			boundUser: true,
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+
+				// The broker the user is bound to must not be revealed, so it
+				// is not selected automatically.
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `permission denied: only root can perform this operation for other users`)
+				c.WaitFor(t, `PAM Authenticate\(\)(?s:.*)Result: error: PAM exit code: 4\b`)
+			},
+		},
+		"Login_as_another_user_falls_back_to_the_broker_selection": {
+			pamUser:   testUserName(t, "bound-user-local"),
+			boundUser: true,
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+
+				// Not knowing the broker of the user must not fail the
+				// authentication, so the local broker can still be used.
+				selectLocalBroker(t, c)
+				c.WaitFor(t, `PAM Authenticate\(\)(?s:.*)Result: error: PAM exit code: 25\b`)
+			},
+		},
+		"Change_password_of_another_user_falls_back_to_the_broker_selection": {
+			pamUser:   testUserName(t, "bound-user-passwd"),
+			action:    pam_test.RunnerActionPasswd,
+			boundUser: true,
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+
+				selectLocalBroker(t, c)
+				c.WaitFor(t, `PAM ChangeAuthTok\(\)(?s:.*)Result: error: PAM exit code: 25\b`)
+			},
+		},
+		"Allowed_for_the_user_itself": {
+			pamUser: currentUser.Username,
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+
+				// The user is a local one, so its broker is automatically
+				// selected and the module ignores it.
+				c.WaitFor(t, `PAM Authenticate\(\)(?s:.*)Result: error: PAM exit code: 25\b`)
+				require.NotContains(t, c.Output(), "Select your provider",
+					"The broker of the user itself should be selected automatically")
+			},
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			groupFile := filepath.Join(t.TempDir(), "group")
+			require.NoError(t, os.WriteFile(groupFile, nil, 0o600), "Setup: could not create group file")
+			// authd creates the database directory with the permissions it requires.
+			dbDir := filepath.Join(t.TempDir(), "db")
+
+			if tc.boundUser {
+				socketPath, stopAuthd := runAuthdForTestingWithCancel(t, false,
+					testutils.WithCurrentUserAsRoot,
+					testutils.WithDBPath(dbDir),
+					testutils.WithGroupFile(groupFile),
+					testutils.WithGroupFileOutput(groupFile),
+				)
+
+				c := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionLogin, cliEnv,
+					clientOptions{
+						ClientType: ptrValue(adapter.InteractiveTerminal),
+						PamUser:    tc.pamUser,
+					})
+				cliSimpleAuthPresetUser(t, c)
+				c.RequireExitCode(t, 0)
+				require.Contains(t, c.Output(), "Result: success",
+					"Setup: the user should be bound to the broker by a successful login")
+				stopAuthd()
+			}
+
+			// Do not consider the current user as root.
+			socketPath := runAuthd(t,
+				testutils.WithDBPath(dbDir),
+				testutils.WithGroupFile(groupFile),
+				testutils.WithGroupFileOutput(groupFile),
+			)
+
+			action := tc.action
+			if action == pam_test.RunnerAction(authd.SessionMode_UNDEFINED) {
+				action = pam_test.RunnerActionLogin
+			}
+
+			c := startCLIPAMRunner(t, clientPath, socketPath, action, cliEnv,
+				clientOptions{
+					ClientType: ptrValue(adapter.InteractiveTerminal),
+					PamUser:    tc.pamUser,
+				})
+
+			tc.test(t, c)
+			c.RequireExitCode(t, 0)
 		})
 	}
 }

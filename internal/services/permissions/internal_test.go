@@ -96,3 +96,30 @@ func TestServerPeerCredsInterface(t *testing.T) {
 	require.Nil(t, s.OverrideServerName("unused"), "OverrideServerName is a no-op and should return nil")
 	require.Equal(t, credentials.ProtocolInfo{}, s.Info(), "Info should return an empty struct")
 }
+
+func TestIsRequestedUser(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		peerUsername string
+		username     string
+
+		want bool
+	}{
+		"Same_user":                 {peerUsername: "user", username: "user", want: true},
+		"Same_user_in_another_case": {peerUsername: "user", username: "USER", want: true},
+
+		"Other_user":                                 {peerUsername: "user", username: "other"},
+		"Empty_username":                             {peerUsername: "user", username: ""},
+		"Peer_with_uppercase_name":                   {peerUsername: "User", username: "user"},
+		"Peer_name_folding_to_the_requested_user":    {peerUsername: "ſam", username: "sam"},
+		"Peer_name_lowercased_to_the_requested_user": {peerUsername: "\u212a", username: "k"},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tc.want, isRequestedUser(tc.peerUsername, tc.username))
+		})
+	}
+}
