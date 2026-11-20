@@ -1,0 +1,66 @@
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+    cat >&2 <<EOF
+Usage: workshop run -- logs [TARGET] [-f|--follow] [-n|--lines N]
+TARGET: all | brokers | authd | google | msentraid | oidc | <unit>
+  no args: all, 200 lines, then exit
+  -f: follow instead of exiting
+  -n N: number of lines (default 200)
+  <unit>: any systemd unit, e.g. gdm3, ssh
+Examples:
+  workshop run -- logs
+  workshop run -- logs google
+  workshop run -- logs -f all
+  workshop run -- logs gdm3 -f -n 100
+EOF
+}
+
+target="all"
+follow=no
+target_given=no
+lines=200
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -h|--help) usage; exit 0 ;;
+        -f|--follow) follow=yes; shift ;;
+        -n|--lines)
+            [ $# -ge 2 ] || { echo "Missing value for $1" >&2; usage; exit 2; }
+            lines="$2"
+            [[ "$lines" =~ ^[0-9]+$ ]] || { echo "Invalid line count: $lines" >&2; exit 2; }
+            shift 2
+            ;;
+        -*) echo "Unknown option: $1" >&2; usage; exit 2 ;;
+        *)
+            if [ "$target_given" = no ]; then
+                target="$1"
+                target_given=yes
+            else
+                echo "Too many targets: $target and $1" >&2
+                usage
+                exit 2
+            fi
+            shift
+            ;;
+    esac
+done
+
+journal_args=(--no-pager -n "$lines")
+[ "$follow" = yes ] && journal_args+=(-f)
+
+case "$target" in
+    all) exec sudo journalctl "${journal_args[@]}" -u authd.service -u 'authd-*.service' ;;
+    brokers) exec sudo journalctl "${journal_args[@]}" -u 'authd-*.service' ;;
+    authd) exec sudo journalctl "${journal_args[@]}" -u authd.service ;;
+    google|msentraid|oidc) exec sudo journalctl "${journal_args[@]}" -u "authd-${target}.service" ;;
+    *)
+        unit="$target"
+        if ! systemctl cat "$unit" >/dev/null 2>&1 && ! systemctl cat "${unit}.service" >/dev/null 2>&1; then
+            echo "Unknown log target '${target}'." >&2
+            echo "Valid values: all, brokers, authd, google, msentraid, oidc, or a systemd unit like gdm3." >&2
+            exit 2
+        fi
+        exec sudo journalctl "${journal_args[@]}" -u "$unit"
+        ;;
+esac

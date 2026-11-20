@@ -7,6 +7,7 @@ on:
       - ".github/workflows/shell-sanity.yaml"
       - ".shellcheckrc"
       - "brokers/.shellcheckrc"
+      - ".workshop/**"
       - "**.sh"
       - "brokers/tools/install-cargo-c"
       - "debian/postinst"
@@ -34,3 +35,11 @@ jobs:
         uses: ludeeus/action-shellcheck@master
         with:
           additional_files: "postinst postrm prerm"
+
+      - name: Run ShellCheck on the Workshop scripts
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: .workshop
+          additional_files: >-
+            broker build-component gdm lint login logs test validate
+            setup-base setup-project save-state restore-state
