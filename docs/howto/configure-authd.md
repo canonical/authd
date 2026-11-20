@@ -501,10 +501,10 @@ authentication flows are offered to the user at login.
 
 ### Entra authentication flow
 
-If `entra_auth` is omitted, it follows the `register_device` setting: it is
-enabled when device registration is enabled and disabled otherwise. New Entra
-broker configurations explicitly set `entra_auth = false`. After enabling
-device registration or configuring a client secret, enable the flow explicitly:
+When omitted, `entra_auth` follows `register_device`. New Entra broker
+configurations leave device registration off by default. Enabling registration
+enables the flow unless you set `entra_auth = false`. To enable it without
+device registration, configure a client secret and set:
 
 ```ini
 [flows]

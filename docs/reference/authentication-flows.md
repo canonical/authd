@@ -26,12 +26,12 @@ Microsoft Entra ID supports the following authentication flows:
   password. See [Stored secrets](ref::stored-secrets) and
   [Cached Entra ID passwords](ref::cached-entra-passwords).
 
-The device code flow is enabled by default. If `entra_auth` is omitted, its
-default follows `register_device`: it is enabled when device registration is
-enabled and disabled otherwise. New Entra broker configurations explicitly set
-`entra_auth = false`; enable it only after enabling device registration or
-configuring a client secret. Both flows can be individually configured using
-the `[flows]` section of the broker configuration file. See
+The device code flow is enabled by default. When `entra_auth` is omitted, it
+follows `register_device`. New Entra broker configurations leave registration
+off by default. Set `entra_auth = false` to keep the flow disabled when
+registration is enabled. To enable it without registration, configure a client
+secret and set `entra_auth = true`. Both flows can be configured individually
+in the `[flows]` section of the broker configuration file. See
 [Configure authentication flows](ref::config-auth-flows) for details.
 
 At least one authentication flow must be enabled. A configuration that
