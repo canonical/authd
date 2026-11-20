@@ -2,7 +2,6 @@
 package google
 
 import (
-	"slices"
 	"strings"
 
 	providerErrors "github.com/canonical/authd/brokers/internal/providers/errors"
@@ -66,17 +65,22 @@ func hasNonEmptyStringClaim(claimer info.Claimer, claim string) (bool, error) {
 	return ok && value != "", nil
 }
 
-// IsTokenExpiredError returns true if the reason for the error is that the refresh token is expired.
-func (Provider) IsTokenExpiredError(err *oauth2.RetrieveError) bool {
+// ClassifyRefreshTokenError classifies known errors from the token endpoint.
+func (Provider) ClassifyRefreshTokenError(err *oauth2.RetrieveError) providerErrors.RefreshTokenErrorKind {
+	if err == nil {
+		return providerErrors.RefreshTokenErrorUnknown
+	}
+	if err.ErrorCode == "admin_policy_enforced" {
+		return providerErrors.RefreshTokenErrorExpiredOrRevoked
+	}
 	if err.ErrorCode != "invalid_grant" {
-		return false
+		return providerErrors.RefreshTokenErrorUnknown
 	}
 
-	expiredDescriptions := []string{
-		"Token has been expired or revoked",
+	if strings.Contains(err.ErrorDescription, "Token has been expired or revoked") ||
+		strings.Contains(err.ErrorDescription, "admin_policy_enforced") {
+		return providerErrors.RefreshTokenErrorExpiredOrRevoked
 	}
 
-	return slices.ContainsFunc(expiredDescriptions, func(desc string) bool {
-		return strings.Contains(err.ErrorDescription, desc)
-	})
+	return providerErrors.RefreshTokenErrorUnknown
 }
