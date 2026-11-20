@@ -6,6 +6,7 @@ import tempfile
 import textwrap
 import unittest
 from io import BytesIO
+from itertools import product
 from pathlib import Path
 from time import monotonic
 from unittest.mock import patch
@@ -19,6 +20,7 @@ from collect_ci_failures import (
     collect,
     collect_evidence,
     command_error,
+    extract_diagnostics,
     main,
     timestamp,
 )
@@ -928,6 +930,7 @@ class EvidenceTests(unittest.TestCase):
                 {
                     "output.xml": str(artifact_id),
                     "journal/vm.journal": b"journal\x00",
+                    "Login/screenshots/failure.webp": b"image",
                     "recording.mp4": b"video",
                 },
             )
@@ -963,58 +966,120 @@ class EvidenceTests(unittest.TestCase):
                 Path(current["artifact_path"], "journal/vm.journal").read_bytes(),
                 b"journal\x00",
             )
+            screenshot = (
+                Path(current["artifact_path"]) / "Login/screenshots/failure.webp"
+            )
+            self.assertEqual(screenshot.read_bytes(), b"image")
             self.assertFalse(Path(current["artifact_path"], "recording.mp4").exists())
             self.assertNotIn("artifact_path", missing)
             self.assertIn("stonking", missing["artifact_error"])
             self.assertEqual(archives, [101, 102])
 
-    def test_e2e_stages_failed_suite_before_passing_suites(self):
+    def test_e2e_stages_failed_suites_under_both_limits(self):
         name = "e2e-tests-noble-authd-msentraid-42-2"
-        job = self.e2e_job(10, "noble", 2, None)
-        failure = self.failure(path=".github/workflows/e2e-tests.yaml", jobs=[job])
         failed_journal = "Regenerate Qrcode/journal/vm.journal"
+        failed_screenshot = "Regenerate Qrcode/screenshots/failure.webp"
+        logs = {
+            "listener": (
+                b"2026-11-16T08:39:29.3228407Z Suite  Allowed Users  PASS  1m52s\n"
+                b"2026-11-16T09:35:08.6649622Z \x1b[36mSuite  Regenerate Qrcode"
+                b"  \x1b[31mFAIL\x1b[0m  2m44s  1 test, 0 passed, 1 failed\n"
+            ),
+            "partial": b"Suite  No Diagnostics  FAIL  1m2s\n",
+            "missing": None,
+        }
+        stats = (
+            "<robot><statistics><suite>"
+            '<stat name="Allowed Users" pass="1" fail="0" skip="0">'
+            "Tests.Allowed Users</stat>"
+            '<stat name="Regenerate Qrcode" pass="0" fail="1" skip="0">'
+            "Tests.Regenerate Qrcode</stat>"
+            "</suite></statistics></robot>"
+        )
 
         def download(command, *, stdout, **kwargs):
             if command[-1].endswith("/logs"):
-                stdout.write(
-                    b"2026-11-16T08:39:29.3228407Z Suite  Allowed Users  PASS  1m52s\n"
-                    b"2026-11-16T09:35:08.6649622Z \x1b[36mSuite  Regenerate Qrcode"
-                    b"  \x1b[31mFAIL\x1b[0m  2m44s  1 test, 0 passed, 1 failed\n"
-                )
+                if (log := logs[log_source]) is None:
+                    raise subprocess.CalledProcessError(1, command, stderr=b"HTTP 404")
+                stdout.write(log)
             else:
                 self.write_archive(
                     stdout,
                     {
                         "Allowed Users/journal/vm.journal": bytes(8),
+                        "Allowed Users/screenshots/passing.webp": b"passing",
                         "Authd Disabled/journal/vm.journal": bytes(7),
                         failed_journal: b"failed",
+                        failed_screenshot: b"screen",
                         "log.html": b"log",
                         "report.html": b"report",
+                        "output.xml": stats if log_source != "listener" else "No stats",
                     },
                 )
 
-        with (
-            tempfile.TemporaryDirectory() as directory,
-            patch("collect_ci_failures.MAX_DIAGNOSTIC_BYTES", 15),
-            patch(
-                "collect_ci_failures.api",
-                return_value={"artifacts": [self.artifact(50, name)]},
+        for log_source, (budget, limit, error) in product(
+            logs,
+            (
+                ("MAX_DIAGNOSTIC_BYTES", 15, "size limit"),
+                ("MAX_ARCHIVE_FILES", 3, "3-file staging limit"),
             ),
-            patch("collect_ci_failures.subprocess.run", side_effect=download),
         ):
-            collect_evidence(
-                "canonical/authd", [failure], Path(directory), monotonic() + 30
-            )
-            staged = Path(job["artifact_path"])
-            self.assertCountEqual(
-                (
-                    path.relative_to(staged).as_posix()
-                    for path in staged.rglob("*")
-                    if path.is_file()
+            with (
+                self.subTest(log=log_source, budget=budget),
+                tempfile.TemporaryDirectory() as directory,
+                patch(f"collect_ci_failures.{budget}", limit),
+                patch(
+                    "collect_ci_failures.api",
+                    return_value={"artifacts": [self.artifact(50, name)]},
                 ),
-                (failed_journal, "log.html", "report.html"),
+                patch("collect_ci_failures.subprocess.run", side_effect=download),
+            ):
+                job = self.e2e_job(10, "noble", 2, None)
+                failure = self.failure(
+                    path=".github/workflows/e2e-tests.yaml", jobs=[job]
+                )
+                collect_evidence(
+                    "canonical/authd", [failure], Path(directory), monotonic() + 30
+                )
+                staged = Path(job["artifact_path"])
+                self.assertCountEqual(
+                    (
+                        path.relative_to(staged).as_posix()
+                        for path in staged.rglob("*")
+                        if path.is_file()
+                    ),
+                    (failed_journal, failed_screenshot, "log.html"),
+                )
+                self.assertIn(error, job["artifact_error"])
+
+    def test_unusable_robot_results_do_not_set_staging_priority(self):
+        stats = (
+            "<robot><statistics><suite>"
+            '<stat name="Login" pass="0" fail="1" skip="0">Tests.Login</stat>'
+            "</suite></statistics></robot>"
+        )
+        for results, limit in ((f"<!DOCTYPE robot>{stats}", 1024), (stats, 16)):
+            raw = BytesIO()
+            self.write_archive(
+                raw,
+                {
+                    "log.html": b"log",
+                    "report.html": b"report",
+                    "Login/screenshots/failure.webp": b"image",
+                    "output.xml": results,
+                },
             )
-            self.assertIn("size limit", job["artifact_error"])
+            with (
+                self.subTest(results_limit=limit),
+                tempfile.TemporaryDirectory() as directory,
+                patch("collect_ci_failures.MAX_ROBOT_RESULTS_BYTES", limit),
+            ):
+                output = Path(directory)
+                extract_diagnostics(
+                    raw, output, monotonic() + 30, 9, failed_suites=set()
+                )
+                self.assertEqual((output / "report.html").read_bytes(), b"report")
+                self.assertFalse((output / "Login/screenshots/failure.webp").exists())
 
     def test_bad_archive_does_not_prevent_staging_other_diagnostics(self):
         bad = self.job(10, "Go Tests with Coverage Collection")
@@ -1058,9 +1123,11 @@ class EvidenceTests(unittest.TestCase):
         link.external_attr = stat.S_IFLNK << 16
         compressed = ZipInfo("compressed.log")
         compressed.compress_type = ZIP_BZIP2
+        first = ZipInfo("a.log")
 
         with (
             tempfile.TemporaryDirectory() as directory,
+            patch("collect_ci_failures.MAX_ARCHIVE_FILES", 1),
             patch("collect_ci_failures.api", return_value={"artifacts": [artifact]}),
             patch("collect_ci_failures.subprocess.run"),
             patch("collect_ci_failures.zipfile.ZipFile") as reader,
@@ -1068,16 +1135,25 @@ class EvidenceTests(unittest.TestCase):
             output = Path(directory)
             absolute = output / "absolute.log"
             archive = reader.return_value.__enter__.return_value
-            archive.open.side_effect = AssertionError("unsafe member was opened")
-            for member in (
-                ZipInfo("../outside.log"),
-                ZipInfo(str(absolute)),
-                ZipInfo(r"reports\job.log"),
-                link,
-                compressed,
+
+            def open_member(member):
+                if member is first:
+                    return BytesIO(b"log")
+                raise AssertionError("member should not have been opened")
+
+            archive.open.side_effect = open_member
+            for prefix, member in product(
+                ([], [first, ZipInfo("b.log")]),
+                (
+                    ZipInfo("../outside.log"),
+                    ZipInfo(str(absolute)),
+                    ZipInfo(r"reports\job.log"),
+                    link,
+                    compressed,
+                ),
             ):
-                with self.subTest(member=member.filename):
-                    archive.infolist.return_value = [member]
+                with self.subTest(member=member.filename, after_cap=bool(prefix)):
+                    archive.infolist.return_value = [*prefix, member]
                     job = self.job(10, "Go Tests with Race Detector")
                     collect_evidence(
                         "canonical/authd",
@@ -1124,7 +1200,7 @@ class EvidenceTests(unittest.TestCase):
             path = Path(second["artifact_path"])
             self.assertEqual((path / "race.log").read_text(), "report")
 
-    def test_archive_file_limit_does_not_block_later_artifacts(self):
+    def test_archive_file_limit_keeps_partial_and_later_diagnostics(self):
         first = self.job(10, "Go Tests with Coverage Collection")
         second = self.job(11, "Go Tests with Race Detector")
         artifacts = [
@@ -1153,10 +1229,13 @@ class EvidenceTests(unittest.TestCase):
                 Path(directory),
                 monotonic() + 30,
             )
-            self.assertNotIn("artifact_path", first)
+            path = Path(first["artifact_path"])
+            self.assertEqual((path / "a.log").read_text(), "a")
+            self.assertFalse((path / "b.log").exists())
             self.assertIn("1-file staging limit", first["artifact_error"])
             path = Path(second["artifact_path"])
             self.assertEqual((path / "race.log").read_text(), "report")
+            self.assertNotIn("artifact_error", second)
 
     def test_deadline_records_missing_evidence_instead_of_dropping_jobs(self):
         job = self.job(10, "Go Tests with Race Detector")
