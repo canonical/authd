@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/canonical/authd/internal/brokers/auth"
 	"github.com/canonical/authd/internal/consts"
 	"github.com/canonical/authd/internal/proto/authd"
 	"github.com/canonical/authd/log"
@@ -68,9 +69,10 @@ type uiModel struct {
 	client      authd.PAMClient
 	serviceName string
 
-	sessionStartingForBroker string
-	userIsBoundToBroker      bool
-	currentSession           *sessionInfo
+	sessionStartingForBroker       string
+	userIsBoundToBroker            bool
+	currentSession                 *sessionInfo
+	fetchAuthModesAfterStageChange bool
 
 	healthCheckCancel      func()
 	userSelectionModel     userSelectionModel
@@ -322,8 +324,9 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SessionStarted:
 		safeMessageDebug(msg)
 		m.sessionStartingForBroker = ""
+		m.fetchAuthModesAfterStageChange = false
 		if m.clientType == Gdm {
-			m.gdmModel.pendingEchoAuthModeID = ""
+			m.gdmModel.resetPendingAuthModeEcho()
 		}
 		pubASN1, err := base64.StdEncoding.DecodeString(msg.encryptionKey)
 		if err != nil {
@@ -366,6 +369,17 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case StageChanged:
 		safeMessageDebug(msg)
+		if m.clientType == Gdm && msg.Stage == proto.Stage_authModeSelection &&
+			m.fetchAuthModesAfterStageChange {
+			gdmCmd := m.updateClientModel(msg)
+			m.fetchAuthModesAfterStageChange = false
+			getModesCmd := getAuthenticationModes(
+				m.client,
+				m.currentSession.sessionID,
+				m.authModeSelectionModel.SupportedUILayouts(),
+			)
+			return m, afterGdmAck(gdmCmd, getModesCmd)
+		}
 		if m.clientType == Gdm && msg.Stage == proto.Stage_challenge {
 			// GDM must enter the challenge stage before it receives the
 			// startAuthentication event. These commands are otherwise
@@ -395,20 +409,42 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		changeStageCmd := sendEvent(ChangeStage{proto.Stage_authModeSelection})
 
-		// For native/SSH mode during MFA (auth.Next), the stage is still
-		// "challenge". We need to transition through authModeSelection so
-		// that the subsequent auto-selection properly triggers a new challenge
-		// via the normal stage change path (Compose → ChangeStage{challenge}
-		// → StageChanged → nativeChallengeRequested).
-		// Stage change must happen BEFORE fetching modes, so that when
-		// authModesReceived fires the list is already focused and the
-		// immediate auto-selection is safe (no risk of the deferred
-		// ChangeStage{authModeSelection} pulling us back after challenge starts).
+		// Native and GDM clients stay in the challenge stage during MFA
+		// (auth.Next). Enter authModeSelection before fetching modes so an
+		// immediate auto-selection starts the next challenge through the
+		// normal stage-change path, without a deferred stage change pulling
+		// the model back after the challenge starts.
+		if m.clientType == Gdm && m.currentStage() == proto.Stage_challenge {
+			// GDM's StageChanged handler sends a stage request. Wait for its
+			// acknowledgement before fetching modes.
+			m.fetchAuthModesAfterStageChange = true
+			m.gdmModel.preservePendingEchoOnNextAuthModeStage = true
+			return m, changeStageCmd
+		}
+
 		if m.clientType == Native && m.currentStage() == proto.Stage_challenge {
 			return m, tea.Sequence(changeStageCmd, getModesCmd)
 		}
 
 		return m, tea.Sequence(getModesCmd, changeStageCmd)
+
+	case authModesReceived:
+		if m.clientType == Gdm {
+			// Shell needs the new modes before it can display their challenge.
+			// Do not let auto-selection overtake the mode-list event.
+			var selectionCmd tea.Cmd
+			m.authModeSelectionModel, selectionCmd = m.authModeSelectionModel.Update(msg)
+			return m, afterGdmAck(m.updateClientModel(msg), selectionCmd)
+		}
+
+	case isAuthenticatedResultReceived:
+		if m.clientType == Gdm && msg.access == auth.Next {
+			// Shell clears its modes and layout on "next". It must process
+			// that result before we start setting up the next challenge.
+			var authCmd tea.Cmd
+			m.authenticationModel, authCmd = m.authenticationModel.Update(msg)
+			return m, afterGdmAck(m.updateClientModel(msg), authCmd)
+		}
 
 	case AuthModeSelected:
 		safeMessageDebug(msg)
@@ -451,8 +487,9 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		safeMessageDebug(msg)
 		m.sessionStartingForBroker = ""
 		m.currentSession = nil
+		m.fetchAuthModesAfterStageChange = false
 		if m.clientType == Gdm {
-			m.gdmModel.pendingEchoAuthModeID = ""
+			m.gdmModel.resetPendingAuthModeEcho()
 		}
 		return m, nil
 

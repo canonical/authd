@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/base64"
+	"errors"
 	"reflect"
 	"sync/atomic"
 	"testing"
 
+	"github.com/canonical/authd/internal/brokers/auth"
 	"github.com/canonical/authd/internal/brokers/layouts"
 	"github.com/canonical/authd/internal/proto/authd"
 	"github.com/canonical/authd/pam/internal/gdm"
@@ -99,10 +101,17 @@ func TestGdmModelActsOnAuthModeChange(t *testing.T) {
 	m, _ = m.Update(AuthModeSelected{ID: "device_auth_qr"})
 
 	change := []*gdm.EventData{gdm_test.AuthModeSelectedEvent("password")}
-	_, cmd := m.handlePollResponse(change)
+	m, cmd := m.handlePollResponse(change)
 	msgs := collectMessages(cmd)
 	require.True(t, containsAuthModeSelected(msgs, "password"),
 		"selecting a different auth mode must trigger a re-selection")
+	require.Empty(t, m.pendingEchoAuthModeID)
+
+	_, cmd = m.handlePollResponse(
+		[]*gdm.EventData{gdm_test.AuthModeSelectedEvent("device_auth_qr")},
+	)
+	require.True(t, containsAuthModeSelected(collectMessages(cmd), "device_auth_qr"),
+		"returning to the old mode must not be mistaken for an outstanding echo")
 }
 
 func TestGdmModelActsOnSameAuthModeReselection(t *testing.T) {
@@ -150,8 +159,8 @@ func TestGdmModelStageChangeHandlesPendingEcho(t *testing.T) {
 	require.Empty(t, m.pendingEchoAuthModeID,
 		"consuming the delayed echo should clear the expected echo")
 
-	// Entering authModeSelection permits a genuine same-mode re-selection, so
-	// discard an echo that was not delivered before navigating back.
+	// Entering auth mode selection permits a genuine re-selection, so discard
+	// an echo that was not delivered before navigating back.
 	m, _ = m.Update(AuthModeSelected{ID: "device_auth_qr"})
 	m, _ = m.Update(StageChanged{Stage: proto.Stage_authModeSelection})
 	require.Empty(t, m.pendingEchoAuthModeID,
@@ -217,6 +226,19 @@ type countingPAMClient struct {
 	*pam_test.DummyClient
 
 	selectAuthenticationModeCalls atomic.Int32
+}
+
+type orderedModesPAMClient struct {
+	*pam_test.DummyClient
+
+	onGetModes func()
+}
+
+func (c *orderedModesPAMClient) GetAuthenticationModes(ctx context.Context,
+	in *authd.GAMRequest, opts ...grpc.CallOption,
+) (*authd.GAMResponse, error) {
+	c.onGetModes()
+	return c.DummyClient.GetAuthenticationModes(ctx, in, opts...)
 }
 
 func (c *countingPAMClient) SelectAuthenticationMode(ctx context.Context,
@@ -369,4 +391,234 @@ func TestGdmChallengeProtocolEventsAreOrdered(t *testing.T) {
 	_ = collectMessages(cmd)
 
 	require.Equal(t, []string{"layout", "stage", "start"}, protocolEvents)
+}
+
+func TestGdmMFARequestsAuthenticationModesAfterEnteringSelectionStage(t *testing.T) {
+	t.Parallel()
+
+	var protocolEvents []string
+	mTx := pam_test.NewModuleTransactionDummy(gdm.DataConversationFunc(
+		func(data *gdm.Data) (*gdm.Data, error) {
+			if data.Type == gdm.DataType_request {
+				protocolEvents = append(protocolEvents, "stage")
+				return &gdm.Data{
+					Type: gdm.DataType_response,
+					Response: &gdm.ResponseData{
+						Type: data.Request.Type,
+						Data: &gdm.ResponseData_Ack{},
+					},
+				}, nil
+			}
+			return &gdm.Data{Type: gdm.DataType_eventAck}, nil
+		},
+	))
+	client := &orderedModesPAMClient{
+		DummyClient: pam_test.NewDummyClient(nil,
+			pam_test.WithIgnoreSessionIDChecks(),
+			pam_test.WithGetAuthenticationModesReturn([]*authd.GAMResponse_AuthenticationMode{
+				{Id: "password"},
+			}, nil),
+		),
+		onGetModes: func() {
+			protocolEvents = append(protocolEvents, "modes")
+		},
+	}
+	m := newUIModelForClients(mTx, Gdm, authd.SessionMode_LOGIN, client, nil, nil)
+	m.currentSession = &sessionInfo{sessionID: "session"}
+	m.authenticationModel.inProgress = true
+	m.gdmModel.pendingEchoAuthModeID = "password"
+
+	updated, cmd := m.Update(GetAuthenticationModesRequested{})
+	m = convertTo[uiModel](updated)
+	msgs := collectMessages(cmd)
+
+	require.Len(t, msgs, 1)
+	changeStage, ok := msgs[0].(ChangeStage)
+	require.True(t, ok)
+	require.Equal(t, proto.Stage_authModeSelection, changeStage.Stage)
+
+	updated, cmd = m.Update(changeStage)
+	m = convertTo[uiModel](updated)
+	msgs = collectMessages(cmd)
+	var stageChanged StageChanged
+	for _, msg := range msgs {
+		stageChanged, ok = msg.(StageChanged)
+		if ok {
+			break
+		}
+	}
+	require.Equal(t, proto.Stage_authModeSelection, stageChanged.Stage)
+
+	updated, cmd = m.Update(stageChanged)
+	m = convertTo[uiModel](updated)
+	msgs = collectMessages(cmd)
+	require.Equal(t, []string{"stage", "modes"}, protocolEvents)
+	require.Equal(t, "password", m.gdmModel.pendingEchoAuthModeID)
+	modesReceived, ok := msgs[len(msgs)-1].(authModesReceived)
+	require.True(t, ok)
+	require.Equal(t, "password", modesReceived.authModes[0].GetId())
+
+	m.gdmModel, cmd = m.gdmModel.handlePollResponse(
+		[]*gdm.EventData{gdm_test.AuthModeSelectedEvent("password")},
+	)
+	require.False(t, containsAuthModeSelected(collectMessages(cmd), "password"),
+		"a delayed echo must not trigger a duplicate auth mode selection")
+	require.Empty(t, m.gdmModel.pendingEchoAuthModeID)
+}
+
+func TestGdmMFAEmptyPollPreservesPendingEcho(t *testing.T) {
+	t.Parallel()
+
+	for _, nextMode := range []string{"", "password", "otp"} {
+		t.Run("next_mode_"+nextMode, func(t *testing.T) {
+			t.Parallel()
+
+			m := gdmModel{}
+			m, _ = m.Update(AuthModeSelected{ID: "password"})
+			m.preservePendingEchoOnNextAuthModeStage = true
+			m, _ = m.Update(StageChanged{Stage: proto.Stage_authModeSelection})
+
+			expectedEcho := "password"
+			if nextMode != "" {
+				m, _ = m.Update(AuthModeSelected{ID: nextMode})
+				expectedEcho = nextMode
+			}
+
+			// A poll sent before the selection may return after it.
+			m, _ = m.handlePollResponse(nil)
+			require.Equal(t, expectedEcho, m.pendingEchoAuthModeID)
+
+			echo := []*gdm.EventData{gdm_test.AuthModeSelectedEvent(expectedEcho)}
+			m, cmd := m.handlePollResponse(echo)
+			require.False(t, containsAuthModeSelected(collectMessages(cmd), expectedEcho),
+				"a delayed echo must not trigger a duplicate selection")
+			require.Empty(t, m.pendingEchoAuthModeID)
+
+			_, cmd = m.handlePollResponse(echo)
+			require.True(t, containsAuthModeSelected(collectMessages(cmd), expectedEcho),
+				"a later genuine same-mode re-selection must be honored")
+		})
+	}
+}
+
+func TestGdmMFAProtocolOrdering(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		modeID string
+		failAt string
+	}{
+		"same mode in next step":      {modeID: "entra_auth"},
+		"different mode in next step": {modeID: "otp"},
+		"next event fails":            {modeID: "entra_auth", failAt: "next"},
+		"stage request fails":         {modeID: "entra_auth", failAt: "authModeSelection"},
+		"mode list event fails":       {modeID: "entra_auth", failAt: "modes"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var protocolEvents []string
+			mTx := pam_test.NewModuleTransactionDummy(gdm.DataConversationFunc(
+				func(data *gdm.Data) (*gdm.Data, error) {
+					var event string
+					switch data.Type {
+					case gdm.DataType_request:
+						event = data.Request.GetChangeStage().Stage.String()
+					case gdm.DataType_event:
+						switch data.Event.Type {
+						case gdm.EventType_authEvent:
+							event = data.Event.GetAuthEvent().Response.Access
+						case gdm.EventType_authModesReceived:
+							event = "modes"
+						case gdm.EventType_authModeSelected:
+							event = "selection"
+						case gdm.EventType_uiLayoutReceived:
+							event = "layout"
+						case gdm.EventType_startAuthentication:
+							event = "start"
+						}
+					}
+					require.NotEmpty(t, event, "unexpected protocol message: %v", data)
+					protocolEvents = append(protocolEvents, event)
+					if event == tc.failAt {
+						return nil, errors.New("GDM acknowledgement failed")
+					}
+					if data.Type == gdm.DataType_request {
+						return &gdm.Data{
+							Type: gdm.DataType_response,
+							Response: &gdm.ResponseData{
+								Type: data.Request.Type,
+								Data: &gdm.ResponseData_Ack{},
+							},
+						}, nil
+					}
+					return &gdm.Data{Type: gdm.DataType_eventAck}, nil
+				},
+			))
+			client := &orderedModesPAMClient{
+				DummyClient: pam_test.NewDummyClient(nil,
+					pam_test.WithIgnoreSessionIDChecks(),
+					pam_test.WithUILayout(tc.modeID, "Next challenge", pam_test.FormUILayout()),
+				),
+				onGetModes: func() {
+					protocolEvents = append(protocolEvents, "get-modes")
+				},
+			}
+			m := newUIModelForClients(mTx, Gdm, authd.SessionMode_LOGIN, client, nil, nil)
+			m.currentSession = &sessionInfo{brokerID: "broker", sessionID: "session"}
+			m.authenticationModel.inProgress = true
+			m.authModeSelectionModel.currentAuthModeSelectedID = "entra_auth"
+
+			// Process each message before running sibling commands. This lets
+			// a fast broker overtake any GDM command left in a concurrent batch.
+			var runMessage func(tea.Msg)
+			var gotErrors []pamError
+			var messages int
+			runMessage = func(msg tea.Msg) {
+				if msg == nil {
+					return
+				}
+				messages++
+				require.Less(t, messages, 100, "unexpected message loop")
+				if cmds, ok := asCmdSlice(msg); ok {
+					for _, cmd := range cmds {
+						if cmd != nil {
+							runMessage(cmd())
+						}
+					}
+					return
+				}
+				if err, ok := msg.(pamError); ok {
+					gotErrors = append(gotErrors, err)
+					return
+				}
+				updated, cmd := m.Update(msg)
+				m = convertTo[uiModel](updated)
+				if cmd != nil {
+					runMessage(cmd())
+				}
+			}
+			runMessage(isAuthenticatedResultReceived{access: auth.Next})
+
+			wantEvents := []string{
+				"next", "authModeSelection", "get-modes", "modes",
+				"selection", "layout", "challenge", "start",
+			}
+			if tc.failAt != "" {
+				for i, event := range wantEvents {
+					if event == tc.failAt {
+						wantEvents = wantEvents[:i+1]
+						break
+					}
+				}
+				require.Len(t, gotErrors, 1)
+				require.Contains(t, gotErrors[0].msg, "GDM acknowledgement failed")
+			} else {
+				require.Empty(t, gotErrors)
+				require.Equal(t, proto.Stage_challenge, m.currentStage())
+				require.Equal(t, tc.modeID, m.authModeSelectionModel.currentAuthModeSelectedID)
+			}
+			require.Equal(t, wantEvents, protocolEvents)
+		})
+	}
 }
