@@ -61,8 +61,7 @@ Check That Authenticated User Does Not Match Requested User
 
 Check That Remote User Can Run Sudo Commands
     [Arguments]    ${local_password}
-    SSH.Execute    echo ${local_password} | sudo -S touch sudo-test.txt
-    ${output} =    SSH.Execute    ls -l sudo-test.txt
+    ${output} =    SSH.Execute    echo ${local_password} | sudo -S touch sudo-test.txt && ls -l sudo-test.txt
     Should Contain    ${output}    sudo-test.txt
 
 Check that GNOME keyring is unlocked
