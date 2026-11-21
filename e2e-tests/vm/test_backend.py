@@ -359,6 +359,44 @@ print(statuses[min(calls, len(statuses) - 1)], end="")
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertEqual(calls, 2)
 
+    def test_failed_vm_shutdown_reports_the_domain_state(self):
+        self.script(self.commands / "retry", "#!/bin/sh\nexit 124\n")
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                'source "$1"; VM_NAME=custom-vm; shutdown_system',
+                "bash",
+                VM_DIR / "lib/libprovision.sh",
+            ],
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        self.assertEqual(result.returncode, 124, result.stderr)
+        self.assertIn("Domain 'custom-vm' did not shut off", result.stderr)
+        # The test backend's virsh hook echoes its arguments.
+        self.assertIn("domstate|--reason|custom-vm", result.stderr)
+
+    def test_successful_vm_shutdown_prints_no_diagnostics(self):
+        self.script(self.commands / "retry", "#!/bin/sh\nexit 0\n")
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                'source "$1"; VM_NAME=custom-vm; shutdown_system',
+                "bash",
+                VM_DIR / "lib/libprovision.sh",
+            ],
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+
 
 if __name__ == "__main__":
     unittest.main()
