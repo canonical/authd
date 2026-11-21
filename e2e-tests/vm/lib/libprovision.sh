@@ -350,7 +350,14 @@ fi
 virsh shutdown \"${VM_NAME}\" && \
 timeout 5 retry --delay 1 -- sh -c \
 \"virsh domstate \\\"${VM_NAME}\\\" | grep -q '^shut off'\""
-    retry --times 3 --delay 1 -- sh -c "$cmd"
+    local status=0
+    retry --times 3 --delay 1 -- sh -c "$cmd" || status=$?
+    if [[ "${status}" -ne 0 ]]; then
+        # Show why the domain is still not off, to tell a slow guest shutdown
+        # from a lost ACPI request.
+        echo "Domain '${VM_NAME}' did not shut off (exit status ${status}). State: $(virsh domstate --reason "${VM_NAME}" 2>&1 || true)" >&2
+    fi
+    return "${status}"
 }
 
 function boot_system() {
