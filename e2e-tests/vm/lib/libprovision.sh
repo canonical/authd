@@ -170,7 +170,7 @@ function url_exists() {
     esac
 }
 
-function ppa_has_suite() {
+function ppa_has_suite_once() {
     # Return 0 if published, 1 if missing, and 2 if the check failed.
     local ppa="$1"
     local suite="$2"
@@ -186,6 +186,29 @@ function ppa_has_suite() {
     done
 
     return 1
+}
+
+function ppa_has_suite() {
+    # Return 0 if published, 1 if missing, and 2 if the check failed.
+    # Launchpad sometimes answers with HTTP 503 for a short time, so retry
+    # failed checks before giving up. A definite answer is never retried.
+    local ppa="$1"
+    local suite="$2"
+    local attempts="${AUTHD_E2E_PPA_CHECK_ATTEMPTS:-5}"
+    local delay="${AUTHD_E2E_PPA_CHECK_DELAY:-5}"
+    local attempt
+    local status=2
+
+    for ((attempt = 1; attempt <= attempts; attempt++)); do
+        ppa_has_suite_once "${ppa}" "${suite}" && status=0 || status=$?
+        [[ "${status}" -eq 2 ]] || return "${status}"
+        if ((attempt < attempts)); then
+            echo "Retrying the PPA check in ${delay} seconds (attempt ${attempt} of ${attempts})." >&2
+            sleep "${delay}"
+        fi
+    done
+
+    return 2
 }
 
 function source_pin() {
