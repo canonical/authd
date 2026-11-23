@@ -14,12 +14,14 @@ import (
 	"github.com/canonical/authd/internal/services/errmessages"
 	"github.com/canonical/authd/internal/services/permissions"
 	"github.com/canonical/authd/internal/services/user"
+	"github.com/canonical/authd/internal/systemd"
 	"github.com/canonical/authd/internal/testutils"
 	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/canonical/authd/internal/users"
 	"github.com/canonical/authd/internal/users/db"
 	userslocking "github.com/canonical/authd/internal/users/locking"
 	userstestutils "github.com/canonical/authd/internal/users/testutils"
+	"github.com/canonical/authd/internal/users/types"
 	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -31,7 +33,8 @@ import (
 func TestNewService(t *testing.T) {
 	t.Parallel()
 
-	m, err := users.NewManager(users.DefaultConfig, t.TempDir())
+	m, err := users.NewManager(users.DefaultConfig, t.TempDir(),
+		users.WithPreAuthStore(systemd.Z_ForTests_NewDescriptorStore(t)))
 	require.NoError(t, err, "Setup: could not create user manager")
 	t.Cleanup(func() { _ = m.Stop() })
 
@@ -99,6 +102,39 @@ func TestGetUserByName(t *testing.T) {
 			require.Error(t, err, "GetUserByName should return an error, but did not")
 		})
 	}
+}
+
+func TestPreCheckRequiresRoot(t *testing.T) {
+	if testutils.RunningAsRoot() {
+		t.Skip("requires a non-root caller")
+	}
+	userslocking.Z_ForTests_OverrideLockingWithCleanup(t)
+	client, m := newUserServiceClient(t, "", true)
+	_, err := client.GetUserByName(context.Background(), &authd.GetUserByNameRequest{
+		Name: "user-pre-check@example.com", ShouldPreCheck: true,
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	_, err = m.UserByID(1234)
+	require.ErrorIs(t, err, users.NoDataFoundError{}, "denied callers must not reserve IDs")
+	_, err = client.GetUserByName(context.Background(), &authd.GetUserByNameRequest{
+		Name: "user1@example.com", ShouldPreCheck: true,
+	})
+	require.NoError(t, err, "existing user lookups remain available to non-root callers")
+}
+
+func TestPreCheckNormalizesBrokerUsername(t *testing.T) {
+	userslocking.Z_ForTests_OverrideLockingWithCleanup(t)
+	client, m := newUserServiceClient(t, "")
+	req := &authd.GetUserByNameRequest{Name: "mixed-case-pre-check@example.com", ShouldPreCheck: true}
+	first, err := client.GetUserByName(context.Background(), req)
+	require.NoError(t, err)
+	require.Equal(t, req.Name, first.Name)
+	require.NoError(t, m.UpdateUser(types.UserInfo{
+		Name: req.Name, Dir: "/nonexistent", Shell: "/bin/bash",
+	}))
+	saved, err := m.UserByName(req.Name)
+	require.NoError(t, err)
+	require.Equal(t, first.Uid, saved.UID, "PAM must complete the reservation made by NSS")
 }
 
 //nolint:dupl // This is not a duplicate test
@@ -652,6 +688,7 @@ func newUserManagerForTests(t *testing.T, dbFile string) *users.Manager {
 	require.NoError(t, err, "Setup: could not create database from testdata")
 
 	managerOpts := []users.Option{
+		users.WithPreAuthStore(systemd.Z_ForTests_NewDescriptorStore(t)),
 		users.WithIDGenerator(&users.IDGeneratorMock{
 			UIDsToGenerate: []uint32{1234},
 		}),

@@ -1,3 +1,10 @@
+authd (0.7.2~ubuntu24.04) noble; urgency=medium
+
+  * CVE-2026-123879: Prevent first-time SSH sessions from using another
+    account's IDs
+
+ -- Noor Eldeen Mansour <nooreldeen.mansour@canonical.com>  Mon, 23 Nov 2026 18:45:58 +0200
+
 authd (0.7.1~ubuntu24.04.2) noble; urgency=medium
 
   * debian/install: Preserve the authd PPA during Ubuntu upgrades

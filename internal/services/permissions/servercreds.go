@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"os"
 
 	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/internal/users/proc"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -41,6 +43,8 @@ func (serverPeerCreds) ServerHandshake(conn net.Conn) (n net.Conn, c credentials
 	// In order to capture errors, we wrap already defined variable 'errClosure'.
 	// 'err' is then the error returned by Control() itself.
 	var errClosure error
+	peerFD := -1
+	var peerFDErr error
 	err = raw.Control(func(fd uintptr) {
 		if fd > math.MaxInt {
 			errClosure = fmt.Errorf("file descriptor value %d is too large to convert to int", fd)
@@ -49,15 +53,29 @@ func (serverPeerCreds) ServerHandshake(conn net.Conn) (n net.Conn, c credentials
 		cred, errClosure = unix.GetsockoptUcred(int(fd),
 			unix.SOL_SOCKET,
 			unix.SO_PEERCRED)
+		if errClosure == nil {
+			peerFD, peerFDErr = unix.GetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_PEERPIDFD)
+		}
 	})
 	if errClosure != nil {
+		if peerFD >= 0 {
+			_ = unix.Close(peerFD)
+		}
 		return nil, nil, fmt.Errorf("GetsockoptUcred() error: %v", errClosure)
 	}
 	if err != nil {
+		if peerFD >= 0 {
+			_ = unix.Close(peerFD)
+		}
 		return nil, nil, fmt.Errorf("Control() error: %v", err)
 	}
 
-	return conn, peerAuthInfo{uid: cred.Uid, pid: cred.Pid}, nil
+	var process *proc.Process
+	if peerFDErr == nil && peerFD >= 0 {
+		process, _ = proc.ProcessFromFile(os.NewFile(uintptr(peerFD), "peer-pidfd"))
+	}
+	// Other RPCs do not need a live process or peer-pidfd kernel support.
+	return &peerConnection{Conn: conn, process: process}, peerAuthInfo{uid: cred.Uid, pid: cred.Pid, process: process}, nil
 }
 func (serverPeerCreds) ClientHandshake(_ context.Context, _ string, conn net.Conn) (net.Conn, credentials.AuthInfo, error) {
 	return conn, nil, nil
@@ -67,8 +85,21 @@ func (serverPeerCreds) Clone() credentials.TransportCredentials { return nil }
 func (serverPeerCreds) OverrideServerName(_ string) error       { return nil }
 
 type peerAuthInfo struct {
-	uid uint32
-	pid int32
+	uid     uint32
+	pid     int32
+	process *proc.Process
+}
+
+type peerConnection struct {
+	net.Conn
+	process *proc.Process
+}
+
+func (c *peerConnection) Close() error {
+	if c.process != nil {
+		_ = c.process.Close()
+	}
+	return c.Conn.Close()
 }
 
 // AuthType returns a string containing the uid and pid of caller.

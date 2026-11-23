@@ -8,8 +8,8 @@ import (
 	"os"
 
 	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/internal/systemd"
 	"github.com/canonical/authd/log"
-	"github.com/coreos/go-systemd/v22/activation"
 	"github.com/coreos/go-systemd/v22/daemon"
 	"google.golang.org/grpc"
 )
@@ -56,7 +56,7 @@ func New(ctx context.Context, registerGRPCService GRPCServiceRegisterer, args ..
 	opts := options{
 		socketPath: "",
 
-		systemdActivationListener: activation.Listeners,
+		systemdActivationListener: systemd.Listeners,
 		systemdSdNotifier:         daemon.SdNotify,
 	}
 	// Apply given args.
