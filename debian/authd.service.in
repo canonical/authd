@@ -9,6 +9,13 @@ Before=nss-user-lookup.target
 [Service]
 Type=notify
 ExecStart=@AUTHD_DAEMONS_PATH@/authd
+# One generation descriptor plus a pidfd and metadata memfd per SSH owner.
+FileDescriptorStoreMax=8193
+FileDescriptorStorePreserve=yes
+LimitNOFILE=16384
+RuntimeDirectory=authd
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
 
 # Some daemon restrictions
 LockPersonality=yes
