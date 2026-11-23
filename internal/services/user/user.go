@@ -72,6 +72,10 @@ func (s Service) GetUserByName(ctx context.Context, req *authd.GetUserByNameRequ
 		log.Warningf(context.Background(), "GetUserByName: %v", err)
 		return nil, status.Error(codes.NotFound, err.Error())
 	}
+	if status.Code(err) == codes.PermissionDenied {
+		log.Warningf(ctx, "GetUserByName: %v", err)
+		return nil, err
+	}
 	if err != nil {
 		log.Errorf(context.Background(), "GetUserByName: %v", err)
 		return nil, status.Error(codes.NotFound, err.Error())
@@ -415,6 +419,10 @@ var errUserNotPermitted = errors.New("user not permitted to log in via SSH for t
 // It returns a types.UserEntry with a unique UID if the user is permitted to log in.
 // If the user is not permitted to log in by any broker, errUserNotPermitted is returned.
 func (s Service) userPreCheck(ctx context.Context, username string) (types.UserEntry, error) {
+	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
+		return types.UserEntry{}, status.Error(codes.PermissionDenied, err.Error())
+	}
+
 	// Check if any broker permits the user to log in via SSH for the first time.
 	var userinfo string
 	var err error
@@ -448,10 +456,15 @@ func (s Service) userPreCheck(ctx context.Context, username string) (types.UserE
 	if err := json.Unmarshal([]byte(userinfo), &u); err != nil {
 		return types.UserEntry{}, fmt.Errorf("user data from broker invalid: %v", err)
 	}
+	u.Name = strings.ToLower(u.Name)
 
 	// Register a temporary user with a unique UID. If the user authenticates successfully, the user will be added to
 	// the database with the same UID.
-	u.UID, err = s.userManager.RegisterUserPreAuth(u.Name)
+	owner, err := permissions.PeerProcess(ctx)
+	if err != nil {
+		return types.UserEntry{}, err
+	}
+	u.UID, err = s.userManager.RegisterUserPreAuth(u.Name, owner)
 	if err != nil {
 		return types.UserEntry{}, fmt.Errorf("failed to add temporary record for user %q: %v", username, err)
 	}
