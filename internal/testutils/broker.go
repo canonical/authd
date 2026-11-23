@@ -361,6 +361,9 @@ func (b *BrokerBusMock) CancelIsAuthenticated(sessionID string) (dbusErr *dbus.E
 
 // UserPreCheck returns default values to be used in tests or an error if requested.
 func (b *BrokerBusMock) UserPreCheck(username string) (userinfo string, dbusErr *dbus.Error) {
+	if username == "mixed-case-pre-check@example.com" {
+		return userInfoFromName("Mixed-Case-Pre-Check", nil), nil
+	}
 	if username != "user-pre-check@example.com" && username != "local-pre-check" {
 		return "", dbus.MakeFailedError(fmt.Errorf("broker %q: UserPreCheck errored out", b.name))
 	}
