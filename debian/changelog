@@ -1,8 +1,15 @@
-authd (0.7.1+git261120+58+29548e90) stonking; urgency=medium
+authd (0.7.2+git261123+1635+3e475d28) stonking; urgency=medium
 
-  * Github build. Run id: 44735442775. Run number: 58.
+  * Github build. Run id: 45206034206. Run number: 1635.
 
- -- adombeck <18482300+adombeck@users.noreply.github.com>  Fri, 20 Nov 2026 13:15:56 +0000
+ -- Noor <nooreldeen.mansour@canonical.com>  Mon, 23 Nov 2026 15:51:25 +0000
+
+authd (0.7.2) stonking; urgency=medium
+
+  * CVE-2026-123879: Prevent first-time SSH sessions from using another
+    account's IDs
+
+ -- Noor Eldeen Mansour <nooreldeen.mansour@canonical.com>  Mon, 23 Nov 2026 17:20:58 +0200
 
 authd (0.7.1) stonking; urgency=medium
 
