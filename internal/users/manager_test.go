@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/canonical/authd/internal/consts"
+	"github.com/canonical/authd/internal/systemd"
 	"github.com/canonical/authd/internal/testutils"
 	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/canonical/authd/internal/users"
@@ -21,6 +23,7 @@ import (
 	"github.com/canonical/authd/internal/users/localentries"
 	localgroupstestutils "github.com/canonical/authd/internal/users/localentries/testutils"
 	userslocking "github.com/canonical/authd/internal/users/locking"
+	"github.com/canonical/authd/internal/users/proc"
 	"github.com/canonical/authd/internal/users/tempentries"
 	userstestutils "github.com/canonical/authd/internal/users/testutils"
 	"github.com/canonical/authd/internal/users/types"
@@ -96,13 +99,15 @@ func TestNewManager(t *testing.T) {
 				config.GIDMax = tc.gidMax
 			}
 
-			m, err := users.NewManager(config, dbDir)
+			m, err := users.NewManager(config, dbDir,
+				users.WithPreAuthStore(systemd.Z_ForTests_NewDescriptorStore(t)))
 			if tc.wantErr {
 				t.Logf("Manager creation exited with %v", err)
 				require.Error(t, err, "NewManager should return an error, but did not")
 				return
 			}
 			require.NoError(t, err, "NewManager should not return an error, but did")
+			t.Cleanup(func() { _ = m.Stop() })
 
 			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Created database should be valid yaml content")
@@ -134,6 +139,278 @@ func TestStop(t *testing.T) {
 	_, err := userstestutils.DBManager(m).AllUsers()
 
 	require.Error(t, err, "AllUsers should return an error, but did not")
+}
+
+func TestPreAuthIdentityAcrossRestart(t *testing.T) {
+	localgroupstestutils.SetupGroupMock(t, filepath.Join("testdata", "groups", "users_in_groups.group"))
+	dbDir := t.TempDir()
+	m := newManagerForTests(t, dbDir)
+	first, _ := preAuthOwner(t)
+	second, _ := preAuthOwner(t)
+	aliceUID, err := m.RegisterUserPreAuth("alice@example.com", first)
+	require.NoError(t, err)
+	overlapUID, err := m.RegisterUserPreAuth("alice@example.com", second)
+	require.NoError(t, err)
+	require.Equal(t, aliceUID, overlapUID)
+	aliceTemporaryGroup, err := m.GroupByID(aliceUID)
+	require.NoError(t, err)
+	require.NoError(t, m.Stop())
+
+	m = newManagerForTests(t, dbDir)
+	bobUID, err := m.RegisterUserPreAuth("bob@example.com")
+	require.NoError(t, err)
+	require.NotEqual(t, aliceUID, bobUID, "a live SSH connection still holds Alice's UID and GID")
+	require.NoError(t, m.UpdateUser(types.UserInfo{
+		Name: "bob@example.com", Dir: "/nonexistent", Shell: "/bin/bash",
+		Groups: []types.GroupInfo{{Name: "shared@example.com", UGID: "shared"}},
+	}))
+	shared, err := m.GroupByName("shared@example.com")
+	require.NoError(t, err)
+	require.NotEqual(t, aliceUID, shared.GID, "Alice's primary GID must not be assigned to another group")
+	require.NoError(t, m.Stop())
+
+	m = newManagerForTests(t, dbDir)
+	t.Cleanup(func() { require.NoError(t, m.Stop()) })
+	retryUID, err := m.RegisterUserPreAuth("alice@example.com", first)
+	require.NoError(t, err)
+	require.Equal(t, aliceUID, retryUID)
+	restoredGroup, err := m.GroupByID(aliceUID)
+	require.NoError(t, err)
+	require.Equal(t, aliceTemporaryGroup, restoredGroup)
+	require.NoError(t, m.UpdateUser(types.UserInfo{
+		Name: "alice@example.com", Dir: "/nonexistent", Shell: "/bin/bash",
+	}))
+	alice, err := m.UserByName("alice@example.com")
+	require.NoError(t, err)
+	require.Equal(t, aliceUID, alice.UID)
+	require.Equal(t, aliceUID, alice.GID)
+	bob, err := m.UserByName("bob@example.com")
+	require.NoError(t, err)
+	require.Equal(t, bobUID, bob.UID)
+	require.Equal(t, bobUID, bob.GID)
+}
+
+func TestPreAuthRejectsUIDOwnedByAnotherUser(t *testing.T) {
+	for _, restart := range []bool{false, true} {
+		t.Run(fmt.Sprintf("restart=%t", restart), func(t *testing.T) {
+			localgroupstestutils.SetupGroupMock(t, filepath.Join("testdata", "groups", "users_in_groups.group"))
+			dbDir := t.TempDir()
+			m := newManagerForTests(t, dbDir)
+			owner, _ := preAuthOwner(t)
+			uid, err := m.RegisterUserPreAuth("alice@example.com", owner)
+			require.NoError(t, err)
+			bob := db.NewUserRow("bob@example.com", uid, uid, "", "/nonexistent", "/bin/bash", "", "")
+			require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(bob,
+				[]db.GroupRow{db.NewGroupRow(bob.Name, uid, bob.Name)}, nil),
+				"simulate a downgrade or offline database edit")
+			if restart {
+				require.NoError(t, m.Stop())
+				m = newManagerForTests(t, dbDir)
+			}
+			require.ErrorContains(t, m.UpdateUser(types.UserInfo{
+				Name: "alice@example.com", Dir: "/nonexistent", Shell: "/bin/bash",
+			}), "already assigned to")
+			unchanged, err := userstestutils.DBManager(m).UserByID(uid)
+			require.NoError(t, err)
+			require.Equal(t, bob, unchanged)
+			retryUID, err := m.RegisterUserPreAuth("alice@example.com", owner)
+			require.NoError(t, err)
+			require.Equal(t, uid, retryUID, "a conflict must not discard the live connection's IDs")
+		})
+	}
+}
+
+func TestIdentityChangesRejectPreAuthReservations(t *testing.T) {
+	for _, idType := range []string{"UID", "GID"} {
+		t.Run(idType, func(t *testing.T) {
+			localgroupstestutils.SetupGroupMock(t, filepath.Join("testdata", "groups", "users_in_groups.group"))
+			m := newManagerForTests(t, t.TempDir())
+			require.NoError(t, m.UpdateUser(types.UserInfo{
+				Name: "bob@example.com", Dir: "/nonexistent", Shell: "/bin/bash",
+			}))
+			bob, err := m.UserByName("bob@example.com")
+			require.NoError(t, err)
+			owner, exit := preAuthOwner(t)
+			uid, err := m.RegisterUserPreAuth("alice@example.com", owner)
+			require.NoError(t, err)
+
+			setID := func(id uint32) error {
+				if idType == "UID" {
+					_, err := m.SetUserID(bob.Name, id)
+					return err
+				}
+				_, err := m.SetGroupID(bob.Name, id)
+				return err
+			}
+			oldID := bob.UID
+			if idType == "GID" {
+				oldID = bob.GID
+			}
+			require.NoError(t, setID(oldID), "an unchanged ID must remain a no-op")
+			require.ErrorContains(t, setID(uid), "ID is held by a pre-authentication connection")
+			unchanged, err := m.UserByName(bob.Name)
+			require.NoError(t, err)
+			require.Equal(t, bob, unchanged, "a rejected reassignment must not change the account")
+
+			exit()
+			require.Eventually(t, func() bool { return setID(uid) == nil }, 3*time.Second, time.Millisecond,
+				"an abandoned reservation must not block reassignment")
+			updated, err := m.UserByName(bob.Name)
+			require.NoError(t, err)
+			if idType == "UID" {
+				require.Equal(t, uid, updated.UID)
+			} else {
+				require.Equal(t, uid, updated.GID)
+			}
+		})
+	}
+}
+
+func TestCompletedPreAuthAllowsIdentityChanges(t *testing.T) {
+	localgroupstestutils.SetupGroupMock(t, filepath.Join("testdata", "groups", "users_in_groups.group"))
+	dbDir := t.TempDir()
+	first, _ := preAuthOwner(t)
+	second, _ := preAuthOwner(t)
+	m := newManagerForTests(t, dbDir)
+	uid, err := m.RegisterUserPreAuth("alice@example.com", first)
+	require.NoError(t, err)
+	_, err = m.RegisterUserPreAuth("alice@example.com", second)
+	require.NoError(t, err)
+	require.NoError(t, m.UpdateUser(types.UserInfo{
+		Name: "alice@example.com", Dir: "/nonexistent", Shell: "/bin/bash",
+	}))
+	_, err = m.SetUserID("alice@example.com", uid+100)
+	require.NoError(t, err)
+	_, err = m.SetGroupID("alice@example.com", uid+100)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		ids, err := m.UsedUIDs()
+		return err == nil && !slices.Contains(ids, uid)
+	}, 3*time.Second, time.Millisecond, "completed reservations must release while their owners are alive")
+	require.NoError(t, m.Stop())
+	m = newManagerForTests(t, dbDir)
+	t.Cleanup(func() { require.NoError(t, m.Stop()) })
+
+	require.NoError(t, m.DeleteUser("alice@example.com", false))
+	reusedUID, err := m.RegisterUserPreAuth("bob@example.com")
+	require.NoError(t, err)
+	require.Equal(t, uid, reusedUID, "the released ID is available while the original owners are alive")
+}
+
+func TestPreAuthCleanupFailureStillUpdatesLocalGroups(t *testing.T) {
+	groupFile := localgroupstestutils.SetupGroupMock(t, filepath.Join("testdata", "groups", "users_in_groups.group"))
+	dbDir := t.TempDir()
+	store := systemd.Z_ForTests_NewDescriptorStore(t)
+	owner, exit := preAuthOwner(t)
+	generator := &ownerExitingIDGenerator{IDGeneratorIface: &users.IDGenerator{
+		UIDMin: 10000, UIDMax: 60000, GIDMin: 10000, GIDMax: 60000,
+	}, exit: exit}
+	m := newManagerForTests(t, dbDir, users.WithPreAuthStore(store), users.WithIDGenerator(generator))
+	uid, err := m.RegisterUserPreAuth("alice@example.com", owner)
+	require.NoError(t, err)
+	store.SetFailRemove(true)
+	require.NoError(t, m.UpdateUser(types.UserInfo{
+		Name: "alice@example.com", Dir: "/nonexistent", Shell: "/bin/bash",
+		Groups: []types.GroupInfo{
+			{Name: "localgroup1"},
+			{Name: "shared@example.com", UGID: "shared"},
+		},
+	}), "background cleanup failures must not fail account creation")
+	alice, err := userstestutils.DBManager(m).UserByName("alice@example.com")
+	require.NoError(t, err, "the account must be saved before its reservation is released")
+	require.Equal(t, uid, alice.UID)
+	groups, err := os.ReadFile(groupFile)
+	require.NoError(t, err)
+	require.Contains(t, string(groups), "localgroup1:x:41:user1@example.com,alice@example.com")
+	require.NoError(t, m.Stop())
+
+	store.SetFailRemove(false)
+	m = newManagerForTests(t, dbDir, users.WithPreAuthStore(store))
+	require.NoError(t, m.DeleteUser("alice@example.com", false))
+	ids, err := m.UsedUIDs()
+	require.NoError(t, err)
+	require.NotContains(t, ids, uid, "startup must release reservations whose owners have exited")
+}
+
+type ownerExitingIDGenerator struct {
+	users.IDGeneratorIface
+	exit func()
+}
+
+func (g *ownerExitingIDGenerator) GenerateGID(entries *localentries.UserDBLocked, owner users.IDOwner) (uint32, func(), error) {
+	gid, cleanup, err := g.IDGeneratorIface.GenerateGID(entries, owner)
+	g.exit()
+	return gid, cleanup, err
+}
+
+func TestAbandonedPreAuthUIDReused(t *testing.T) {
+	dbDir := t.TempDir()
+	owner, exit := preAuthOwner(t)
+	m := newManagerForTests(t, dbDir)
+	uid, err := m.RegisterUserPreAuth("alice@example.com", owner)
+	require.NoError(t, err)
+	require.NoError(t, m.Stop())
+	exit()
+	m = newManagerForTests(t, dbDir)
+	t.Cleanup(func() { require.NoError(t, m.Stop()) })
+	reusedUID, err := m.RegisterUserPreAuth("bob@example.com")
+	require.NoError(t, err)
+	require.Equal(t, uid, reusedUID)
+}
+
+func preAuthOwner(t *testing.T) (*proc.Process, func()) {
+	t.Helper()
+	cmd := exec.Command("sleep", "600")
+	require.NoError(t, cmd.Start())
+	var once sync.Once
+	exit := func() {
+		once.Do(func() {
+			require.NoError(t, cmd.Process.Kill())
+			_ = cmd.Wait()
+		})
+	}
+	t.Cleanup(exit)
+	owner, err := proc.OpenProcess(cmd.Process.Pid)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = owner.Close() })
+	return owner, exit
+}
+
+func TestFailedUpdateKeepsPreAuthReservation(t *testing.T) {
+	localgroupstestutils.SetupGroupMock(t, filepath.Join("testdata", "groups", "users_in_groups.group"))
+	dbDir := t.TempDir()
+	m := newManagerForTests(t, dbDir)
+	uid, err := m.RegisterUserPreAuth("alice@example.com")
+	require.NoError(t, err)
+	require.Error(t, m.UpdateUser(types.UserInfo{
+		Name: "alice@example.com", Groups: []types.GroupInfo{{UGID: "invalid"}},
+	}))
+	require.NoError(t, m.Stop())
+
+	m = newManagerForTests(t, dbDir)
+	t.Cleanup(func() { require.NoError(t, m.Stop()) })
+	retryUID, err := m.RegisterUserPreAuth("alice@example.com")
+	require.NoError(t, err)
+	require.Equal(t, uid, retryUID, "failed registration must not release an ID already returned to NSS")
+	require.NoError(t, m.UpdateUser(types.UserInfo{
+		Name: "alice@example.com", Dir: "/nonexistent", Shell: "/bin/bash",
+	}))
+	alice, err := m.UserByName("alice@example.com")
+	require.NoError(t, err)
+	require.Equal(t, uid, alice.UID)
+	require.Equal(t, uid, alice.GID)
+}
+
+func TestPreAuthRequiresSavedReservation(t *testing.T) {
+	dbDir := t.TempDir()
+	store := systemd.Z_ForTests_NewDescriptorStore(t)
+	m := newManagerForTests(t, dbDir, users.WithPreAuthStore(store))
+	t.Cleanup(func() { require.NoError(t, m.Stop()) })
+	store.FailPut = true
+
+	uid, err := m.RegisterUserPreAuth("alice@example.com")
+	require.Error(t, err)
+	require.Zero(t, uid, "NSS must not receive an ID that could be lost on restart")
 }
 
 type userCase struct {
@@ -2130,11 +2407,21 @@ func requireErrorAssertions(t *testing.T, gotErr, wantErrType error, wantErr boo
 	require.NoError(t, gotErr, "Error should not be returned")
 }
 
+var preAuthTestStores sync.Map
+
 func newManagerForTests(t *testing.T, dbDir string, opts ...users.Option) *users.Manager {
 	t.Helper()
 
+	value, loaded := preAuthTestStores.LoadOrStore(dbDir, systemd.Z_ForTests_NewDescriptorStore(t))
+	if !loaded {
+		t.Cleanup(func() { preAuthTestStores.Delete(dbDir) })
+	}
+	store, ok := value.(*systemd.TestDescriptorStore)
+	require.True(t, ok)
+	opts = append([]users.Option{users.WithPreAuthStore(store)}, opts...)
 	m, err := users.NewManager(users.DefaultConfig, dbDir, opts...)
 	require.NoError(t, err, "NewManager should not return an error, but did")
+	t.Cleanup(func() { _ = m.Stop() })
 
 	return m
 }
