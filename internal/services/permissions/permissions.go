@@ -5,12 +5,34 @@ import (
 	"context"
 	"errors"
 
+	"github.com/canonical/authd/internal/users/proc"
 	"google.golang.org/grpc/peer"
 )
 
 // Manager is an abstraction of permission process.
 type Manager struct {
 	rootUID uint32
+}
+
+// PeerProcess returns the process identity captured from Unix peer credentials
+// during the server handshake.
+func PeerProcess(ctx context.Context) (*proc.Process, error) {
+	p, ok := peer.FromContext(ctx)
+	if !ok {
+		return nil, errors.New("missing gRPC peer information")
+	}
+	info, ok := p.AuthInfo.(peerAuthInfo)
+	if !ok || info.process == nil {
+		return nil, errors.New("missing kernel peer pidfd")
+	}
+	alive, err := info.process.Alive()
+	if err != nil {
+		return nil, err
+	}
+	if !alive {
+		return nil, errors.New("peer process has exited")
+	}
+	return info.process, nil
 }
 
 type options struct {
