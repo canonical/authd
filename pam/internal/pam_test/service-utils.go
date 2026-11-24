@@ -165,6 +165,10 @@ const (
 	Deny
 	// Ignore uses a module that we use as ignore return value.
 	Ignore
+	// Echo uses a module that prints its arguments.
+	Echo
+	// Exec uses a module that runs its arguments as a command.
+	Exec
 )
 
 func (a FallBackModule) String() string {
@@ -178,6 +182,10 @@ func (a FallBackModule) String() string {
 		return "pam_debug.so auth=incomplete cred=incomplete acct=incomplete " +
 			"prechauthtok=incomplete chauthtok=incomplete " +
 			"open_session=incomplete close_session=incomplete"
+	case Echo:
+		return "pam_echo.so"
+	case Exec:
+		return "pam_exec.so"
 	default:
 		return ""
 	}
