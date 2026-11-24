@@ -79,6 +79,40 @@ var (
 	sshdHostPubKey                            []byte
 )
 
+// The controls of the authd module in the SSH service file, that must be kept in
+// sync with debian/pam-configs/authd.in, as [TestSSHServiceControlsMatchThePackagedOnes]
+// ensures.
+const (
+	// sshAuthControl is the packaged auth control, but it continues on success
+	// and jumps to the local broker lines when the module is ignored.
+	sshAuthControl    = "[success=ok default=die authinfo_unavail=2 ignore=2]"
+	sshAccountControl = "[default=ignore success=ok]"
+)
+
+func TestSSHServiceControlsMatchThePackagedOnes(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		action       pam_test.Action
+		control      string
+		translations map[string]string
+	}{
+		"Auth":    {action: pam_test.Auth, control: sshAuthControl, translations: map[string]string{"end": "ok", "ignore": "2"}},
+		"Account": {action: pam_test.Account, control: sshAccountControl},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			want, err := pam_test.PackagedControl(tc.action, tc.translations)
+			require.NoError(t, err, "Setup: could not get the packaged control")
+			got, err := pam_test.ParseControl(tc.control)
+			require.NoError(t, err, "Setup: could not parse the control")
+			require.Equal(t, want, got, "The control should match the packaged one")
+		})
+	}
+}
+
 func TestSSHAuthenticate(t *testing.T) {
 	t.Parallel()
 
@@ -618,15 +652,12 @@ func createSSHDServiceFile(t *testing.T, module, execChild, mkHomeModule, socket
 	}
 
 	pamServiceName := "authd-sshd"
-	// Keep control values in sync with debian/pam-configs/authd.in.
-	authControl := "[success=ok default=die authinfo_unavail=2 ignore=2]"
-	accountControl := "[default=ignore success=ok]"
 	notifyState := pam_test.ServiceLine{
 		Action: pam_test.Auth, Control: pam_test.Optional, Module: "pam_echo.so",
 		Args: []string{fmt.Sprintf("%s finished for user '%%u'", pam_test.RunnerResultActionAuthenticate.Message(""))},
 	}
 	serviceFile, err := pam_test.CreateService(outDir, pamServiceName, []pam_test.ServiceLine{
-		{Action: pam_test.Auth, Control: pam_test.NewControl(authControl), Module: module, Args: moduleArgs},
+		{Action: pam_test.Auth, Control: pam_test.NewControl(sshAuthControl), Module: module, Args: moduleArgs},
 		// Success case:
 		notifyState,
 		{Action: pam_test.Auth, Control: pam_test.Sufficient, Module: pam_test.Permit.String()},
@@ -636,7 +667,7 @@ func createSSHDServiceFile(t *testing.T, module, execChild, mkHomeModule, socket
 		{Action: pam_test.Auth, Control: pam_test.Optional, Module: "pam_echo.so", Args: []string{"SSH PAM user '%u' using local broker"}},
 		{Action: pam_test.Auth, Control: pam_test.Required, Module: "pam_unix.so"},
 
-		{Action: pam_test.Account, Control: pam_test.NewControl(accountControl), Module: module, Args: moduleArgs},
+		{Action: pam_test.Account, Control: pam_test.NewControl(sshAccountControl), Module: module, Args: moduleArgs},
 		// pam_permit provides a fallback PAM_SUCCESS so that account management
 		// succeeds even when the authd module returns PAM_IGNORE (e.g. for local
 		// users).  In a real system other primary modules (e.g. pam_unix) fill
