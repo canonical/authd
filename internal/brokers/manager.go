@@ -228,6 +228,24 @@ func (m *Manager) CheckSessionOwnership(sessionID, connectionID string) error {
 	m.transactionsToBrokerMu.RLock()
 	defer m.transactionsToBrokerMu.RUnlock()
 
+	return m.checkSessionOwnershipLocked(sessionID, connectionID)
+}
+
+// OwnedSession returns the broker, the username and the PAM service name of
+// the session, after checking that it was created by the given client connection.
+func (m *Manager) OwnedSession(sessionID, connectionID string) (broker *Broker, username, serviceName string, err error) {
+	m.transactionsToBrokerMu.RLock()
+	defer m.transactionsToBrokerMu.RUnlock()
+
+	if err := m.checkSessionOwnershipLocked(sessionID, connectionID); err != nil {
+		return nil, "", "", err
+	}
+
+	return m.transactionsToBroker[sessionID], m.sessionsToUsername[sessionID], m.sessionsToServiceName[sessionID], nil
+}
+
+// checkSessionOwnershipLocked is CheckSessionOwnership with transactionsToBrokerMu held.
+func (m *Manager) checkSessionOwnershipLocked(sessionID, connectionID string) error {
 	ownerConnectionID, found := m.sessionsToConnection[sessionID]
 	if !found {
 		return sessionNotFoundError(sessionID)
@@ -276,13 +294,6 @@ func (m *Manager) AbandonSession(sessionID string) {
 			log.Warningf(context.Background(), "%s: Could not end abandoned session: %v", sessionID, err)
 		}
 	}()
-}
-
-// UsernameFromSessionID returns the username associated with the given session ID.
-func (m *Manager) UsernameFromSessionID(sessionID string) string {
-	m.transactionsToBrokerMu.RLock()
-	defer m.transactionsToBrokerMu.RUnlock()
-	return m.sessionsToUsername[sessionID]
 }
 
 // ServiceNameFromSessionID returns the PAM service name associated with the given session ID.

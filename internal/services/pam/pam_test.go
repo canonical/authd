@@ -1403,6 +1403,61 @@ func TestSessionsEndWhenTheClientDisconnectsWhileEndingOne(t *testing.T) {
 	require.Error(t, err, "The other sessions of the connection should be forgotten")
 }
 
+func TestIsAuthenticated_FailDelay_SessionEndedDuringAuthentication(t *testing.T) {
+	t.Parallel()
+
+	delay := 200 * time.Millisecond
+	cfg := pam.Config{
+		BruteForceMitigationConfig: pam.BruteForceMitigationConfig{
+			AuthFailDelayThreshold: 1,
+			AuthFailDelay:          delay,
+			AuthFailResetWindow:    time.Hour,
+		},
+	}
+	client := newPamClientWithConfig(t, nil, globalBrokerManager, cfg)
+
+	sessionID := startSession(t, client, "ia_denied@example.com")
+	isAuthenticated := testutils.BlockBrokerMockIsAuthenticated(
+		strings.TrimPrefix(sessionID, mockBrokerGeneratedID+"-"))
+	t.Cleanup(isAuthenticated.Release)
+
+	done := make(chan error, 1)
+	go func() {
+		resp, err := client.IsAuthenticated(context.Background(), &authd.IARequest{
+			SessionId:          sessionID,
+			AuthenticationData: &authd.IARequest_AuthenticationData{},
+		})
+		if err == nil && resp.GetAccess() != auth.Denied {
+			err = fmt.Errorf("unexpected access %q", resp.GetAccess())
+		}
+		done <- err
+	}()
+
+	select {
+	case <-isAuthenticated.Started():
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "The broker did not receive the IsAuthenticated call")
+	}
+
+	// The session is ended while the broker is still checking the authentication.
+	_, err := client.EndSession(context.Background(), &authd.ESRequest{SessionId: sessionID})
+	require.NoError(t, err, "EndSession should not return an error")
+
+	isAuthenticated.Release()
+	require.NoError(t, <-done, "The authentication should be denied")
+
+	// The denial must still count against the user, so the next one is delayed.
+	sessionID = startSession(t, client, "ia_denied@example.com")
+	start := time.Now()
+	_, err = client.IsAuthenticated(context.Background(), &authd.IARequest{
+		SessionId:          sessionID,
+		AuthenticationData: &authd.IARequest_AuthenticationData{},
+	})
+	require.NoError(t, err, "IsAuthenticated should not return an error")
+	require.GreaterOrEqual(t, time.Since(start), delay,
+		"A denial should count against the user even if its session was ended meanwhile")
+}
+
 func TestMain(m *testing.M) {
 	log.SetLevel(log.DebugLevel)
 

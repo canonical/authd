@@ -90,6 +90,17 @@ func BlockBrokerMockCall(key string) *BrokerMockCall {
 	return c
 }
 
+// BlockBrokerMockIsAuthenticated makes the broker mock wait before replying to
+// the IsAuthenticated call for the given session ID, until the returned call is
+// released.
+func BlockBrokerMockIsAuthenticated(sessionID string) *BrokerMockCall {
+	return BlockBrokerMockCall(isAuthenticatedCallKey(sessionID))
+}
+
+func isAuthenticatedCallKey(sessionID string) string {
+	return "IsAuthenticated " + sessionID
+}
+
 func waitForBrokerMockCall(key string) {
 	brokerMockBlockedCallsMu.Lock()
 	c, ok := brokerMockBlockedCalls[key]
@@ -281,6 +292,8 @@ func (b *BrokerBusMock) SelectAuthenticationMode(sessionID, authenticationModeNa
 
 // IsAuthenticated returns default values to be used in tests or an error if requested.
 func (b *BrokerBusMock) IsAuthenticated(sessionID, authenticationData string) (access, data string, dbusErr *dbus.Error) {
+	waitForBrokerMockCall(isAuthenticatedCallKey(sessionID))
+
 	// The IsAuthenticated needs to function a bit differently to still allow tests to be executed in parallel.
 	// We have to use both the prefixed sessionID and the parsed one in order to differentiate between test cases.
 	parsedID := parseSessionID(sessionID)

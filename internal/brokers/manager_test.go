@@ -250,6 +250,16 @@ func TestNewSession(t *testing.T) {
 				"CheckSessionOwnership should refuse another client connection")
 			require.Error(t, m.CheckSessionOwnership("unknown-session", testConnectionID),
 				"CheckSessionOwnership should refuse unknown sessions")
+
+			ownedBroker, username, serviceName, err := m.OwnedSession(gotID, testConnectionID)
+			require.NoError(t, err, "OwnedSession should return the session of its client connection")
+			require.Equal(t, wantBroker.ID, ownedBroker.ID, "OwnedSession should return the broker of the session")
+			require.Equal(t, tc.username, username, "OwnedSession should return the username of the session")
+			require.Equal(t, "sshd", serviceName, "OwnedSession should return the PAM service name of the session")
+			_, _, _, err = m.OwnedSession(gotID, "other-connection")
+			require.ErrorIs(t, err, brokers.ErrSessionNotOwned, "OwnedSession should refuse another client connection")
+			_, _, _, err = m.OwnedSession("unknown-session", testConnectionID)
+			require.Error(t, err, "OwnedSession should refuse unknown sessions")
 		})
 	}
 }

@@ -466,14 +466,16 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		log.Errorf(ctx, "IsAuthenticated: No session ID provided")
 		return nil, status.Error(codes.InvalidArgument, "no session ID provided")
 	}
-	if err := s.checkSessionOwnership(ctx, sessionID); err != nil {
+	connectionID, err := sessionConnectionID(ctx, sessionID)
+	if err != nil {
 		return nil, err
 	}
 
-	broker, err := s.brokerManager.BrokerFromSessionID(sessionID)
+	// Get the session information before authenticating, as the session may
+	// be ended while the broker checks the authentication.
+	broker, username, serviceName, err := s.brokerManager.OwnedSession(sessionID, connectionID)
 	if err != nil {
-		log.Errorf(ctx, "IsAuthenticated: Could not get broker for session %q: %v", sessionID, err)
-		return nil, err
+		return nil, sessionOwnershipError(ctx, sessionID, err)
 	}
 
 	authenticationDataJSON, err := protojson.Marshal(req.GetAuthenticationData())
@@ -490,8 +492,6 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 
 	log.Debugf(ctx, "%s: Authentication result: %s", sessionID, access)
 
-	username := s.brokerManager.UsernameFromSessionID(sessionID)
-	serviceName := s.brokerManager.ServiceNameFromSessionID(sessionID)
 	bfCfg := s.authFailConfig.ForService(serviceName)
 
 	if access != auth.Granted {
@@ -692,13 +692,27 @@ func (s Service) EndSessionsForConnection(connectionID string) {
 
 // checkSessionOwnership ensures that the session was created by the client connection sending the request.
 func (s Service) checkSessionOwnership(ctx context.Context, sessionID string) error {
+	connectionID, err := sessionConnectionID(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+
+	return sessionOwnershipError(ctx, sessionID, s.brokerManager.CheckSessionOwnership(sessionID, connectionID))
+}
+
+// sessionConnectionID returns the ID of the client connection sending the request about the session.
+func sessionConnectionID(ctx context.Context, sessionID string) (string, error) {
 	connectionID, ok := permissions.ConnectionID(ctx)
 	if !ok {
 		log.Errorf(ctx, "%s: Impossible to identify the client connection", sessionID)
-		return status.Error(codes.Internal, "impossible to identify the client connection")
+		return "", status.Error(codes.Internal, "impossible to identify the client connection")
 	}
 
-	err := s.brokerManager.CheckSessionOwnership(sessionID, connectionID)
+	return connectionID, nil
+}
+
+// sessionOwnershipError converts the error of a session ownership check into the one to return.
+func sessionOwnershipError(ctx context.Context, sessionID string, err error) error {
 	if errors.Is(err, brokers.ErrSessionNotOwned) {
 		log.Errorf(ctx, "%s: Session was created by another client connection", sessionID)
 		return status.Error(codes.PermissionDenied, err.Error())
