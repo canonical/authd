@@ -33,6 +33,7 @@ func main() {
 	pamTty := os.Getenv(pam_test.RunnerEnvTty)
 	pamService := os.Getenv(pam_test.RunnerEnvService)
 	timeoutDuration := os.Getenv(pam_test.RunnerEnvConnectionTimeout)
+	packagedPasswordStack := os.Getenv(pam_test.RunnerEnvPackagedPasswordStack) != ""
 
 	tmpDir, err := os.MkdirTemp(os.TempDir(), "pam-cli-tester-")
 	if err != nil {
@@ -96,14 +97,33 @@ func main() {
 	if pamService == "" {
 		pamService = "authd-pam-runner-service"
 	}
-	serviceFile, err := pam_test.CreateService(tmpDir, pamService, []pam_test.ServiceLine{
+	passwordLines := []pam_test.ServiceLine{
+		{Action: pam_test.Password, Control: pam_test.SufficientRequisite, Module: execModule, Args: args},
+		{Action: pam_test.Password, Control: pam_test.Sufficient, Module: pam_test.Ignore.String()},
+	}
+	if packagedPasswordStack {
+		nextPasswordLines := []pam_test.ServiceLine{
+			{Action: pam_test.Password, Control: pam_test.Optional, Module: pam_test.Echo.String(), Args: []string{"Next password module reached"}},
+			{
+				Action: pam_test.Password, Control: pam_test.NewControl("[success=1 default=ignore]"), Module: pam_test.Exec.String(),
+				Args: []string{"quiet", "stdout", "/bin/echo", "Next password module changed the password"},
+			},
+			{Action: pam_test.Password, Control: pam_test.Requisite, Module: pam_test.Deny.String()},
+			{Action: pam_test.Password, Control: pam_test.Required, Module: pam_test.Permit.String()},
+		}
+		// The end jump of pam-auth-update reaches the last module of the stack.
+		passwordControl := pam_test.RunnerPackagedPasswordControl(len(nextPasswordLines) - 1)
+		passwordLines = append([]pam_test.ServiceLine{
+			{Action: pam_test.Password, Control: pam_test.NewControl(passwordControl), Module: execModule, Args: args},
+		}, nextPasswordLines...)
+	}
+
+	serviceFile, err := pam_test.CreateService(tmpDir, pamService, append([]pam_test.ServiceLine{
 		{Action: pam_test.Auth, Control: pam_test.SufficientRequisite, Module: execModule, Args: args},
 		{Action: pam_test.Auth, Control: pam_test.Sufficient, Module: pam_test.Ignore.String()},
 		{Action: pam_test.Account, Control: pam_test.SufficientRequisite, Module: execModule, Args: args},
 		{Action: pam_test.Account, Control: pam_test.Sufficient, Module: pam_test.Ignore.String()},
-		{Action: pam_test.Password, Control: pam_test.SufficientRequisite, Module: execModule, Args: args},
-		{Action: pam_test.Password, Control: pam_test.Sufficient, Module: pam_test.Ignore.String()},
-	})
+	}, passwordLines...))
 	if err != nil {
 		log.Fatalf("Can't create service file %s: %v", serviceFile, err)
 	}
@@ -164,6 +184,9 @@ func main() {
 	}
 
 	pamFlags := pam.Silent
+	if packagedPasswordStack {
+		pamFlags = 0
+	}
 	pamRes := pamFunc(pamFlags)
 	user, _ := tx.GetItem(pam.User)
 
