@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +21,7 @@ import (
 	"github.com/canonical/authd/internal/brokers/layouts"
 	"github.com/canonical/authd/internal/decorate"
 	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/internal/services/permissions"
 	"github.com/canonical/authd/internal/users"
 	"github.com/canonical/authd/internal/users/types"
 	"github.com/canonical/authd/log"
@@ -28,6 +31,18 @@ import (
 )
 
 var _ authd.PAMServer = Service{}
+
+// pamDDirs are the directories containing PAM service configuration files.
+var pamDDirs = []string{"/etc/pam.d", "/usr/lib/pam.d"}
+
+// pamDefaultService is the service whose configuration PAM uses when a
+// service has no configuration of its own.
+const pamDefaultService = "other"
+
+// ConfigDirs returns the directories containing PAM service configuration files.
+func ConfigDirs() []string {
+	return slices.Clone(pamDDirs)
+}
 
 // authFailMaxTracked is the maximum number of distinct (service, username) pairs tracked
 // simultaneously to bound memory usage.
@@ -101,17 +116,7 @@ func (c Config) ForService(name string) BruteForceMitigationConfig {
 // is removed from the system but still present in the config file.
 func (c Config) WarnOnUnknownServices(ctx context.Context, pamDDirs []string) {
 	for name := range c.Services {
-		found := false
-		for _, pamDDir := range pamDDirs {
-			if _, err := os.Stat(filepath.Join(pamDDir, name)); err == nil {
-				found = true
-				break
-			} else if !os.IsNotExist(err) {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !hasPAMServiceFile(pamDDirs, name) {
 			log.Warningf(ctx, "PAM service %q configured in authd but not found in %s", name, strings.Join(pamDDirs, " or "))
 		}
 	}
@@ -186,23 +191,25 @@ func (t *authFailTracker) recordSuccess(serviceName, username string) {
 
 // Service is the implementation of the PAM module service.
 type Service struct {
-	userManager    *users.Manager
-	brokerManager  *brokers.Manager
-	failedAuths    *authFailTracker
-	authFailConfig Config
+	userManager       *users.Manager
+	brokerManager     *brokers.Manager
+	permissionManager *permissions.Manager
+	failedAuths       *authFailTracker
+	authFailConfig    Config
 
 	authd.UnimplementedPAMServer
 }
 
 // NewService returns a new PAM GRPC service.
-func NewService(ctx context.Context, userManager *users.Manager, brokerManager *brokers.Manager, cfg Config) Service {
+func NewService(ctx context.Context, userManager *users.Manager, brokerManager *brokers.Manager, permissionManager *permissions.Manager, cfg Config) Service {
 	log.Debug(ctx, "Building new gRPC PAM service")
 
 	return Service{
-		userManager:    userManager,
-		brokerManager:  brokerManager,
-		failedAuths:    newAuthFailTracker(),
-		authFailConfig: cfg,
+		userManager:       userManager,
+		brokerManager:     brokerManager,
+		permissionManager: permissionManager,
+		failedAuths:       newAuthFailTracker(),
+		authFailConfig:    cfg,
 	}
 }
 
@@ -226,6 +233,10 @@ func (s Service) AvailableBrokers(ctx context.Context, _ *authd.Empty) (*authd.A
 func (s Service) GetBroker(ctx context.Context, req *authd.GBRequest) (*authd.GBResponse, error) {
 	// authd usernames are lowercase
 	username := strings.ToLower(req.GetUsername())
+
+	if err := s.checkUserAccess(ctx, username); err != nil {
+		return nil, err
+	}
 
 	// Use in memory cache first
 	if b := s.brokerManager.BrokerForUser(username); b != nil {
@@ -298,6 +309,9 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 		log.Errorf(ctx, "SelectBroker: No user name provided")
 		return nil, status.Error(codes.InvalidArgument, "no user name provided")
 	}
+	if err := s.checkUserAccess(ctx, username); err != nil {
+		return nil, err
+	}
 	if brokerID == "" {
 		log.Errorf(ctx, "SelectBroker: No broker selected")
 		return nil, status.Error(codes.InvalidArgument, "no broker selected")
@@ -336,7 +350,7 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 	}
 
 	// Create a session and Memorize selected broker for it.
-	sessionID, encryptionKey, err := s.brokerManager.NewSession(brokerID, username, lang, mode, userProviderID, req.GetServiceName())
+	sessionID, encryptionKey, err := s.brokerManager.NewSession(brokerID, username, lang, mode, userProviderID, pamServiceName(req.GetServiceName()))
 	if err != nil {
 		log.Errorf(ctx, "SelectBroker: Could not create session for user %q with broker %q: %v", username, brokerID, err)
 		return nil, err
@@ -566,6 +580,84 @@ func (s Service) EndSession(ctx context.Context, req *authd.ESRequest) (empty *a
 	}
 
 	return &authd.Empty{}, s.brokerManager.EndSession(sessionID)
+}
+
+// checkUserAccess ensures that the request comes from root or from the user it is about.
+// The reply is the same whether or not the user exists.
+func (s Service) checkUserAccess(ctx context.Context, username string) error {
+	if err := s.permissionManager.CheckRequestIsFromRootOrUser(ctx, func() (uint32, error) {
+		return s.userUID(username)
+	}); err != nil {
+		log.Warningf(ctx, "Refusing request about user %q: %v", username, err)
+		return status.Error(codes.PermissionDenied, err.Error())
+	}
+
+	return nil
+}
+
+// userUID returns the UID of the user that a request about username acts on.
+// This is the one of the authd user, as its record provides the broker of the
+// user, or the one of the user that NSS provides if authd does not manage it.
+func (s Service) userUID(username string) (uint32, error) {
+	if username == "" {
+		return 0, errors.New("no user name provided")
+	}
+
+	u, err := s.userManager.UserByName(username)
+	if err == nil {
+		return checkUserUID(u.UID)
+	}
+	if !errors.Is(err, users.NoDataFoundError{}) {
+		return 0, err
+	}
+
+	nssUser, err := user.Lookup(username)
+	if err != nil {
+		return 0, err
+	}
+	uid, err := strconv.ParseUint(nssUser.Uid, 10, 32)
+	if err != nil {
+		return 0, err
+	}
+	return checkUserUID(uint32(uid))
+}
+
+func checkUserUID(uid uint32) (uint32, error) {
+	if uid == 0 {
+		return 0, errors.New("users cannot be root")
+	}
+	return uid, nil
+}
+
+// pamServiceName returns the name of the service whose configuration PAM uses
+// for the given service name.
+//
+// PAM lowercases service names and only keeps the part after the last '/'.
+// If there is no configuration file for the service, it uses the one of the
+// default service.
+func pamServiceName(name string) string {
+	name = strings.ToLower(name)
+	if i := strings.LastIndexByte(name, '/'); i >= 0 {
+		name = name[i+1:]
+	}
+
+	if name == "" || name == "." || name == ".." || !hasPAMServiceFile(pamDDirs, name) {
+		return pamDefaultService
+	}
+
+	return name
+}
+
+// hasPAMServiceFile returns whether there is a configuration file for the PAM
+// service in one of the given directories.
+func hasPAMServiceFile(dirs []string, name string) bool {
+	for _, dir := range dirs {
+		if fi, err := os.Stat(filepath.Join(dir, name)); err == nil && fi.Mode().IsRegular() {
+			return true
+		}
+	}
+
+	return false
 }
 
 func uiLayoutToMap(layout *authd.UILayout) (mapLayout map[string]string, err error) {

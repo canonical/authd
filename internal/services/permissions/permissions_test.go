@@ -2,6 +2,7 @@ package permissions_test
 
 import (
 	"context"
+	"errors"
 	"math"
 	"os"
 	"testing"
@@ -62,6 +63,63 @@ func TestCheckRequestIsFromRoot(t *testing.T) {
 				return
 			}
 			require.NoError(t, err, "CheckRequestIsFromRoot should allow access but didn't")
+		})
+	}
+}
+
+func TestCheckRequestIsFromRootOrUser(t *testing.T) {
+	t.Parallel()
+
+	currentUID := permissions.CurrentUserUID()
+
+	const notRootUID uint32 = math.MaxUint32 - 1
+
+	tests := map[string]struct {
+		userUID        uint32
+		userUIDErr     error
+		peerIsRoot     bool
+		noPeerInfo     bool
+		noPeerAuthInfo bool
+
+		wantErr           bool
+		wantUserUIDCalled bool
+	}{
+		"Granted_if_peer_is_root":                     {peerIsRoot: true, userUID: notRootUID},
+		"Granted_if_peer_is_root_and_user_is_unknown": {peerIsRoot: true, userUIDErr: errors.New("unknown user")},
+		"Granted_if_peer_is_the_user":                 {userUID: currentUID, wantUserUIDCalled: true},
+
+		"Error_if_peer_is_another_user":    {userUID: notRootUID, wantErr: true, wantUserUIDCalled: true},
+		"Error_if_user_cannot_be_resolved": {userUIDErr: errors.New("unknown user"), wantErr: true, wantUserUIDCalled: true},
+		"Error_if_user_cannot_be_resolved_with_the_peer_uid": {
+			userUID: currentUID, userUIDErr: errors.New("unknown user"), wantErr: true, wantUserUIDCalled: true,
+		},
+		"Error_if_missing_peer_info":      {noPeerInfo: true, userUID: currentUID, wantErr: true},
+		"Error_if_missing_peer_auth_info": {noPeerAuthInfo: true, userUID: currentUID, wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := setupPermissionTestContext(t, tc.noPeerInfo, tc.noPeerAuthInfo, currentUID)
+
+			rootUID := notRootUID
+			if tc.peerIsRoot {
+				rootUID = currentUID
+			}
+			pm := permissions.New(permissions.Z_ForTests_WithRootUID(rootUID))
+
+			var userUIDCalled bool
+			err := pm.CheckRequestIsFromRootOrUser(ctx, func() (uint32, error) {
+				userUIDCalled = true
+				return tc.userUID, tc.userUIDErr
+			})
+			require.Equal(t, tc.wantUserUIDCalled, userUIDCalled, "The user UID lookup should only be done if needed")
+
+			if tc.wantErr {
+				require.Error(t, err, "CheckRequestIsFromRootOrUser should deny access but didn't")
+				return
+			}
+			require.NoError(t, err, "CheckRequestIsFromRootOrUser should allow access but didn't")
 		})
 	}
 }
