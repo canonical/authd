@@ -73,6 +73,10 @@ func TestFormatErrorMessage(t *testing.T) {
 			inputError:  status.Error(codes.Unknown, "Unknown error"),
 			wantMessage: "Unknown error",
 		},
+		"Parse_code_PermissionDenied": {
+			inputError:  status.Error(codes.PermissionDenied, "PermissionDenied error"),
+			wantMessage: "permission denied: PermissionDenied error",
+		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -81,6 +85,8 @@ func TestFormatErrorMessage(t *testing.T) {
 			err := FormatErrorMessage(context.TODO(), "", testRequest{tc.inputError}, nil, nil, testInvoker)
 			require.Error(t, err, "FormatErrorMessage should return an error")
 			require.Equal(t, tc.wantMessage, err.Error(), "FormatErrorMessage returned unexpected error message")
+			require.Equal(t, status.Code(tc.inputError), status.Code(err),
+				"FormatErrorMessage should keep the gRPC status of the error")
 		})
 	}
 }
