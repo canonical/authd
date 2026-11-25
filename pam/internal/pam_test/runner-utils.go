@@ -31,7 +31,20 @@ const (
 	RunnerEnvTty = "AUTHD_PAM_RUNNER_TTY"
 	// RunnerEnvService is the environment variable used by the test client to set the PAM service name.
 	RunnerEnvService = "AUTHD_PAM_RUNNER_SERVICE"
+	// RunnerEnvPackagedPasswordStack is the environment variable used by the test client to use
+	// the packaged password stack controls, followed by another module.
+	//
+	//nolint:gosec // G101 This is the name of an environment variable, not a credential.
+	RunnerEnvPackagedPasswordStack = "AUTHD_PAM_RUNNER_PACKAGED_PASSWORD_STACK"
 )
+
+// RunnerPackagedPasswordControl returns the control of the authd password
+// module in the packaged password stack, as debian/pam-configs/authd.in
+// defines it once pam-auth-update expanded its jumps to skip endJump modules.
+// It must be kept in sync with it, as [TestRunnerPackagedPasswordControl] ensures.
+func RunnerPackagedPasswordControl(endJump int) string {
+	return fmt.Sprintf("[success=%d ignore=ignore default=die authinfo_unavail=ignore]", endJump)
+}
 
 // RunnerAction is the type for Pam Runner actions.
 type RunnerAction authd.SessionMode
