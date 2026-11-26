@@ -74,6 +74,13 @@ export BUILT_PAM_LIBS_PATH := obj-$(DEB_HOST_GNU_TYPE)/src/$(AUTHD_GO_PACKAGE)/p
 	# --without=single-binary can be removed with dh 15.
 	dh $@ --buildsystem=golang --with=golang,apport --without=single-binary
 
+ifeq ($(DEB_DISTRIBUTION),noble)
+# systemd 255 refuses to start the socket if authd's fd store is pinned.
+override_dh_installsystemd:
+	dh_installsystemd --no-stop-on-upgrade authd.socket
+	dh_installsystemd authd.service
+endif
+
 override_dh_gencontrol:
 	dh_gencontrol -- -Vauthd:gnome-shell-breaks="$(GNOME_SHELL_BREAKS)"
 
