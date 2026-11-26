@@ -97,6 +97,8 @@ archive suites, the matching `-proposed` suite, and the
 [authd-edge PPA][authd-edge-ppa] are enabled. APT selects the highest available
 package version across those sources. Authd comes from the local package when
 `--authd-deb` is supplied, and the broker comes from the edge channel snap.
+Before taking a new broker snapshot, provisioning waits up to two minutes for
+pending snap changes to finish.
 
 Use `--apt-source <source>` to add a source for all packages except authd, or
 `--authd-apt-source <source>` to add a source for authd. Both options accept

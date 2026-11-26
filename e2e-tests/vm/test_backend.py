@@ -359,6 +359,51 @@ print(statuses[min(calls, len(statuses) - 1)], end="")
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertEqual(calls, 2)
 
+    def test_wait_for_snapd_idle_rejects_failed_queries_and_pending_changes(self):
+        self.script(
+            self.commands / "retry",
+            '#!/bin/sh\nwhile [ "$1" != -- ]; do shift; done\nshift\n"$@" || "$@"\n',
+        )
+        ssh = self.commands / "ssh"
+        self.script(ssh, '#!/bin/sh\nexec sh -c "$2"\n')
+        self.script(
+            self.commands / "snap",
+            """#!/bin/sh
+[ "$SNAP_STATUS" != unavailable ] || exit 1
+if [ -s "$CALL_LOG" ]; then
+    status=Hold
+else
+    status="$SNAP_STATUS"
+fi
+printf '%s\\n' "$status" >>"$CALL_LOG"
+printf 'ID Status Spawn Ready Summary\\n1 %s - - Service change\\n' "$status"
+""",
+        )
+        for initial_status in ("unavailable", "Do", "Abort"):
+            with self.subTest(initial_status=initial_status):
+                self.log.unlink(missing_ok=True)
+                result = subprocess.run(
+                    [
+                        "bash",
+                        "-euc",
+                        'source "$1"; SSH="$2"; wait_for_snapd_idle',
+                        "bash",
+                        VM_DIR / "lib/libprovision.sh",
+                        ssh,
+                    ],
+                    env={**self.env, "SNAP_STATUS": initial_status},
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if initial_status == "unavailable":
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                else:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(
+                        self.log.read_text().splitlines(), [initial_status, "Hold"]
+                    )
+
     def test_failed_vm_shutdown_reports_the_domain_state(self):
         self.script(self.commands / "retry", "#!/bin/sh\nexit 124\n")
         result = subprocess.run(
