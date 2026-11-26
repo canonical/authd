@@ -47,6 +47,11 @@ packages:
   - yaru-theme-icon
 
 write_files:
+  # Retry failed apt downloads; this runs before cloud-init installs packages.
+  - path: /etc/apt/apt.conf.d/80-retries
+    content: |
+      Acquire::Retries "5";
+
   - path: /etc/dconf/profile/user
     content: |
       user-db:user

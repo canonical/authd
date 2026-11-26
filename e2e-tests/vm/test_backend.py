@@ -314,6 +314,51 @@ print('<domain><vsock><cid address="7"/></vsock></domain>')
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn("VSOCK-CONNECT:7:22", result.stdout)
 
+    def ppa_has_suite(self, statuses):
+        counter = self.root / "curl-calls"
+        counter.write_text("")
+        self.script(
+            self.commands / "curl",
+            f"""#!/usr/bin/python3
+import pathlib
+counter = pathlib.Path("{counter}")
+statuses = {statuses!r}
+calls = len(counter.read_text().split())
+counter.write_text(counter.read_text() + "x\\n")
+print(statuses[min(calls, len(statuses) - 1)], end="")
+""",
+        )
+        self.script(self.commands / "sleep", "#!/bin/sh\nexit 0\n")
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                'source "$1"; ppa_has_suite ubuntu-enterprise-desktop/authd noble',
+                "bash",
+                VM_DIR / "lib/libprovision.sh",
+            ],
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        return result, len(counter.read_text().split())
+
+    def test_ppa_check_retries_temporary_server_errors(self):
+        result, calls = self.ppa_has_suite(["503", "503", "200"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls, 3)
+
+    def test_ppa_check_fails_when_server_errors_persist(self):
+        result, calls = self.ppa_has_suite(["503"])
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(calls, 5)
+
+    def test_ppa_check_does_not_retry_a_missing_suite(self):
+        result, calls = self.ppa_has_suite(["404"])
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(calls, 2)
+
 
 if __name__ == "__main__":
     unittest.main()
