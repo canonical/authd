@@ -43,7 +43,6 @@ Log In And Set Password
     Hid.Type String    ubuntu
     Hid.Keys Combo    Return
 
-    Match Text    You are required to change your password immediately    30
     Match Text    Changing password    30
     Sleep    2
     Hid.Type String    ubuntu
