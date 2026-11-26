@@ -370,7 +370,7 @@ function shutdown_system() {
     exit 0
 fi
 virsh shutdown \"${VM_NAME}\" && \
-timeout 5 retry --delay 1 -- sh -c \
+timeout 10 retry --delay 1 -- sh -c \
 \"virsh domstate \\\"${VM_NAME}\\\" | grep -q '^shut off'\""
     local status=0
     retry --times 3 --delay 1 -- sh -c "$cmd" || status=$?
