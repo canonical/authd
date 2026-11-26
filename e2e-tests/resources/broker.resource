@@ -58,7 +58,7 @@ Select Provider
     Builtin.Sleep    2
 
 Regenerate QR Code
-    Match Text    Request new code    120
+    Match Text    regex:Request\\s*new\\s*code    120    confidence=88
     Hid.Keys Combo    Return
     Match Text    ${DEVICE_URL}    15
 
