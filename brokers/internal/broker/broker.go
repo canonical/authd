@@ -126,6 +126,7 @@ type session struct {
 	userDataDir             string
 	passwordPath            string
 	tokenPath               string
+	localPasswordVerified   bool // The user entered their correct local password, then the refresh token turned out to be expired.
 
 	// Data to pass from one request to another.
 	deviceAuthResponse        *oauth2.DeviceAuthResponse
@@ -1564,6 +1565,14 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 	// Store the auth info in the session so that we can use it when handling the
 	// next IsAuthenticated call for the new password mode.
 	session.authInfo = authInfo
+
+	// The user already entered the correct local password and only had to re-authenticate because the
+	// refresh token expired, so keep the existing password instead of asking for a new one.
+	if session.localPasswordVerified && passwordFileExists(*session) {
+		log.Debugf(context.Background(), "Keeping existing local password for user %q", session.username)
+		return b.finishAuth(session, authInfo)
+	}
+
 	session.nextAuthModes = []string{authmodes.NewPassword}
 
 	return AuthNext, nil
@@ -1633,6 +1642,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 			}
 			if b.provider.IsTokenExpiredError(retrieveErr) {
 				log.Noticef(context.Background(), "Refresh token expired for user %q, re-authentication required", session.username)
+				session.localPasswordVerified = true
 				session.nextAuthModes = reauthModes
 				return AuthNext, errorMessage{Message: "Refresh token expired, please authenticate again."}
 			}
