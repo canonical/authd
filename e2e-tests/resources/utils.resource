@@ -227,7 +227,7 @@ Submit Run Command Dialog
 
 Launch App
     [Arguments]    ${app-id}
-    SSH.Execute As Current User    gtk-launch ${app-id}    timeout=60
+    SSH.Execute As Current User    nohup gtk-launch ${app-id} </dev/null >/dev/null 2>&1 &
 
 Cancel Operation
     Hid.Keys Combo    Control_L    c
