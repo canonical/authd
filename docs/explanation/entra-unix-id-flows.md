@@ -13,7 +13,8 @@ way to map Entra users and remote groups to stable Unix IDs:
 
 - The broker reads Unix IDs from Entra extension attributes.
 - The broker stores them in `token.json`.
-- Administrators inspect and apply them with `authctl`.
+- Administrators inspect and apply them with `authctl` or the provisioning
+  script.
 - The broker does not apply the values to the authd database automatically
   during login.
 
@@ -338,14 +339,17 @@ normal local ID allocation unchanged.
 
 ## Applying cached values
 
-To apply cached values, use `authctl`. These commands do not check which
-attribute names produced the cached values. See the
+To apply cached values manually, use `authctl`. Unlike the helper, these
+commands do not check which attribute names produced the cached values. See the
 [configuration how-to](../howto/configure-entra-unix-ids) for the commands and
 safe application procedure.
 
-When a cached UID is present, set the user's UID and then the GID of the user's
-private group to that same value before applying remote group GIDs. Skip local
-groups and groups without a cached GID. `authctl` is the final check for local
+See `man authd-entra-unix-ids` for the command's options, dry-run behavior, and
+attribute-name checks. When a cached UID is present, the helper sets the user's
+UID and then the GID of the user's private group to that same value before
+applying remote group GIDs. It skips local groups and groups without a cached
+GID, uses `ugid` for conflict reporting, and aborts before mutation if the input
+contains conflicting assignments. `authctl` remains the final check for local
 and authd database conflicts.
 
 ## Limitations

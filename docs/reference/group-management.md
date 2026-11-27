@@ -66,7 +66,10 @@ group membership cannot be resolved.
 
 The broker can cache a Unix GID from a configured Entra group extension
 property. It does not apply the GID during login. Administrators can review the
-cached value and run `authctl group set-gid <group> <gid>`.
+cached value and run `authctl group set-gid <group> <gid>`, or use the
+dry-run-first `authd-entra-unix-ids` command. The command uses the Entra
+group object ID in `ugid` for identity and conflict checks, and passes the
+normalized group name to `authctl`.
 
 Groups named with the `linux-` prefix are local mappings. Their `ugid` is empty,
 they do not receive a remote GID, and they are exempt from required remote-GID
