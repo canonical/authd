@@ -62,7 +62,7 @@ type EntraAuthProvider interface {
 	// On success it returns the rotated token (the new refresh token must be
 	// persisted). On an Entra rejection it returns an *oauth2.RetrieveError so the
 	// broker can classify it with the same checks it uses for device-auth
-	// (IsUserDisabledError → AADSTS50057, IsTokenExpiredError → AADSTS50173, etc.).
+	// (IsUserDisabledError → AADSTS50057, ClassifyRefreshTokenError → AADSTS50173, etc.).
 	RefreshEntraToken(
 		ctx context.Context,
 		issuerURL string,
@@ -72,6 +72,10 @@ type EntraAuthProvider interface {
 	// UserInfoFromAccessToken extracts identity claims from an Entra access token.
 	// It does not verify the token's signature.
 	UserInfoFromAccessToken(accessToken string) (info.User, error)
+
+	// ProviderIDFromAccessToken extracts the stable object ID from an Entra
+	// access token without verifying its signature.
+	ProviderIDFromAccessToken(accessToken string) (string, error)
 }
 
 // MFAFlowState is an opaque handle to an in-progress MFA flow.

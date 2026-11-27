@@ -165,6 +165,9 @@ func (p *Provider) GetUserInfo(claimer info.Claimer, _ bool) (info.User, error) 
 	if stableID == "" {
 		return info.User{}, fmt.Errorf("oid claim is missing from the ID token")
 	}
+	if userClaims.PreferredUserName == "" {
+		return info.User{}, providerErrors.NewMissingClaimError("preferred_username")
+	}
 
 	return info.NewUser(
 		userClaims.PreferredUserName,
@@ -176,19 +179,24 @@ func (p *Provider) GetUserInfo(claimer info.Claimer, _ bool) (info.User, error) 
 	), nil
 }
 
+// GetProviderID returns the stable object ID from the claims.
+func (p *Provider) GetProviderID(claimer info.Claimer) (string, error) {
+	userClaims, err := p.userClaims(claimer)
+	if err != nil {
+		return "", err
+	}
+
+	return userClaims.Oid, nil
+}
+
 // UserInfoFromAccessToken extracts user info from an Entra access token's
 // claims without verifying the signature. Access tokens use oid/upn-style claims
 // rather than the OIDC preferred_username/sub pair that GetUserInfo expects, so
 // remap them first and then reuse the standard GetUserInfo path.
 func (p *Provider) UserInfoFromAccessToken(accessToken string) (info.User, error) {
-	parsed, _, err := new(jwt.Parser).ParseUnverified(accessToken, jwt.MapClaims{})
+	rawClaims, err := accessTokenClaims(accessToken)
 	if err != nil {
-		return info.User{}, fmt.Errorf("failed to parse access token claims: %w", err)
-	}
-
-	rawClaims, ok := parsed.Claims.(jwt.MapClaims)
-	if !ok {
-		return info.User{}, errors.New("failed to cast access token claims to MapClaims")
+		return info.User{}, err
 	}
 	if oid, _ := rawClaims["oid"].(string); oid != "" {
 		rawClaims["sub"] = oid
@@ -200,6 +208,32 @@ func (p *Provider) UserInfoFromAccessToken(accessToken string) (info.User, error
 	}
 
 	return p.GetUserInfo(tokenClaimer(rawClaims), false)
+}
+
+// ProviderIDFromAccessToken returns the stable object ID from an Entra access token.
+// It does not verify the token's signature.
+func (p *Provider) ProviderIDFromAccessToken(accessToken string) (string, error) {
+	rawClaims, err := accessTokenClaims(accessToken)
+	if err != nil {
+		return "", err
+	}
+
+	oid, _ := rawClaims["oid"].(string)
+	return oid, nil
+}
+
+func accessTokenClaims(accessToken string) (jwt.MapClaims, error) {
+	parsed, _, err := new(jwt.Parser).ParseUnverified(accessToken, jwt.MapClaims{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse access token claims: %w", err)
+	}
+
+	rawClaims, ok := parsed.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, errors.New("failed to cast access token claims to MapClaims")
+	}
+
+	return rawClaims, nil
 }
 
 // GetGroups retrieves the groups the user is a member of via the Microsoft Graph API.
@@ -390,7 +424,10 @@ func classifyGraphTokenAcquisitionError(err error) error {
 	}
 	if errors.Is(err, himmelblau.ErrInvalidRedirectURI) {
 		msg := "Token acquisition failed: The app is misconfigured in Microsoft Entra (the redirect URI is missing or invalid). Please contact your administrator."
-		return &providerErrors.ForDisplayError{Message: msg, Err: fmt.Errorf("%w: %w", providerErrors.ErrInvalidRedirectURI, err)}
+		return &providerErrors.ForDisplayError{
+			Message: msg,
+			Err:     fmt.Errorf("%w: %w", providerErrors.ErrInvalidRedirectURI, err),
+		}
 	}
 	wrapped := fmt.Errorf("failed to acquire access token for Microsoft Graph API: %w", err)
 	if errors.Is(err, himmelblau.ErrDeviceAuthenticationFailed) {
@@ -617,6 +654,8 @@ func (p *Provider) fetchUserGroups(token *jwt.Token, msgraphHost string) ([]info
 	// Check if the token has the GroupMember.Read.All scope
 	if !slices.Contains(scopes, "GroupMember.Read.All") {
 		msg := "Error: the Microsoft Entra ID app is missing the GroupMember.Read.All permission"
+		// Returning logins may use cached groups when group lookup fails, so this
+		// message is displayable but is not an authoritative authentication result.
 		return nil, &providerErrors.ForDisplayError{Message: msg}
 	}
 
@@ -919,7 +958,10 @@ func (p *Provider) RefreshEntraToken(ctx context.Context, issuerURL, refreshToke
 func (p *Provider) VerifyUsername(requestedUsername, authenticatedUsername string) error {
 	if p.NormalizeUsername(requestedUsername) != p.NormalizeUsername(authenticatedUsername) {
 		msg := fmt.Sprintf("Authentication failure: requested username %q does not match the authenticated username %q", requestedUsername, authenticatedUsername)
-		return &providerErrors.ForDisplayError{Message: msg}
+		return &providerErrors.ForDisplayError{
+			Message: msg,
+			Err:     &providerErrors.AuthoritativeError{},
+		}
 	}
 
 	// Check that the usernames only contain the characters allowed by the Microsoft Entra username policy
@@ -929,11 +971,17 @@ func (p *Provider) VerifyUsername(requestedUsername, authenticatedUsername strin
 		// If this error occurs, we should investigate and probably relax the username policy, so we ask the user
 		// explicitly to report this error.
 		msg := fmt.Sprintf("Authentication failure: the authenticated username %q contains invalid characters. Please report this error on https://github.com/canonical/authd/issues", authenticatedUsername)
-		return &providerErrors.ForDisplayError{Message: msg}
+		return &providerErrors.ForDisplayError{
+			Message: msg,
+			Err:     &providerErrors.AuthoritativeError{},
+		}
 	}
 	if !usernameRegexp.MatchString(requestedUsername) {
 		msg := fmt.Sprintf("Authentication failure: requested username %q contains invalid characters", requestedUsername)
-		return &providerErrors.ForDisplayError{Message: msg}
+		return &providerErrors.ForDisplayError{
+			Message: msg,
+			Err:     &providerErrors.AuthoritativeError{},
+		}
 	}
 
 	return nil
@@ -1030,27 +1078,37 @@ func (c azureTokenCredential) GetToken(_ context.Context, _ policy.TokenRequestO
 	}, nil
 }
 
-// IsTokenExpiredError returns true if the reason for the error is that the refresh token is expired.
-func (p *Provider) IsTokenExpiredError(err *oauth2.RetrieveError) bool {
-	if err.ErrorCode != "invalid_grant" {
-		return false
+// ClassifyRefreshTokenError classifies known errors from the token endpoint.
+func (p *Provider) ClassifyRefreshTokenError(err *oauth2.RetrieveError) providerErrors.RefreshTokenErrorKind {
+	if err == nil || err.ErrorCode != "invalid_grant" {
+		return providerErrors.RefreshTokenErrorUnknown
 	}
 
-	expiredPrefixes := []string{
+	switch {
+	case strings.HasPrefix(err.ErrorDescription, "AADSTS50173:"):
+		return providerErrors.RefreshTokenErrorRevoked
+	case slices.ContainsFunc([]string{
 		"AADSTS50078:",  // MFA session expired due to sign-in frequency (Conditional Access)
 		"AADSTS50089:",  // refresh token expired or revoked by user or admin
-		"AADSTS50173:",  // grant revoked (password change/reset)
-		"AADSTS70008:",  // refresh token expired due to inactivity (legacy code for AADSTS700082)
+		"AADSTS135011:", // device used for the original authentication is disabled
 		"AADSTS70043:",  // refresh token expired due to sign-in frequency (Conditional Access)
-		"AADSTS700082:", // refresh token expired due to inactivity
-	}
-
-	return slices.ContainsFunc(expiredPrefixes, func(prefix string) bool {
+	}, func(prefix string) bool {
 		return strings.HasPrefix(err.ErrorDescription, prefix)
-	})
+	}):
+		return providerErrors.RefreshTokenErrorExpiredOrRevoked
+	case slices.ContainsFunc([]string{
+		"AADSTS70008:",  // refresh token expired due to inactivity (legacy code for AADSTS700082)
+		"AADSTS700082:", // refresh token expired due to inactivity
+	}, func(prefix string) bool {
+		return strings.HasPrefix(err.ErrorDescription, prefix)
+	}):
+		return providerErrors.RefreshTokenErrorExpired
+	default:
+		return providerErrors.RefreshTokenErrorUnknown
+	}
 }
 
 // IsUserDisabledError returns true if the reason for the error is that the user is disabled.
 func (p *Provider) IsUserDisabledError(err *oauth2.RetrieveError) bool {
-	return err.ErrorCode == "invalid_grant" && strings.HasPrefix(err.ErrorDescription, "AADSTS50057:")
+	return err != nil && err.ErrorCode == "invalid_grant" && strings.HasPrefix(err.ErrorDescription, "AADSTS50057:")
 }
