@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -203,6 +204,7 @@ type Console struct {
 	snapshots    []string // terminal screen snapshots captured at WaitFor points
 	startedAt    time.Time
 	exitedAt     time.Time
+	processState atomic.Pointer[os.ProcessState]
 
 	// spawnSelfSIGINT records the test process's own SIGINT disposition at the
 	// moment this command was spawned. A spawned process inherits SIG_IGN for
@@ -409,6 +411,7 @@ func Start(t *testing.T, name string, args []string, opts ...Option) *Console {
 		c.mu.Lock()
 		c.exitedAt = time.Now()
 		c.mu.Unlock()
+		c.processState.Store(cmd.ProcessState)
 		c.done <- err
 	}()
 
@@ -543,11 +546,11 @@ func (c *Console) processExitSummary() string {
 	}
 
 	// If the wait result is not ready yet, fall back to ProcessState if present.
-	if c.cmd != nil && c.cmd.ProcessState != nil {
-		if ws, ok := c.cmd.ProcessState.Sys().(syscall.WaitStatus); ok {
+	if processState := c.processState.Load(); processState != nil {
+		if ws, ok := processState.Sys().(syscall.WaitStatus); ok {
 			return fmt.Sprintf("%s, runtime=%s", waitStatusDetails(ws), runtime)
 		}
-		return fmt.Sprintf("process state available (code=%d), runtime=%s", c.cmd.ProcessState.ExitCode(), runtime)
+		return fmt.Sprintf("process state available (code=%d), runtime=%s", processState.ExitCode(), runtime)
 	}
 
 	return fmt.Sprintf("still running (no exit observed), runtime=%s", runtime)
