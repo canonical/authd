@@ -12,6 +12,8 @@ Test Teardown    utils.Test Teardown
 ${snapshot}          %{BROKER}-installed
 ${username}          %{E2E_USER}
 ${local_password}    qwer1234
+${short_password}    1234
+${dictionary_password}    password
 
 
 *** Test Cases ***
@@ -24,7 +26,11 @@ Test login with GDM
     ...    password.
 
     # Log in with remote user with device code flow via GDM
-    Log In With Remote User Through GDM: QR Code    ${username}    ${local_password}
+    Start Log In With Remote User Through GDM    ${username}
+    Select Broker Through GDM
+    Continue Log In With Remote User: Authenticate In External Browser
+    Continue Log In With Remote User Through GDM: Define Local Password With Quality Checks
+    ...    ${short_password}    ${dictionary_password}    ${local_password}
     Check that GNOME keyring is unlocked
 
     # Check remote user is properly added to the system
