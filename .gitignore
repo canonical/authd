@@ -41,3 +41,8 @@ e2e-tests/e2e-tests.env
 
 # e2e tests python cache
 __pycache__/
+
+# Workshop project ID.
+.workshop.lock
+# Keep older Workshop secrets ignored. Store new ones in the VM.
+/.authd-client-secret

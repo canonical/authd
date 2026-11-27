@@ -15,6 +15,11 @@ run on the host to interface with remote identity providers.
 Steps for building the components, testing authd, and contributing to the code,
 are described on this page.
 
+## Development environment (recommended)
+
+Use the [Workshop guide](https://github.com/canonical/authd/blob/main/.workshop/README.md)
+to build authd in an Ubuntu 26.04 VM and test cloud logins through GDM or SSH.
+
 ## Required dependencies
 
 This project has several build dependencies. You can install these dependencies from the top of the source tree using the `apt` command as follows:
@@ -121,7 +126,7 @@ The library resulting from the build is located in `./target/debug/libnss_authd.
 
 The authd brokers are packaged as separate snaps that are built and released
 independently from authd. The source code for the brokers is located in
-`./authd-oidc-brokers` and the snap packaging files are located in `./snap`.
+`./brokers` and the snap packaging files are located in `./snap`.
 
 ````{admonition} Building the broker requires snapcraft
 :class: important

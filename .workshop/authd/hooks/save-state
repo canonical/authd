@@ -1,0 +1,76 @@
+#!/bin/bash
+# save-state — preserve authd and broker configuration across refresh.
+#
+# Workshop calls this hook as root before a refresh or restore rebuilds the VM.
+# It saves configuration to $SDK_STATE_DIR for restore-state.
+#
+# $SDK_STATE_DIR carries this state across refresh and restore. Stop/start keeps
+# the VM filesystem and does not run these hooks.
+#
+# Deliberately out of scope: /var/lib/authd, broker runtime data, and cloud
+# homes. Back these up on the host after stopping services; copying live
+# database files into SDK state storage is unsafe.
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source "$SDK/lib/brokers.sh"
+config_helper="$SDK/lib/broker_config.py"
+
+umask 077
+stage="$(mktemp -d -- "${SDK_STATE_DIR}/.authd-state.XXXXXX")"
+trap 'rm -rf -- "$stage"' EXIT
+
+if [ -f /etc/authd/authd.yaml ]; then
+    install -m600 /etc/authd/authd.yaml "${stage}/authd.yaml"
+fi
+
+mkdir "${stage}/brokers"
+
+saved=0
+for variant in "${AUTHD_BROKER_VARIANTS[@]}"; do
+    conf_dir="/etc/authd-${variant}"
+    [ -f "${conf_dir}/broker.conf" ] || continue
+
+    vdir="${stage}/brokers/${variant}"
+    mkdir "$vdir"
+    authd_stage_broker_config "$conf_dir" "${vdir}/config"
+
+    registration="/etc/authd/brokers.d/${variant}.conf"
+    if [ -f "$registration" ]; then
+        install -m600 "$registration" "${vdir}/authd.conf"
+        dbus_name="$(python3 "$config_helper" dbus-name "${vdir}/authd.conf")"
+        if [ -f "/usr/share/dbus-1/system.d/${dbus_name}.conf" ]; then
+            printf '%s\n' "$dbus_name" > "${vdir}/dbus_name"
+            install -m600 "/usr/share/dbus-1/system.d/${dbus_name}.conf" "${vdir}/dbus.conf"
+        fi
+    fi
+
+    unit="authd-${variant}.service"
+    unit_file="/etc/systemd/system/${unit}"
+    if [ -d "${unit_file}.d" ]; then
+        cp -a -- "${unit_file}.d" "${vdir}/service.d"
+    fi
+    if [ -f "$unit_file" ]; then
+        install -m600 "$unit_file" "${vdir}/service"
+        # Activity and persistent boot enablement are independent.
+        status="$(systemctl show "$unit" --property=UnitFileState --property=ActiveState)"
+        if grep -qx 'UnitFileState=enabled' <<< "$status"; then
+            touch "${vdir}/was-enabled"
+        fi
+        if grep -qx 'ActiveState=active' <<< "$status"; then
+            touch "${vdir}/was-running"
+        fi
+    fi
+
+    saved=$((saved + 1))
+    printf 'Saved broker config: %s\n' "$variant"
+done
+
+python3 "$config_helper" replace-tree "${stage}/brokers" "${SDK_STATE_DIR}/brokers"
+if [ -f "${stage}/authd.yaml" ]; then
+    mv -fT -- "${stage}/authd.yaml" "${SDK_STATE_DIR}/authd.yaml"
+else
+    rm -f -- "${SDK_STATE_DIR}/authd.yaml"
+fi
+
+printf 'Saved %d broker configuration(s).\n' "$saved"

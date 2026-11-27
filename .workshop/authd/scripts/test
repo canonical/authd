@@ -1,0 +1,66 @@
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+    cat >&2 <<EOF
+Usage: workshop run -- test [--no-race] [-- GO_TEST_ARGS...]
+  no args: go test -race ./...
+  --no-race: drop -race
+  Extra args pass to go test. Use -- to separate them.
+  Put -C DIR first in GO_TEST_ARGS to test a different module.
+Examples:
+  workshop run -- test
+  workshop run -- test ./pam/...
+  workshop run -- test --no-race ./...
+  workshop run -- test -- -run TestFoo -count=1 ./internal/...
+  workshop run -- test -- -C brokers ./...
+EOF
+}
+
+AUTHD_SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${AUTHD_SCRIPT_DIR}/../lib/env.sh"
+if [ -d "$AUTHD_PROJECT_DIR" ]; then
+    cd "$AUTHD_PROJECT_DIR"
+fi
+
+race_flag=(-race)
+args=()
+after_separator=no
+for arg in "$@"; do
+    if [ "$after_separator" = yes ]; then
+        args+=("$arg")
+        continue
+    fi
+
+    case "$arg" in
+        -h|--help) usage; exit 0 ;;
+        --no-race) race_flag=() ;;
+        --) after_separator=yes ;;
+        *) args+=("$arg") ;;
+    esac
+done
+
+# Go requires -C before every other test argument, including our -race.
+dir_flag=()
+case "${args[0]:-}" in
+    -C|--C)
+        if [ "${#args[@]}" -lt 2 ]; then
+            echo 'go test -C requires a directory' >&2
+            exit 2
+        fi
+        dir_flag=("${args[@]:0:2}")
+        args=("${args[@]:2}")
+        ;;
+    -C=*|--C=*)
+        dir_flag=("${args[0]}")
+        args=("${args[@]:1}")
+        ;;
+esac
+[ "${#args[@]}" -eq 0 ] && args=(./...)
+
+# Skip root-only tests only when running as root. An unconditional skip
+# would lose coverage for other users.
+[ "$(id -u)" -eq 0 ] && export AUTHD_SKIP_ROOT_TESTS=1
+
+exec go test "${dir_flag[@]}" "${race_flag[@]}" "${args[@]}"

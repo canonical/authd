@@ -7,6 +7,8 @@ on:
       - ".github/workflows/shell-sanity.yaml"
       - ".shellcheckrc"
       - "brokers/.shellcheckrc"
+      - ".workshop/authd/hooks/**"
+      - ".workshop/authd/scripts/**"
       - "**.sh"
       - "brokers/tools/install-cargo-c"
       - "debian/postinst"
@@ -34,3 +36,13 @@ jobs:
         uses: ludeeus/action-shellcheck@master
         with:
           additional_files: "postinst postrm prerm"
+
+      - name: Check Workshop PAM config matching
+        shell: bash
+        run: |-
+          source .workshop/authd/lib/health-checks.sh
+          authd_pam_has_module /dev/stdin auth pam_authd.so <<<'auth [default=ignore success=ok] pam_authd.so'
+          if authd_pam_has_module /dev/stdin auth pam_authd.so <<<'auth required pam_other.so pam_authd.so # pam_authd.so'; then
+            echo "PAM match accepted a module name in an argument" >&2
+            exit 1
+          fi
