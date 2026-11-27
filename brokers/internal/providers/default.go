@@ -8,5 +8,8 @@ import (
 
 // CurrentProvider returns a generic oidc provider implementation.
 func CurrentProvider() Provider {
-	return genericprovider.New()
+	// Return a pointer, so that the broker can configure the groups claim
+	// through the optional GroupsClaimConfigurer interface.
+	p := genericprovider.New()
+	return &p
 }
