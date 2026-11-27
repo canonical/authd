@@ -465,9 +465,9 @@ func (p *MockProvider) GetUserInfo(idToken info.Claimer, isRefresh bool) (info.U
 }
 
 // GetGroups returns the groups the user is a member of.
-func (p *MockProvider) GetGroups(ctx context.Context, clientID string, issuerURL string, token *oauth2.Token, providerMetadata map[string]interface{}, deviceRegistrationData []byte, needsAccessTokenForGraphAPI bool) ([]info.Group, error) {
+func (p *MockProvider) GetGroups(ctx context.Context, clientID string, issuerURL string, token *oauth2.Token, providerMetadata map[string]interface{}, deviceRegistrationData []byte, needsAccessTokenForGraphAPI bool, _ string) (info.GroupFetchResult, error) {
 	if p.GetGroupsFails {
-		return nil, errors.New("error requested in the mock")
+		return info.GroupFetchResult{}, errors.New("error requested in the mock")
 	}
 
 	userGroups := []info.Group{
@@ -479,11 +479,11 @@ func (p *MockProvider) GetGroups(ctx context.Context, clientID string, issuerURL
 	if p.GetGroupsFunc != nil {
 		userGroups, err = p.GetGroupsFunc()
 		if err != nil {
-			return nil, err
+			return info.GroupFetchResult{}, err
 		}
 	}
 
-	return userGroups, nil
+	return info.GroupFetchResult{Groups: userGroups}, nil
 }
 
 // MockDeviceRegistererProvider wraps MockProvider and adds DeviceRegisterer support.
