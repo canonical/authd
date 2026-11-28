@@ -388,6 +388,7 @@ function install_broker() {
     # waiting for the guest to transition. Shut it down and start it
     # explicitly so we wait for both state changes.
     reboot_system
+    wait_for_snapd_idle
 }
 
 function add_apt_source() {

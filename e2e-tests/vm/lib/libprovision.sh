@@ -301,6 +301,19 @@ function print_vm_console_log() {
     fi
 }
 
+function wait_for_snapd_idle() {
+    # A live snapshot preserves pending snap changes across reverts.
+    # shellcheck disable=SC2016
+    local cmd='changes=$(snap changes) || exit $?
+printf "%s\n" "$changes" |
+    awk '\''NR > 1 && NF && $2 !~ /^(Done|Error|Hold|Undone)$/ { exit 1 }'\'''
+    if ! timeout 120 retry --delay 2 -- "$SSH" -- "$cmd"; then
+        timeout 10 "$SSH" -- 'snap changes --abs-time' >&2 || true
+        print_vm_console_log "Could not confirm that snapd has no pending changes."
+        return 1
+    fi
+}
+
 function force_create_snapshot() {
     local snapshot_name="$1"
     local vm_state

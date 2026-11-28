@@ -227,7 +227,8 @@ Comment Key In Broker Configuration
 Restart Broker
     [Documentation]    Restart the broker and capture its state if the SSH command fails.
     TRY
-        SSH.Execute    snap restart ${BROKER_SNAP_NAME}
+        # A restart after a snapshot revert can take longer than 30 seconds (#2262).
+        SSH.Execute    snap restart ${BROKER_SNAP_NAME}    timeout=120
     EXCEPT    AS    ${error}
         Run Broker Restart Diagnostic    snap changes    snap changes
         Run Broker Restart Diagnostic    broker services    snap services ${BROKER_SNAP_NAME}
