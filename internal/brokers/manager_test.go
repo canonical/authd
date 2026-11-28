@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/canonical/authd/internal/brokers"
 	"github.com/canonical/authd/internal/brokers/auth"
@@ -20,6 +21,9 @@ import (
 var (
 	brokerConfFixtures = filepath.Join("testdata", "broker.d")
 )
+
+// testConnectionID is the client connection used to create sessions in tests.
+const testConnectionID = "test-connection"
 
 func TestNewManager(t *testing.T) {
 	tests := map[string]struct {
@@ -225,7 +229,7 @@ func TestNewSession(t *testing.T) {
 				tc.sessionMode = "auth"
 			}
 
-			gotID, gotEKey, err := m.NewSession(tc.brokerID, tc.username, "some_lang", tc.sessionMode, "", "sshd")
+			gotID, gotEKey, err := m.NewSession(tc.brokerID, tc.username, "some_lang", tc.sessionMode, "", "sshd", testConnectionID)
 			if tc.wantErr {
 				require.Error(t, err, "NewSession should return an error, but did not")
 				return
@@ -240,6 +244,22 @@ func TestNewSession(t *testing.T) {
 			require.NoError(t, err, "NewSession should have assigned a broker for the session, but did not")
 			require.Equal(t, wantBroker.ID, gotBroker.ID, "BrokerFromSessionID should have assigned the expected broker for the session, but did not")
 			require.Equal(t, "sshd", m.ServiceNameFromSessionID(gotID), "NewSession should remember the PAM service name for the session")
+			require.NoError(t, m.CheckSessionOwnership(gotID, testConnectionID),
+				"NewSession should remember the client connection of the session")
+			require.ErrorIs(t, m.CheckSessionOwnership(gotID, "other-connection"), brokers.ErrSessionNotOwned,
+				"CheckSessionOwnership should refuse another client connection")
+			require.Error(t, m.CheckSessionOwnership("unknown-session", testConnectionID),
+				"CheckSessionOwnership should refuse unknown sessions")
+
+			ownedBroker, username, serviceName, err := m.OwnedSession(gotID, testConnectionID)
+			require.NoError(t, err, "OwnedSession should return the session of its client connection")
+			require.Equal(t, wantBroker.ID, ownedBroker.ID, "OwnedSession should return the broker of the session")
+			require.Equal(t, tc.username, username, "OwnedSession should return the username of the session")
+			require.Equal(t, "sshd", serviceName, "OwnedSession should return the PAM service name of the session")
+			_, _, _, err = m.OwnedSession(gotID, "other-connection")
+			require.ErrorIs(t, err, brokers.ErrSessionNotOwned, "OwnedSession should refuse another client connection")
+			_, _, _, err = m.OwnedSession("unknown-session", testConnectionID)
+			require.Error(t, err, "OwnedSession should refuse unknown sessions")
 		})
 	}
 }
@@ -323,13 +343,13 @@ func TestStartAndEndSession(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		id, key, err := m.NewSession(b1.ID, "user1@example.com", "some_lang", "auth", "", "sshd")
+		id, key, err := m.NewSession(b1.ID, "user1@example.com", "some_lang", "auth", "", "sshd", testConnectionID)
 		firstID, firstKey, firstErr = &id, &key, &err
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		id, key, err := m.NewSession(b2.ID, "user2", "some_lang", "auth", "", "gdm-authd")
+		id, key, err := m.NewSession(b2.ID, "user2", "some_lang", "auth", "", "gdm-authd", testConnectionID+"-other")
 		secondID, secondKey, secondErr = &id, &key, &err
 	}()
 	wg.Wait()
@@ -345,6 +365,11 @@ func TestStartAndEndSession(t *testing.T) {
 		*secondID, "Second NewSession should return the expected session ID, but did not")
 	require.Equal(t, testutils.GenerateEncryptionKey(b2.Name),
 		*secondKey, "Second NewSession should return the expected encryption key, but did not")
+
+	require.NoError(t, m.CheckSessionOwnership(*firstID, testConnectionID),
+		"First NewSession should have assigned the expected connection to the session, but did not")
+	require.NoError(t, m.CheckSessionOwnership(*secondID, testConnectionID+"-other"),
+		"Second NewSession should have assigned the expected connection to the session, but did not")
 
 	assignedBroker, err := m.BrokerFromSessionID(*firstID)
 	require.NoError(t, err, "First NewSession should have assigned a broker for the session, but did not")
@@ -374,6 +399,121 @@ func TestStartAndEndSession(t *testing.T) {
 
 	_, err = m.BrokerFromSessionID(*secondID)
 	require.Error(t, err, "Second EndSession should have removed the broker for the session, but did not")
+
+	require.Error(t, m.CheckSessionOwnership(*firstID, testConnectionID),
+		"First EndSession should have removed the connection of the session, but did not")
+	require.Error(t, m.CheckSessionOwnership(*secondID, testConnectionID+"-other"),
+		"Second EndSession should have removed the connection of the session, but did not")
+}
+
+func TestEndSessionsForConnection(t *testing.T) {
+	t.Parallel()
+
+	brokersConfPath := t.TempDir()
+	b := newBrokerForTests(t, brokersConfPath, t.Name()+".conf")
+
+	m, err := brokers.NewManager(context.Background(), brokersConfPath, []string{b.Name + ".conf"})
+	require.NoError(t, err, "Setup: could not create manager")
+
+	for _, broker := range m.AvailableBrokers() {
+		if broker.Name == b.Name {
+			b.ID = broker.ID
+		}
+	}
+	require.NotEmpty(t, b.ID, "Setup: could not find the test broker in the manager")
+
+	firstID, _, err := m.NewSession(b.ID, "first", "some_lang", "auth", "", "sshd", "first-connection")
+	require.NoError(t, err, "Setup: could not create the first session")
+	secondID, _, err := m.NewSession(b.ID, "second", "some_lang", "auth", "", "sshd", "second-connection")
+	require.NoError(t, err, "Setup: could not create the second session")
+
+	firstEnded := testutils.WatchBrokerMockEndSession(testutils.GenerateSessionID("first"))
+	m.EndSessionsForConnection("first-connection")
+
+	_, err = m.BrokerFromSessionID(firstID)
+	require.Error(t, err, "The sessions of the closed connection should be ended")
+	require.NoError(t, m.CheckSessionOwnership(secondID, "second-connection"),
+		"The sessions of other connections should be kept")
+	select {
+	case <-firstEnded:
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "The broker should end the sessions of the closed connection")
+	}
+
+	// Abandoning a session must not affect other sessions of the same connection.
+	thirdID, _, err := m.NewSession(b.ID, "third", "some_lang", "auth", "", "sshd", "shared-connection")
+	require.NoError(t, err, "Setup: could not create the third session")
+	fourthID, _, err := m.NewSession(b.ID, "fourth", "some_lang", "auth", "", "sshd", "shared-connection")
+	require.NoError(t, err, "Setup: could not create the fourth session")
+
+	m.AbandonSession(thirdID)
+
+	_, err = m.BrokerFromSessionID(thirdID)
+	require.Error(t, err, "The abandoned session should be ended")
+	require.NoError(t, m.CheckSessionOwnership(fourthID, "shared-connection"),
+		"Abandoning a session should not affect the other sessions of its connection")
+
+	// The bookkeeping must be cleared even if the broker fails to end the session.
+	m.SetBrokerForSession(&b, "es_error")
+	m.SetSessionConnectionForTests("es_error", "failed-connection")
+	m.EndSessionsForConnection("failed-connection")
+
+	_, err = m.BrokerFromSessionID("es_error")
+	require.Error(t, err, "A session must not be kept when its broker fails to end it")
+	require.Error(t, m.CheckSessionOwnership("es_error", "failed-connection"),
+		"The bookkeeping of a session must be cleared even if the broker fails to end it")
+}
+
+func TestAbandonSessionDoesNotWaitForTheBroker(t *testing.T) {
+	t.Parallel()
+
+	brokersConfPath := t.TempDir()
+	b := newBrokerForTests(t, brokersConfPath, t.Name()+".conf")
+
+	m, err := brokers.NewManager(context.Background(), brokersConfPath, []string{b.Name + ".conf"})
+	require.NoError(t, err, "Setup: could not create manager")
+	for _, broker := range m.AvailableBrokers() {
+		if broker.Name == b.Name {
+			b.ID = broker.ID
+		}
+	}
+	require.NotEmpty(t, b.ID, "Setup: could not find the test broker in the manager")
+
+	const username = "unresponsive"
+	sessionID, _, err := m.NewSession(b.ID, username, "some_lang", "auth", "", "sshd", testConnectionID)
+	require.NoError(t, err, "Setup: could not create the session")
+
+	endSession := testutils.BlockBrokerMockCall(testutils.GenerateSessionID(username))
+	t.Cleanup(endSession.Release)
+	sessionEnded := testutils.WatchBrokerMockEndSession(testutils.GenerateSessionID(username))
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		m.EndSessionsForConnection(testConnectionID)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "Ending the sessions of a connection should not wait for the broker")
+	}
+
+	_, err = m.BrokerFromSessionID(sessionID)
+	require.Error(t, err, "The session should be forgotten before the broker replies")
+
+	select {
+	case <-endSession.Started():
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "The broker should be asked to end the session")
+	}
+	endSession.Release()
+
+	select {
+	case <-sessionEnded:
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "The broker should end the session")
+	}
 }
 
 func TestMain(m *testing.M) {

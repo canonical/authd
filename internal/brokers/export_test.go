@@ -22,6 +22,15 @@ func (m *Manager) SetBrokerForSession(b *Broker, sessionID string) {
 	m.transactionsToBrokerMu.Unlock()
 }
 
+// SetSessionConnectionForTests sets the connection that created a session.
+//
+// This is to be used only in tests.
+func (m *Manager) SetSessionConnectionForTests(sessionID, connectionID string) {
+	m.transactionsToBrokerMu.Lock()
+	m.sessionsToConnection[sessionID] = connectionID
+	m.transactionsToBrokerMu.Unlock()
+}
+
 // GenerateLayoutValidators generates the layout validators and assign them to the specified broker.
 func GenerateLayoutValidators(b *Broker, sessionID string, supportedUILayouts []map[string]string) {
 	b.layoutValidatorsMu.Lock()

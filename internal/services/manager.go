@@ -57,7 +57,11 @@ func NewManager(ctx context.Context, dbDir, brokersConfPath string, configuredBr
 func (m Manager) RegisterGRPCServices(ctx context.Context) *grpc.Server {
 	log.Debug(ctx, "Registering gRPC services")
 
-	opts := []grpc.ServerOption{permissions.WithUnixPeerCreds(), grpc.ChainUnaryInterceptor(errmessages.RedactErrorInterceptor)}
+	opts := []grpc.ServerOption{
+		permissions.WithUnixPeerCreds(),
+		grpc.StatsHandler(permissions.NewConnectionTracker(m.pamService.EndSessionsForConnection)),
+		grpc.ChainUnaryInterceptor(errmessages.RedactErrorInterceptor),
+	}
 	grpcServer := grpc.NewServer(opts...)
 
 	healthCheck := health.NewServer()

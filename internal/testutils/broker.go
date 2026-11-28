@@ -53,6 +53,78 @@ type isAuthenticatedCtx struct {
 	cancelFunc context.CancelFunc
 }
 
+// BrokerMockCall allows to synchronize with a call to the broker mock.
+type BrokerMockCall struct {
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+// Started is closed once the broker mock received the call.
+func (c *BrokerMockCall) Started() <-chan struct{} {
+	return c.started
+}
+
+// Release lets the broker mock reply to the call.
+func (c *BrokerMockCall) Release() {
+	c.once.Do(func() { close(c.release) })
+}
+
+var (
+	brokerMockBlockedCalls   = map[string]*BrokerMockCall{}
+	brokerMockBlockedCallsMu sync.Mutex
+
+	brokerMockEndSessionWatchers   = map[string][]chan struct{}{}
+	brokerMockEndSessionWatchersMu sync.Mutex
+)
+
+// BlockBrokerMockCall makes the broker mock wait before replying to the
+// NewSession call for the given username, or to the EndSession call for the
+// given session ID, until the returned call is released.
+func BlockBrokerMockCall(key string) *BrokerMockCall {
+	c := &BrokerMockCall{started: make(chan struct{}), release: make(chan struct{})}
+
+	brokerMockBlockedCallsMu.Lock()
+	defer brokerMockBlockedCallsMu.Unlock()
+	brokerMockBlockedCalls[key] = c
+	return c
+}
+
+// BlockBrokerMockIsAuthenticated makes the broker mock wait before replying to
+// the IsAuthenticated call for the given session ID, until the returned call is
+// released.
+func BlockBrokerMockIsAuthenticated(sessionID string) *BrokerMockCall {
+	return BlockBrokerMockCall(isAuthenticatedCallKey(sessionID))
+}
+
+func isAuthenticatedCallKey(sessionID string) string {
+	return "IsAuthenticated " + sessionID
+}
+
+func waitForBrokerMockCall(key string) {
+	brokerMockBlockedCallsMu.Lock()
+	c, ok := brokerMockBlockedCalls[key]
+	delete(brokerMockBlockedCalls, key)
+	brokerMockBlockedCallsMu.Unlock()
+	if !ok {
+		return
+	}
+
+	close(c.started)
+	<-c.release
+}
+
+// WatchBrokerMockEndSession returns a channel that is closed once the broker
+// mock is asked to end the given session.
+func WatchBrokerMockEndSession(sessionID string) <-chan struct{} {
+	ch := make(chan struct{})
+
+	brokerMockEndSessionWatchersMu.Lock()
+	defer brokerMockEndSessionWatchersMu.Unlock()
+	brokerMockEndSessionWatchers[sessionID] = append(brokerMockEndSessionWatchers[sessionID], ch)
+	return ch
+}
+
 // BrokerBusMock is the D-Bus object that will answer calls for the broker mock.
 type BrokerBusMock struct {
 	name                   string
@@ -129,6 +201,8 @@ func writeConfig(cfgDir, name string) (string, error) {
 
 // NewSession returns default values to be used in tests or an error if requested.
 func (b *BrokerBusMock) NewSession(username, lang, mode, providerID string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
+	waitForBrokerMockCall(username)
+
 	parsedUsername := parseSessionID(username)
 	if parsedUsername == "ns_error" {
 		return "", "", dbus.MakeFailedError(fmt.Errorf("broker %q: NewSession errored out", b.name))
@@ -218,6 +292,8 @@ func (b *BrokerBusMock) SelectAuthenticationMode(sessionID, authenticationModeNa
 
 // IsAuthenticated returns default values to be used in tests or an error if requested.
 func (b *BrokerBusMock) IsAuthenticated(sessionID, authenticationData string) (access, data string, dbusErr *dbus.Error) {
+	waitForBrokerMockCall(isAuthenticatedCallKey(sessionID))
+
 	// The IsAuthenticated needs to function a bit differently to still allow tests to be executed in parallel.
 	// We have to use both the prefixed sessionID and the parsed one in order to differentiate between test cases.
 	parsedID := parseSessionID(sessionID)
@@ -340,6 +416,15 @@ func (b *BrokerBusMock) IsAuthenticated(sessionID, authenticationData string) (a
 
 // EndSession returns default values to be used in tests or an error if requested.
 func (b *BrokerBusMock) EndSession(sessionID string) (dbusErr *dbus.Error) {
+	waitForBrokerMockCall(sessionID)
+
+	brokerMockEndSessionWatchersMu.Lock()
+	for _, ch := range brokerMockEndSessionWatchers[sessionID] {
+		close(ch)
+	}
+	delete(brokerMockEndSessionWatchers, sessionID)
+	brokerMockEndSessionWatchersMu.Unlock()
+
 	sessionID = parseSessionID(sessionID)
 	if sessionID == "es_error" {
 		return dbus.MakeFailedError(fmt.Errorf("broker %q: EndSession errored out", b.name))

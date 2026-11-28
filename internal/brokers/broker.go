@@ -282,8 +282,8 @@ func (b Broker) endSession(ctx context.Context, sessionID string) (err error) {
 	sessionID = b.parseSessionID(sessionID)
 
 	b.ongoingUserRequestsMu.Lock()
-	defer b.ongoingUserRequestsMu.Unlock()
 	delete(b.ongoingUserRequests, sessionID)
+	b.ongoingUserRequestsMu.Unlock()
 
 	b.isAuthMuMu.Lock()
 	delete(b.isAuthMu, sessionID)
