@@ -49,3 +49,45 @@ Test login after updating authd to the version under test
     Open Terminal
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
     Check Home Directory    ${username}
+
+Test authd is available after package reinstall
+    [Documentation]    Reinstalling authd restarts the service and leaves both
+    ...    units active.
+    ...
+    ...    Start with the version under test already running so the package hooks
+    ...    run with a populated descriptor store, even when the stable baseline
+    ...    does not have one (#2317).
+    [Setup]    utils.Test Setup    snapshot=%{BROKER}-installed
+    Check Authd Units Are Active
+    ${descriptor_count} =    Get Authd Descriptor Count
+    Should Be True    int($descriptor_count) > 0    authd has no stored descriptors before reinstall
+    ${old_invocation} =    Get Authd Service Invocation ID
+    Reinstall Installed Authd Package
+    Check Authd Units Are Active
+    ${new_invocation} =    Get Authd Service Invocation ID
+    Should Not Be Equal    ${new_invocation}    ${old_invocation}    authd.service did not restart
+
+
+*** Keywords ***
+Check Authd Units Are Active
+    SSH.Execute    systemctl is-active authd.socket && systemctl is-active authd.service
+
+Get Authd Service Invocation ID
+    ${id} =    SSH.Execute    systemctl show authd.service -p InvocationID --value
+    RETURN    ${id}
+
+Reinstall Installed Authd Package
+    ${authd_deb} =    Get Environment Variable    AUTHD_DEB    ${EMPTY}
+    ${directory} =    SSH.Execute    mktemp -d
+    ${staged_deb} =    Set Variable    ${directory}/authd.deb
+    ${installed_version} =    SSH.Execute    dpkg-query -W -f='\${Version}' authd
+    IF    $authd_deb
+        SSH.Copy To VM    ${authd_deb}    ${staged_deb}
+    ELSE
+        SSH.Execute
+        ...    cd ${directory} && apt-get download "authd=${installed_version}" && mv authd_*.deb authd.deb
+        ...    timeout=120
+    END
+    ${staged_version} =    SSH.Execute    dpkg-deb -f ${staged_deb} Version
+    Should Be Equal    ${staged_version}    ${installed_version}
+    SSH.Execute    dpkg --install ${staged_deb}    timeout=120
