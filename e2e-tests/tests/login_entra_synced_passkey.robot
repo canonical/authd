@@ -38,13 +38,8 @@ Test passwordless synced passkey user falls back to TAP
     ...    passkey and passwordless Authenticator sign-in enabled.
     [Setup]    Passwordless Test Setup
 
-    FOR    ${attempt}    IN RANGE    3
-        ${status}    ${message} =    Run Keyword And Ignore Error
-        ...    Run Passwordless TAP Login Attempt
-        IF    '${status}' == 'PASS'    BREAK
-        IF    ${attempt} < 2    Reset Synced Passkey Test State
-    END
-    Should Be Equal    ${status}    PASS    msg=${message}
+    Retry Passwordless Login    Run Passwordless Login Attempt    Reset Passwordless Test State
+    ...    Log In With Remote User Through GDM: Entra Passwordless TAP
 
     Log Out
 
@@ -56,45 +51,11 @@ Check Entra Password Fallback Is Offered
     Match Text    Enter your Entra ID password    30    similarity=90
 
 Test Setup
-    ${passkey_user} =    Get Environment Variable    E2E_PASSKEY_USER    ${EMPTY}
-    Set Suite Variable    ${username}    ${passkey_user}
-    Prepare Synced Passkey Test    E2E_PASSKEY_USER is not set; skipping the synced-passkey Entra test
+    Prepare Passwordless Test
+    ...    E2E_PASSKEY_USER
+    ...    E2E_PASSKEY_USER is not set; skipping the synced-passkey Entra test
 
 Passwordless Test Setup
-    ${passwordless_passkey_user} =    Get Environment Variable    E2E_PASSWORDLESS_PASSKEY_USER    ${EMPTY}
-    Set Suite Variable    ${username}    ${passwordless_passkey_user}
-    Prepare Synced Passkey Test
+    Prepare Passwordless Test
+    ...    E2E_PASSWORDLESS_PASSKEY_USER
     ...    E2E_PASSWORDLESS_PASSKEY_USER is not set; skipping the passwordless synced-passkey Entra test
-
-Prepare Synced Passkey Test
-    [Arguments]    ${skip_message}
-    utils.Test Setup    snapshot=%{BROKER}-installed
-    IF    not $username    Skip    ${skip_message}
-    Change Broker Configuration    register_device    true
-    Change Broker Configuration    entra_auth    true
-    Change Broker Configuration    device_code    false
-
-Reset Synced Passkey Test State
-    utils.Restore Snapshot    %{BROKER}-installed
-    Change Broker Configuration    register_device    true
-    Change Broker Configuration    entra_auth    true
-    Change Broker Configuration    device_code    false
-
-Run Passwordless TAP Login Attempt
-    VAR    ${tap_id} =    ${None}
-    TRY
-        ${tap_code}    ${tap_id} =    Wait Until Keyword Succeeds    12x    60s
-        ...    EntraTAP.Create TAP For User    ${username}
-
-        Start Log In With Remote User Through GDM    ${username}
-        Select Broker Through GDM
-        Match Text    Enter your MFA code    120    similarity=88
-        Hid.Type String    ${tap_code.value}
-        Hid.Keys Combo    Return
-        Continue Log In With Remote User Through GDM: Define Local Password    ${local_password}
-    FINALLY
-        IF    $tap_id is not None
-            Run Keyword And Warn On Failure    Wait Until Keyword Succeeds    3x    2s
-            ...    EntraTAP.Delete Tap By Id    ${username}    ${tap_id}
-        END
-    END
